@@ -5,10 +5,12 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "cjkwrap>=2.2",
     "loguru>=0.7.3",
     "prompt-toolkit>=3.0.53",
     "pydantic-ai>=2.30.0",
     "pydantic-ai-harness>=0.21.0",
     "python-dotenv>=1.2.2",
     "rich>=15.0.0",
+    "textual>=8.2.8",
 ]

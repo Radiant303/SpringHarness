@@ -1,0 +1,305 @@
+"""聊天区组件：欢迎框、用户消息、AI 消息、工具调用消息、状态栏、滚动区。
+
+代码从 step12_final.py 提炼，行为一致；WelcomeBox / StatusBar 把原来写死的
+演示数据换成了构造参数，ToolCallMessage 是新增组件。
+"""
+
+from pathlib import Path
+
+from rich.text import Text
+
+from textual.app import ComposeResult
+from textual.containers import Horizontal, HorizontalGroup, Vertical, VerticalScroll
+from textual.widget import Widget
+from textual.widgets import Static
+
+from cjk_wrap import CJKMarkdown, CJKStatic
+
+from .theme import ACCENT, GRAY
+
+
+class WelcomeBox(Vertical):
+    """顶部欢迎信息框：蓝色边框 + logo + 信息。"""
+
+    DEFAULT_CSS = """
+    WelcomeBox {
+        width: 1fr;
+        height: auto;
+        background: transparent;
+        border: round #4a9eff;
+        padding: 1 2;
+        margin: 1 1 0 1;
+    }
+    WelcomeBox .logo {
+        width: 7;
+        height: 2;
+        background: #4a9eff;
+        color: #1b1e24;
+    }
+    WelcomeBox .welcome-text {
+        width: 1fr;
+        height: auto;
+    }
+    WelcomeBox .info {
+        width: 1fr;
+        height: auto;
+        margin-top: 1;
+    }
+    """
+
+    def __init__(
+        self,
+        title: str = "Kimi Code",
+        model: str = "",
+        version: str = "",
+        **kwargs,
+    ) -> None:
+        super().__init__(**kwargs)
+        self._title = title
+        self._model = model
+        self._version = version
+
+    def compose(self) -> ComposeResult:
+        cwd = Path.cwd()
+        with HorizontalGroup():
+            yield Static(" ▪  ▪ ", classes="logo")
+            with Vertical(classes="welcome-text"):
+                yield Static(Text(f"Welcome to {self._title}!", style=f"bold {ACCENT}"))
+                yield Static(Text("Send /help for help information.", style=GRAY))
+        yield Static(
+            Text.assemble(
+                ("Directory: ", GRAY), (f"{cwd}\n", "#9aa3b0"),
+                ("Session:   ", GRAY), ("session_xxx\n", "#9aa3b0"),
+                ("Model:     ", GRAY), (f"{self._model}\n", "#9aa3b0"),
+                ("Version:   ", GRAY), (self._version, "#9aa3b0"),
+            ),
+            classes="info",
+        )
+
+
+class UserMessage(CJKStatic):
+    """用户消息：黄色 ✦ 开头。"""
+
+    DEFAULT_CSS = """
+    UserMessage {
+        width: 1fr;
+        height: auto;
+        margin: 1 1 0 1;
+    }
+    """
+
+    def __init__(self, text: str, **kwargs) -> None:
+        content = Text.assemble(
+            ("✨ ", "bold yellow"),
+            (text, "bold #FFCB6B"),
+        )
+        super().__init__(content, **kwargs)
+
+
+class AssistantMessage(Vertical):
+    """AI 消息：thinking（● 灰点 + 暗色斜体）+ 带 ● 的回答。"""
+
+    DEFAULT_CSS = """
+    AssistantMessage {
+        width: 1fr;
+        height: auto;
+        margin: 0 1 1 1;
+    }
+    AssistantMessage .stream-pending {
+        display: none;
+    }
+    AssistantMessage .thinking-row {
+        width: 1fr;
+        height: auto;
+        margin-top: 1;
+    }
+    AssistantMessage .thinking-bullet {
+        width: auto;
+        height: auto;
+        color: #7a8391;
+        padding: 0 1 0 0;
+    }
+    AssistantMessage #thinking-content {
+        width: 1fr;
+        height: auto;
+        color: #7a8391;
+        text-style: italic;
+    }
+    AssistantMessage .answer-row {
+        width: 1fr;
+        height: auto;
+        margin-top: 1;
+    }
+    AssistantMessage .assistant-bullet {
+        width: auto;
+        height: auto;
+        color: #c8cdd5;
+        padding: 0 1 0 0;
+    }
+    AssistantMessage Markdown {
+        width: 1fr;
+        height: auto;
+        padding: 0;
+        background: transparent;
+    }
+    AssistantMessage MarkdownParagraph:last-child {
+        margin-bottom: 0;
+    }
+    """
+
+    def compose(self) -> ComposeResult:
+        with HorizontalGroup(classes="thinking-row stream-pending"):
+            yield Static("●", classes="thinking-bullet")
+            yield CJKStatic(id="thinking-content")
+        with HorizontalGroup(classes="answer-row stream-pending"):
+            yield Static("●", classes="assistant-bullet")
+            yield CJKMarkdown(id="answer-md")
+
+
+class ToolCallMessage(Vertical):
+    """工具调用消息：一行 ⚙ ToolName(参数摘要)，结果灰字缩进、超长截断。"""
+
+    MAX_RESULT_LINES = 5
+
+    DEFAULT_CSS = """
+    ToolCallMessage {
+        width: 1fr;
+        height: auto;
+        margin: 0 1 1 1;
+    }
+    ToolCallMessage .tool-head {
+        width: 1fr;
+        height: auto;
+        margin-top: 1;
+    }
+    ToolCallMessage .tool-result {
+        width: 1fr;
+        height: auto;
+        padding-left: 2;
+        color: #7a8391;
+    }
+    """
+
+    def __init__(self, name: str, args: str = "", result: str | None = None, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._name = name
+        self._args = args
+        self._result = result
+
+    def compose(self) -> ComposeResult:
+        args = self._args if len(self._args) <= 40 else self._args[:39] + "…"
+        yield CJKStatic(
+            Text.assemble(
+                ("⚙ ", ACCENT),
+                (self._name, f"bold {ACCENT}"),
+                (f"({args})", "#9aa3b0"),
+            ),
+            classes="tool-head",
+        )
+        if self._result:
+            lines = self._result.splitlines()
+            hidden = len(lines) - self.MAX_RESULT_LINES
+            if hidden > 0:
+                lines = lines[: self.MAX_RESULT_LINES] + [f"… (还有 {hidden} 行)"]
+            yield CJKStatic("\n".join(lines), classes="tool-result")
+
+
+class SystemMessage(CJKStatic):
+    """系统提示行：灰色文字（错误 / 提示 / 命令回显都用它）。"""
+
+    DEFAULT_CSS = """
+    SystemMessage {
+        width: 1fr;
+        height: auto;
+        margin: 0 1;
+        color: #7a8391;
+    }
+    """
+
+    def __init__(self, text: str, **kwargs) -> None:
+        super().__init__(Text(text, style=GRAY), **kwargs)
+
+
+class ChatScroll(VerticalScroll):
+    """聊天滚动区：修复 anchor() 的一个小 bug。
+
+    anchor() 让滚动区一直吸底；但 Textual 的合成器在「内容不足一屏」时
+    会把 scroll_y 直接设成负数（set_reactive 绕过了 0 下限的校验），表现为：
+    第一次发消息后，上面的内容整体往下挪、顶部空出一片。
+    这里把负的滚动值挡回去即可。
+    """
+
+    def set_reactive(self, reactive, value) -> None:
+        if (
+            isinstance(value, (int, float))
+            and value < 0
+            and (reactive is Widget.scroll_y or reactive is Widget.scroll_target_y)
+        ):
+            value = 0
+        super().set_reactive(reactive, value)
+
+
+class StatusBar(Horizontal):
+    """底部状态栏：左侧信息 + 右侧上下文，字段可用 update() 局部更新。"""
+
+    DEFAULT_CSS = """
+    StatusBar {
+        width: 1fr;
+        height: 1;
+        background: transparent;
+        padding: 0 1;
+    }
+    StatusBar .status-left {
+        width: 1fr;
+        height: 1;
+        content-align: left middle;
+    }
+    StatusBar .status-right {
+        width: auto;
+        height: 1;
+        content-align: right middle;
+    }
+    """
+
+    def __init__(
+        self,
+        model: str = "",
+        directory: str | None = None,
+        git_branch: str = "",
+        context: str = "",
+        **kwargs,
+    ) -> None:
+        super().__init__(**kwargs)
+        self._model = model
+        self._directory = directory if directory is not None else str(Path.cwd())
+        self._git_branch = git_branch
+        self._context_text = context
+
+    def compose(self) -> ComposeResult:
+        yield Static(self._render_left(), classes="status-left")
+        yield Static(Text(self._context_text, style=GRAY), classes="status-right")
+
+    def _render_left(self) -> Text:
+        parts: list[tuple[str, str]] = [(self._model, "#c8cdd5")]
+        tail = f"{self._directory}  {self._git_branch}".rstrip()
+        parts.append((f"  {tail}", GRAY))
+        return Text.assemble(*parts)
+
+    def update(
+        self,
+        model: str | None = None,
+        directory: str | None = None,
+        git_branch: str | None = None,
+        context: str | None = None,
+    ) -> None:
+        """局部更新状态栏字段（None 表示保持原值）。"""
+        if model is not None:
+            self._model = model
+        if directory is not None:
+            self._directory = directory
+        if git_branch is not None:
+            self._git_branch = git_branch
+        if context is not None:
+            self._context_text = context
+        self.query_one(".status-left", Static).update(self._render_left())
+        self.query_one(".status-right", Static).update(Text(self._context_text, style=GRAY))
