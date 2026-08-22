@@ -1,7 +1,8 @@
-"""模型选择弹窗（/model 内置命令使用）。从 step12_final.py 提炼，行为一致。"""
+"""弹窗：模型选择（/model 内置命令）、工具批准（deferred 调用挂起时）。"""
 
 from typing import Any, ClassVar
 
+from pydantic_ai import ToolCallPart
 from rich.text import Text
 from textual.app import ComposeResult
 from textual.containers import Horizontal, HorizontalGroup, Vertical
@@ -9,6 +10,68 @@ from textual.screen import ModalScreen
 from textual.widgets import Static
 
 from .theme import ACCENT
+
+
+class ApprovalModal(ModalScreen[bool]):
+    """单条工具调用的批准弹窗：y 批准这一条、n/Esc 拒绝这一条。
+
+    多条挂起调用由调用方逐个弹（Claude Code 风格：每个工具各问一次）。
+    """
+
+    CSS = """
+    ApprovalModal {
+        align: center middle;
+    }
+    #approval-dialog {
+        width: 72;
+        height: auto;
+        background: transparent;
+        border: round #e5c07b;
+        padding: 1 2;
+    }
+    #approval-title {
+        color: #e5c07b;
+        text-style: bold;
+        margin-bottom: 1;
+    }
+    #approval-call {
+        height: auto;
+        margin-bottom: 1;
+    }
+    #approval-help {
+        color: #7a8391;
+    }
+    """
+
+    BINDINGS: ClassVar[list] = [
+        ("y", "approve", "Approve"),
+        ("n", "reject", "Reject"),
+        ("escape", "reject", "Reject"),
+    ]
+
+    MAX_ARGS_LEN = 60
+
+    def __init__(self, call: ToolCallPart, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self._call = call
+
+    def compose(self) -> ComposeResult:
+        args = str(self._call.args or "")
+        if len(args) > self.MAX_ARGS_LEN:
+            args = args[: self.MAX_ARGS_LEN - 1] + "…"
+        with Vertical(id="approval-dialog"):
+            yield Static("Approve this tool call?", id="approval-title")
+            yield Static(
+                Text.assemble(("⚡ ", ACCENT), (self._call.tool_name, "bold"), (f"({args})", "#9aa3b0")),
+                id="approval-call",
+            )
+            yield Static("y approve · n reject · Esc reject", id="approval-help")
+
+    def action_approve(self) -> None:
+        self.dismiss(True)
+
+    def action_reject(self) -> None:
+        self.dismiss(False)
 
 
 class ModelSelectModal(ModalScreen[None]):

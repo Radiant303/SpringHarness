@@ -8,6 +8,7 @@ start_tool_call() / show_tool_call() / show_system() 输出内容；界面、
 
 from typing import cast
 
+from pydantic_ai import ToolCallPart
 from textual import on
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
@@ -22,7 +23,7 @@ from textual.worker import (  # pyright: ignore[reportUnknownVariableType]
 )
 
 from .inputs import CommandDropdown, HistoryInput
-from .modal import ModelSelectModal
+from .modal import ApprovalModal, ModelSelectModal
 from .theme import KIMI_THEME
 from .utils import format_num
 from .widgets import (
@@ -126,6 +127,12 @@ class ToolCallHandle:
         if self._check_cancelled():
             return
         self._message.set_diff(diff)
+
+    async def show_pending(self) -> None:
+        """标记该调用处于"等待批准/外部执行"状态（deferred 工具）。"""
+        if self._check_cancelled():
+            return
+        self._message.set_pending()
 
 
 class CliApp(App[None]):
@@ -279,6 +286,10 @@ class CliApp(App[None]):
             line.hide()
         else:
             line.show_state(state)
+
+    async def ask_approval(self, call: ToolCallPart) -> bool:
+        """弹窗询问是否批准这一条工具调用：True 批准 / False 拒绝。多条挂起逐条问。"""
+        return await self.push_screen_wait(ApprovalModal(call))
 
     def set_status(
         self,

@@ -4,8 +4,10 @@ from collections.abc import AsyncIterable, Awaitable, Callable
 from typing import Any
 
 from pydantic_ai import (
+    AgentRunResult,
     AgentRunResultEvent,
     AgentStreamEvent,
+    DeferredToolRequestsEvent,
     FunctionToolResultEvent,
     PartDeltaEvent,
     PartEndEvent,
@@ -74,6 +76,7 @@ class EventStreamRenderer:
             PartDeltaEvent: self._on_part_delta,
             PartEndEvent: self._on_part_end,
             FunctionToolResultEvent: self._on_tool_result,
+            DeferredToolRequestsEvent:self._on_deferred_requests,
             AgentRunResultEvent: self._on_agent_result,
         }
         self._tool_by_index: dict[int, ToolCallSink] = {}
@@ -123,6 +126,21 @@ class EventStreamRenderer:
             if diff is not None:
                 await tool.show_diff(diff)
 
+    async def _on_deferred_requests(self, event: DeferredToolRequestsEvent) -> None:
+        calls = event.requests.calls
+        approvals = event.requests.approvals
+
+        for call_part in calls:
+            tool = self._tool_by_id.get(call_part.tool_call_id)
+            if tool is not None:
+                await tool.show_pending()
+
+        for approvals_part in approvals:
+            tool = self._tool_by_id.get(approvals_part.tool_call_id)
+            if tool is not None:
+                await tool.show_pending()
+
+
     async def _on_tool_result(self, event: FunctionToolResultEvent) -> None:
         part = event.part
         if isinstance(part, ToolReturnPart):
@@ -140,3 +158,8 @@ class EventStreamRenderer:
             self._context = input_token + output_token
             await self._sink.update_context(self._context)
         await self._sink.finish()
+
+    async def finish_with(self, result: AgentRunResult) -> None:
+        """agent.run 路径的收尾：该路径的 handler 收不到 AgentRunResultEvent，
+        由持有返回值的调用方直接喂给它。"""
+        await self._on_agent_result(AgentRunResultEvent(result=result))

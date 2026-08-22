@@ -193,6 +193,12 @@ class ToolCallMessage(Vertical):
         height: auto;
         padding-left: 2;
     }
+    ToolCallMessage .tool-pending {
+        width: 1fr;
+        height: auto;
+        padding-left: 2;
+        color: #e5c07b;
+    }
     """
 
     def __init__(self, name: str, args: str = "", result: str | None = None, **kwargs: Any) -> None:
@@ -230,13 +236,20 @@ class ToolCallMessage(Vertical):
         self.query_one(".tool-head", CJKStatic).update(self._render_head())
 
     def set_result(self, result: str) -> None:
-        """补显示工具返回结果；重复调用以最后一次为准。"""
+        """补显示工具返回结果；重复调用以最后一次为准。结果到达即撤下等待标记。"""
         self._result = result
         rendered = self._render_result()
+        if self.query(".tool-pending"):
+            self.query_one(".tool-pending", CJKStatic).remove()
         if self.query(".tool-result"):
             self.query_one(".tool-result", CJKStatic).update(rendered)
         else:
             self.mount(CJKStatic(rendered, classes="tool-result"))
+
+    def set_pending(self) -> None:
+        """标记为"等待批准/外部执行"（deferred 工具调用暂停）；重复调用幂等。"""
+        if not self.query(".tool-pending"):
+            self.mount(CJKStatic("⏸ 等待批准", classes="tool-pending"))
 
     def set_diff(self, diff_text: str) -> None:
         """显示编辑工具的 diff（红绿行）；重复调用以最后一次为准。
