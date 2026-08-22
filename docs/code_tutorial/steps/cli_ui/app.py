@@ -24,6 +24,7 @@ from textual.worker import (  # pyright: ignore[reportUnknownVariableType]
 from .inputs import CommandDropdown, HistoryInput
 from .modal import ModelSelectModal
 from .theme import KIMI_THEME
+from .utils import format_num
 from .widgets import (
     AssistantMessage,
     ChatScroll,
@@ -34,7 +35,6 @@ from .widgets import (
     WelcomeBox,
     WorkingLine,
 )
-from .utils import format_num
 
 BUILTIN_COMMANDS = [
     ("model", "Switch LLM model"),
@@ -120,6 +120,12 @@ class ToolCallHandle:
         if self._check_cancelled():
             return
         self._message.set_result(result)
+
+    async def show_diff(self, diff: str) -> None:
+        """显示编辑工具的 diff（红绿行）。"""
+        if self._check_cancelled():
+            return
+        self._message.set_diff(diff)
 
 
 class CliApp(App[None]):

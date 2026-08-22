@@ -5,19 +5,18 @@
 """
 
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, ClassVar, cast
 
 from rich.spinner import Spinner
 from rich.text import Text
-
 from textual.app import ComposeResult
 from textual.containers import Horizontal, HorizontalGroup, Vertical, VerticalScroll
+from textual.highlight import highlight
 from textual.reactive import Reactive, ReactiveType
 from textual.widget import Widget
 from textual.widgets import Static
 
-from .cjk_wrap import CJKMarkdown, CJKStatic
-
+from .cjk_wrap import CJKMarkdown, CJKStatic, DiffHighlightTheme
 from .theme import ACCENT, GRAY
 
 
@@ -189,6 +188,11 @@ class ToolCallMessage(Vertical):
         padding-left: 2;
         color: #7a8391;
     }
+    ToolCallMessage .tool-diff {
+        width: 1fr;
+        height: auto;
+        padding-left: 2;
+    }
     """
 
     def __init__(self, name: str, args: str = "", result: str | None = None, **kwargs: Any) -> None:
@@ -196,6 +200,7 @@ class ToolCallMessage(Vertical):
         self._name = name
         self._args = args
         self._result = result
+        self._diff: str | None = None
 
     def compose(self) -> ComposeResult:
         yield CJKStatic(self._render_head(), classes="tool-head")
@@ -233,6 +238,18 @@ class ToolCallMessage(Vertical):
         else:
             self.mount(CJKStatic(rendered, classes="tool-result"))
 
+    def set_diff(self, diff_text: str) -> None:
+        """显示编辑工具的 diff（红绿行）；重复调用以最后一次为准。
+
+        时序上 diff 在工具结果之前到达（参数完整时即生成），直接追加挂载即可。
+        """
+        self._diff = diff_text
+        content = highlight(diff_text, language="diff", theme=DiffHighlightTheme)
+        if self.query(".tool-diff"):
+            self.query_one(".tool-diff", CJKStatic).update(content)
+        else:
+            self.mount(CJKStatic(content, classes="tool-diff"))
+
 
 class WorkingLine(Static):
     """输入框上方左侧的运行状态行：spinner 动画 + 状态标签 + 一句话。
@@ -242,7 +259,7 @@ class WorkingLine(Static):
     所以定时器里反复 update 同一个 Spinner 对象就能形成动画。
     """
 
-    STATES = {
+    STATES: ClassVar[dict[str, tuple[str, str, str]]] = {
         "idle": ("moon", "", "We see the first gaze, feel life's power transcend."),
         "thinking": ("dots", "Thinking...", "The quiet mind is the calling card of deep thought."),
         "tool": ("line", "Using Tool...", "Give me a place to stand, and I will move Earth."),

@@ -30,11 +30,11 @@ KIMI_THEME = Theme(
         "ansi-foreground": "ansi_default",
         # Markdown 标题：主蓝 + 粗体 + 下划线（text-style 可空格组合多个值）
         "markdown-h1-text-style": "bold underline",
-        "markdown-h2-text-style": "bold underline",
-        "markdown-h3-text-style": "bold underline",
-        "markdown-h4-text-style": "bold underline",
-        "markdown-h5-text-style": "bold underline",
-        "markdown-h6-text-style": "bold underline",
+        "markdown-h2-text-style": "bold",
+        "markdown-h3-text-style": "bold",
+        "markdown-h4-text-style": "bold",
+        "markdown-h5-text-style": "bold",
+        "markdown-h6-text-style": "bold",
         # 颜色用固定主蓝：ansi_default 虽能跟随终端反色，但 bold 打在它上面
         # 在部分终端里是空操作（没有"更亮的默认色"），权衡后选固定色
         "markdown-h1-color": ACCENT,

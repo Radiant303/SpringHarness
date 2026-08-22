@@ -1,3 +1,4 @@
+import difflib
 import json
 from collections.abc import AsyncIterable, Awaitable, Callable
 from typing import Any
@@ -31,6 +32,38 @@ def _args_text(args: object) -> str:
     if isinstance(args, dict):
         return json.dumps(args, ensure_ascii=False)
     return str(args)
+
+
+def _make_diff(tool_name: str, args: object) -> str | None:
+    """编辑类工具的调用参数 → unified diff 文本；其它工具或参数不全返回 None。
+
+    diff 展示的是"打算怎么改"（来自调用参数而非执行结果），
+    所以在 args 完整的那一刻（PartEndEvent）生成，不等工具返回。
+    """
+    if isinstance(args, str):
+        try:
+            args = json.loads(args)
+        except json.JSONDecodeError:
+            return None
+    if not isinstance(args, dict):
+        return None
+    path = str(args.get("path", ""))
+    if tool_name == "edit_file":
+        old, new = args.get("old_text"), args.get("new_text")
+        if isinstance(old, str) and isinstance(new, str):
+            return "".join(difflib.unified_diff(
+                old.splitlines(keepends=True),
+                new.splitlines(keepends=True),
+                fromfile=f"a/{path}", tofile=f"b/{path}",
+            ))
+    elif tool_name == "write_file":
+        content = args.get("content")
+        if isinstance(content, str):
+            return "".join(difflib.unified_diff(
+                [], content.splitlines(keepends=True),
+                fromfile="/dev/null", tofile=f"b/{path}",
+            ))
+    return None
 
 
 class EventStreamRenderer:
@@ -83,7 +116,12 @@ class EventStreamRenderer:
                 await tool.write_args(_args_text(delta.args_delta))
 
     async def _on_part_end(self, event: PartEndEvent) -> None:
-        self._tool_by_index.pop(event.index, None)
+        tool = self._tool_by_index.pop(event.index, None)
+        part = event.part
+        if tool is not None and isinstance(part, ToolCallPart):
+            diff = _make_diff(part.tool_name, part.args)
+            if diff is not None:
+                await tool.show_diff(diff)
 
     async def _on_tool_result(self, event: FunctionToolResultEvent) -> None:
         part = event.part

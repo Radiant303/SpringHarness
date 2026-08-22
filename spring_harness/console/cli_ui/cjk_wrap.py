@@ -162,7 +162,8 @@ class CJKMarkdownParagraph(MarkdownParagraph):
 class DiffHighlightTheme(HighlightTheme):
     """库的高亮主题漏了 diff 的删除/新增行 token，这里补上（红/绿跟随主题色）。"""
 
-    STYLES: ClassVar[dict[tuple[str, ...], str]] = {
+    # 库把 STYLES 声明成实例变量（该写 ClassVar 没写），覆写它被误报，局部忽略
+    STYLES: ClassVar[dict[tuple[str, ...], str]] = {  # pyright: ignore[reportIncompatibleVariableOverride]
         **HighlightTheme.STYLES,
         Token.Generic.Deleted: "$text-error",
         Token.Generic.Inserted: "$text-success",
@@ -182,7 +183,7 @@ class DiffMarkdownFence(MarkdownFence):
 class CJKMarkdown(Markdown):
     """段落使用 CJK 友好换行、diff 代码块补红绿配色的 Markdown 组件。"""
 
-    BLOCKS: ClassVar[dict[str, type[MarkdownBlock]]] = {
+    BLOCKS: ClassVar[dict[str, type[MarkdownBlock]]] = {  # pyright: ignore[reportIncompatibleVariableOverride]
         **Markdown.BLOCKS,
         "paragraph_open": CJKMarkdownParagraph,
         "fence": DiffMarkdownFence,
