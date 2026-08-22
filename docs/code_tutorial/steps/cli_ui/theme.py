@@ -6,6 +6,9 @@ variables 里补 ansi-background / ansi-foreground，三者缺一不可。
 
 from textual.theme import Theme
 
+ACCENT = "#4a9eff"
+GRAY = "#7a8391"
+
 # Kimi Code CLI 风格配色
 KIMI_THEME = Theme(
     name="kimi",
@@ -25,20 +28,20 @@ KIMI_THEME = Theme(
         # ansi 主题需要这两个变量（按钮/Toast/内联边框等会引用）
         "ansi-background": "ansi_default",
         "ansi-foreground": "ansi_default",
-        "markdown-h2-text-style": "bold",
-        "markdown-h3-text-style": "bold",
-        "markdown-h4-text-style": "bold",
-        "markdown-h5-text-style": "bold",
-        "markdown-h6-text-style": "bold",
-        # 标题颜色透传终端默认前景：黑底白字、白底黑字
-        "markdown-h1-color": "ansi_default",
-        "markdown-h2-color": "ansi_default",
-        "markdown-h3-color": "ansi_default",
-        "markdown-h4-color": "ansi_default",
-        "markdown-h5-color": "ansi_default",
-        "markdown-h6-color": "ansi_default",
+        # Markdown 标题：主蓝 + 粗体 + 下划线（text-style 可空格组合多个值）
+        "markdown-h1-text-style": "bold underline",
+        "markdown-h2-text-style": "bold underline",
+        "markdown-h3-text-style": "bold underline",
+        "markdown-h4-text-style": "bold underline",
+        "markdown-h5-text-style": "bold underline",
+        "markdown-h6-text-style": "bold underline",
+        # 颜色用固定主蓝：ansi_default 虽能跟随终端反色，但 bold 打在它上面
+        # 在部分终端里是空操作（没有"更亮的默认色"），权衡后选固定色
+        "markdown-h1-color": ACCENT,
+        "markdown-h2-color": ACCENT,
+        "markdown-h3-color": ACCENT,
+        "markdown-h4-color": ACCENT,
+        "markdown-h5-color": ACCENT,
+        "markdown-h6-color": ACCENT,
     },
 )
-
-ACCENT = "#4a9eff"
-GRAY = "#7a8391"
