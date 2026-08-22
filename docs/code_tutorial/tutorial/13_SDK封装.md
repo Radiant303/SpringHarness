@@ -67,8 +67,9 @@ CliApp(
 - `await assistant.write_thinking(s)` —— 往 thinking 行（灰点斜体）累加文本，可多次调用；首个字符到达前整行自动隐藏。
 - `await assistant.write_answer(s)` —— 往 Markdown 回答累加文本，可多次调用；首个 chunk 到达前整行自动隐藏，流的首尾（`get_stream` / `stream.stop`）框架代管。
 - `await assistant.finish()` —— 收尾，**必须调用**（worker 结束时框架会兜底，但请显式调）。
-- `await self.show_tool_call(name, args, result=None)` —— 显示一条工具调用：一行 `⚙ Name(参数摘要)`，结果灰字缩进，超过 5 行截断成 `… (还有 N 行)`。
+- `await self.show_tool_call(name, args, result=None)` —— 显示一条工具调用：一行 `⚡ Name(参数摘要)`，结果灰字缩进，超过 5 行截断成 `… (还有 N 行)`。
 - `tool = await self.start_tool_call(name)` —— 流式版工具调用：返回 **ToolCallHandle**，`await tool.write_args(s)` 逐段累加参数（标题行实时刷新），`await tool.show_result(s)` 后补结果。参数随模型流式输出时用这个；一次性给全用上面的 `show_tool_call()`。
+- `self.set_working(state)` —— 输入框上方的运行状态行（spinner 动画）：`"idle"` / `"thinking"` / `"tool"` / `"working"`，传 `None` 收起。worker 结束时框架自动收起。
 - `await self.show_system(text)` —— 显示一行灰色系统提示，适合错误和通知。
 - `await self.show_user(text)` —— 手动补显示一条用户消息。提交时框架已自动显示，一般不需要调。
 
@@ -154,7 +155,7 @@ if __name__ == "__main__":
 python steps/step13_sdk.py
 ```
 
-发一条消息，应该依次看到：thinking 灰字逐字出现 → 两行工具调用（`⚙ Read(README.md)` 和 `⚙ Bash(ls steps/)`，Bash 的结果截断成 5 行 + `… (还有 N 行)`）→ Markdown 回答流式蹦字 → 状态栏右侧变成 `context: 1% (2.6k/256k)`。再试试 `↑` 翻历史、输入 `/c` 看下拉框过滤出 `clear`、`/model` 弹窗、Esc 关闭。
+发一条消息，应该依次看到：thinking 灰字逐字出现 → 两行工具调用（`⚡ Read(README.md)` 和 `⚡ Bash(ls steps/)`，Bash 的结果截断成 5 行 + `… (还有 N 行)`）→ Markdown 回答流式蹦字 → 状态栏右侧变成 `context: 1% (2.6k/256k)`。再试试 `↑` 翻历史、输入 `/c` 看下拉框过滤出 `clear`、`/model` 弹窗、Esc 关闭。
 
 无头验证（和第 5 章以来一样的 pilot 套路）也能跑通：启动自动聚焦、发消息后用户消息 / thinking / 工具调用行 / Markdown 回答 / 状态栏全部就位、`/model` 弹窗能开能关、未知命令显示灰色提示。
 

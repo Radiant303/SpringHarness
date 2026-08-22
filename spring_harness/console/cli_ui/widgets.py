@@ -6,6 +6,7 @@
 
 from pathlib import Path
 
+from rich.spinner import Spinner
 from rich.text import Text
 
 from textual.app import ComposeResult
@@ -157,7 +158,7 @@ class AssistantMessage(Vertical):
 
 
 class ToolCallMessage(Vertical):
-    """工具调用消息：一行 ⚙ ToolName(参数摘要)，结果灰字缩进、超长截断。
+    """工具调用消息：一行 ⚡ ToolName(参数摘要)，结果灰字缩进、超长截断。
 
     两种用法：
     - 静态：构造时直接给 args / result（show_tool_call 走这条路）；
@@ -203,7 +204,7 @@ class ToolCallMessage(Vertical):
         if len(args) > self.MAX_ARGS_LEN:
             args = args[: self.MAX_ARGS_LEN - 1] + "…"
         return Text.assemble(
-            ("⚙ ", ACCENT),
+            ("⚡ ", ACCENT),
             (self._name, f"bold {ACCENT}"),
             (f"({args})", "#9aa3b0"),
         )
@@ -230,6 +231,64 @@ class ToolCallMessage(Vertical):
             self.mount(CJKStatic(rendered, classes="tool-result"))
 
 
+class WorkingLine(Static):
+    """输入框上方左侧的运行状态行：spinner 动画 + 状态标签 + 一句话。
+
+    由 CliApp.set_working(state) 驱动：state 是 STATES 的键，None 时整行隐藏。
+    spinner 用 rich 的 Spinner（moon/dots/line），它按时间取帧，
+    所以定时器里反复 update 同一个 Spinner 对象就能形成动画。
+    """
+
+    STATES = {
+        "idle": ("moon", "", "We see the first gaze, feel life's power transcend."),
+        "thinking": ("dots", "Thinking...", "The quiet mind is the calling card of deep thought."),
+        "tool": ("line", "Using Tool...", "Give me a place to stand, and I will move Earth."),
+        "working": ("dots", "Working...", "It always seems impossible until it is done by us."),
+    }
+
+    DEFAULT_CSS = """
+    WorkingLine {
+        width: 1fr;
+        height: 1;
+        padding: 0;
+        margin: 1 1 0 1;
+        background: transparent;
+    }
+    """
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__("", **kwargs)
+        self.state: str | None = None
+        self._spinner: Spinner | None = None
+        self.display = False
+
+    def on_mount(self) -> None:
+        self.set_interval(1 / 12, self._advance)
+
+    def show_state(self, state: str) -> None:
+        if state == self.state:
+            return  # 同状态高频重复调用（每个 delta 一次），重建 spinner 会卡住动画
+        spinner, label, text = self.STATES[state]
+        self.state = state
+        parts: list[tuple[str, str]] = []
+        if label:
+            parts.append((f"{label} ", f"bold {ACCENT}"))
+        parts.append(("· ", GRAY))
+        parts.append((text, f"italic {GRAY}"))
+        self._spinner = Spinner(spinner, text=Text.assemble(*parts))
+        self.display = True
+        self._advance()
+
+    def hide(self) -> None:
+        self.state = None
+        self._spinner = None
+        self.display = False
+
+    def _advance(self) -> None:
+        if self._spinner is not None:
+            self.update(self._spinner)
+
+
 class SystemMessage(CJKStatic):
     """系统提示行：灰色文字（错误 / 提示 / 命令回显都用它）。"""
 
@@ -253,6 +312,14 @@ class ChatScroll(VerticalScroll):
     会把 scroll_y 直接设成负数（set_reactive 绕过了 0 下限的校验），表现为：
     第一次发消息后，上面的内容整体往下挪、顶部空出一片。
     这里把负的滚动值挡回去即可。
+
+    滚动条隐藏（scrollbar-size: 0）：吸底场景不需要它，省两列空间。
+    """
+
+    DEFAULT_CSS = """
+    ChatScroll {
+        scrollbar-size: 0 0;
+    }
     """
 
     def set_reactive(self, reactive, value) -> None:

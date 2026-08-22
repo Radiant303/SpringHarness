@@ -10,7 +10,9 @@ from pydantic_ai import (
     PartEndEvent,
     PartStartEvent,
     RunContext,
+    TextPart,
     TextPartDelta,
+    ThinkingPart,
     ThinkingPartDelta,
     ToolCallPart,
     ToolCallPartDelta,
@@ -21,11 +23,6 @@ from spring_harness.console.sink import RenderSink, ToolCallSink
 
 
 def _args_text(args: object) -> str:
-    """把工具参数统一成显示文本。
-
-    边界上宽容接收：实际类型随 pydantic_ai 版本会变（str / dict /
-    ToolSearchArgs 等强类型参数对象），这里不枚举，内部分类处理。
-    """
     if args is None:
         return ""
     if isinstance(args, str):
@@ -66,6 +63,11 @@ class EventStreamRenderer:
             self._tool_by_id[part.tool_call_id] = tool
             if part.args:
                 await tool.write_args(_args_text(part.args))
+        elif isinstance(part, ThinkingPart) and part.content:
+            # 第一口内容在 start 事件里，不写就吞了首 token
+            await self._sink.write_thinking(part.content)
+        elif isinstance(part, TextPart) and part.content:
+            await self._sink.write_answer(part.content)
 
     async def _on_part_delta(self, event: PartDeltaEvent) -> None:
         delta = event.delta

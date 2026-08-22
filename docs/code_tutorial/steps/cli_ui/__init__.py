@@ -25,6 +25,7 @@ from .widgets import (
     ToolCallMessage,
     UserMessage,
     WelcomeBox,
+    WorkingLine,
 )
 
 __all__ = [
@@ -34,6 +35,7 @@ __all__ = [
     "AssistantHandle",
     "ToolCallHandle",
     "WelcomeBox",
+    "WorkingLine",
     "UserMessage",
     "AssistantMessage",
     "ToolCallMessage",

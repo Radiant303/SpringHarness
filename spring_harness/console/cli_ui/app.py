@@ -23,6 +23,7 @@ from .widgets import (
     ToolCallMessage,
     UserMessage,
     WelcomeBox,
+    WorkingLine,
 )
 
 BUILTIN_COMMANDS = [
@@ -141,9 +142,9 @@ class CliApp(App):
         width: 1fr;
         height: 3;
         background: transparent;
-        border: round #3a3f4a;
+        border: round #7a8391;
         padding: 0 1;
-        margin: 1 1 0 1;
+        margin: 0 1 0 1;
     }
     #user-input {
         width: 1fr;
@@ -190,6 +191,7 @@ class CliApp(App):
             yield WelcomeBox(title=self.title_text, model=self.model, version=self.version)
         with Vertical(id="input-area"):
             yield CommandDropdown(self._commands, id="command-dropdown")
+            yield WorkingLine(id="working-line")
             with Horizontal(id="input-row"):
                 yield Static(">", id="prompt")
                 yield HistoryInput(placeholder="", id="user-input")
@@ -234,7 +236,7 @@ class CliApp(App):
         return ToolCallHandle(message)
 
     async def show_tool_call(self, name: str, args: str = "", result: str | None = None) -> None:
-        """显示一条工具调用：⚙ Name(参数) + 灰字缩进的结果。"""
+        """显示一条工具调用：⚡ Name(参数) + 灰字缩进的结果。"""
         await self._scroll.mount(ToolCallMessage(name, args, result))
         self._scroll.anchor()
 
@@ -242,6 +244,14 @@ class CliApp(App):
         """显示一行灰色系统提示（错误 / 通知）。"""
         await self._scroll.mount(SystemMessage(text))
         self._scroll.anchor()
+
+    def set_working(self, state: str | None) -> None:
+        """输入框上方的运行状态行：idle/thinking/tool/working，None 收起。"""
+        line = self.query_one("#working-line", WorkingLine)
+        if state is None:
+            line.hide()
+        else:
+            line.show_state(state)
 
     def set_status(
         self,
@@ -296,3 +306,4 @@ class CliApp(App):
             for handle in self._active_handles:
                 await handle.finish()
             self._active_handles.clear()
+            self.set_working(None)  # 兜底：worker 结束（含取消）时一定收掉状态行
