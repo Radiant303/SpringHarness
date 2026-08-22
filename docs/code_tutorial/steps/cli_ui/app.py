@@ -1,11 +1,10 @@
 """CliApp：开箱即用的 Claude Code 风格聊天界面基类。
 
 子类只需实现 handle_input()，在里边用 await self.start_assistant() /
-show_tool_call() / show_system() 输出内容；界面、主题、历史、下拉框、
-/model 弹窗、状态栏全部内置。
+start_tool_call() / show_tool_call() / show_system() 输出内容；界面、
+主题、历史、下拉框、/model 弹窗、状态栏全部内置。
 """
 
-from rich.text import Text
 
 from textual import on
 from textual.app import App, ComposeResult
@@ -75,6 +74,33 @@ class AssistantHandle:
         self._finished = True
         if self._answer_stream is not None:
             await self._answer_stream.stop()
+
+
+class ToolCallHandle:
+    """一条工具调用的写入句柄：args 流式累加，结果后补。
+
+    由 ``await app.start_tool_call(name)`` 创建；方法签名与
+    console/sink.py 的 ToolCallSink 协议一致，可直接当 sink 用。
+    """
+
+    def __init__(self, message: ToolCallMessage) -> None:
+        self._message = message
+
+    def _check_cancelled(self) -> bool:
+        worker = get_current_worker()
+        return worker is not None and worker.is_cancelled
+
+    async def write_args(self, chunk: str) -> None:
+        """流式累加参数文本（可多次调用）。"""
+        if self._check_cancelled():
+            return
+        self._message.append_args(chunk)
+
+    async def show_result(self, result: str) -> None:
+        """补显示工具返回结果。"""
+        if self._check_cancelled():
+            return
+        self._message.set_result(result)
 
 
 class CliApp(App):
@@ -199,6 +225,13 @@ class CliApp(App):
         handle = AssistantHandle(message)
         self._active_handles.append(handle)
         return handle
+
+    async def start_tool_call(self, name: str) -> ToolCallHandle:
+        """开一条新的工具调用消息，返回写入句柄（args 流式累加、结果后补）。"""
+        message = ToolCallMessage(name)
+        await self._scroll.mount(message)
+        self._scroll.anchor()
+        return ToolCallHandle(message)
 
     async def show_tool_call(self, name: str, args: str = "", result: str | None = None) -> None:
         """显示一条工具调用：⚙ Name(参数) + 灰字缩进的结果。"""

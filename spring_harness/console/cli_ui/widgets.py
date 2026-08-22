@@ -13,7 +13,7 @@ from textual.containers import Horizontal, HorizontalGroup, Vertical, VerticalSc
 from textual.widget import Widget
 from textual.widgets import Static
 
-from cjk_wrap import CJKMarkdown, CJKStatic
+from .cjk_wrap import CJKMarkdown, CJKStatic
 
 from .theme import ACCENT, GRAY
 
@@ -157,9 +157,16 @@ class AssistantMessage(Vertical):
 
 
 class ToolCallMessage(Vertical):
-    """工具调用消息：一行 ⚙ ToolName(参数摘要)，结果灰字缩进、超长截断。"""
+    """工具调用消息：一行 ⚙ ToolName(参数摘要)，结果灰字缩进、超长截断。
+
+    两种用法：
+    - 静态：构造时直接给 args / result（show_tool_call 走这条路）；
+    - 流式：构造时只给 name，之后用 append_args() 逐段累加参数、
+      set_result() 后补结果（start_tool_call 返回的句柄走这条路）。
+    """
 
     MAX_RESULT_LINES = 5
+    MAX_ARGS_LEN = 40
 
     DEFAULT_CSS = """
     ToolCallMessage {
@@ -187,21 +194,40 @@ class ToolCallMessage(Vertical):
         self._result = result
 
     def compose(self) -> ComposeResult:
-        args = self._args if len(self._args) <= 40 else self._args[:39] + "…"
-        yield CJKStatic(
-            Text.assemble(
-                ("⚙ ", ACCENT),
-                (self._name, f"bold {ACCENT}"),
-                (f"({args})", "#9aa3b0"),
-            ),
-            classes="tool-head",
-        )
+        yield CJKStatic(self._render_head(), classes="tool-head")
         if self._result:
-            lines = self._result.splitlines()
-            hidden = len(lines) - self.MAX_RESULT_LINES
-            if hidden > 0:
-                lines = lines[: self.MAX_RESULT_LINES] + [f"… (还有 {hidden} 行)"]
-            yield CJKStatic("\n".join(lines), classes="tool-result")
+            yield CJKStatic(self._render_result(), classes="tool-result")
+
+    def _render_head(self) -> Text:
+        args = self._args
+        if len(args) > self.MAX_ARGS_LEN:
+            args = args[: self.MAX_ARGS_LEN - 1] + "…"
+        return Text.assemble(
+            ("⚙ ", ACCENT),
+            (self._name, f"bold {ACCENT}"),
+            (f"({args})", "#9aa3b0"),
+        )
+
+    def _render_result(self) -> str:
+        lines = self._result.splitlines()
+        hidden = len(lines) - self.MAX_RESULT_LINES
+        if hidden > 0:
+            lines = lines[: self.MAX_RESULT_LINES] + [f"… (还有 {hidden} 行)"]
+        return "\n".join(lines)
+
+    def append_args(self, chunk: str) -> None:
+        """流式累加参数文本并刷新标题行（超长部分显示为 …）。"""
+        self._args += chunk
+        self.query_one(".tool-head", CJKStatic).update(self._render_head())
+
+    def set_result(self, result: str) -> None:
+        """补显示工具返回结果；重复调用以最后一次为准。"""
+        self._result = result
+        rendered = self._render_result()
+        if self.query(".tool-result"):
+            self.query_one(".tool-result", CJKStatic).update(rendered)
+        else:
+            self.mount(CJKStatic(rendered, classes="tool-result"))
 
 
 class SystemMessage(CJKStatic):

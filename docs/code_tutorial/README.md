@@ -108,7 +108,7 @@ python steps/step12_final.py      # 成品
 ### steps/step13_sdk.py：SDK 封装（开箱即用）
 - 前 12 步是「教你怎么造」，这一步是把 step12 的界面提炼成 `steps/cli_ui/` 包，
   用的人不用懂 Textual：继承 `CliApp`，实现 `handle_input()`，
-  调 `start_assistant()` / `show_tool_call()` / `show_system()` / `set_status()` 即可。
+  调 `start_assistant()` / `start_tool_call()` / `show_tool_call()` / `show_system()` / `set_status()` 即可。
 - 包内模块：`theme.py`（透明主题）、`widgets.py`（消息/状态栏组件，含新增的
   `ToolCallMessage`）、`inputs.py`（历史输入 + 斜杠下拉框）、`modal.py`（模型选择弹窗）、
   `app.py`（CliApp 基类）。详细用法见 `tutorial/13_SDK封装.md`。
