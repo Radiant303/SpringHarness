@@ -137,7 +137,7 @@ class AssistantMessage(Vertical):
     AssistantMessage .assistant-bullet {
         width: auto;
         height: auto;
-        color: #c8cdd5;
+        color: ansi_default;
         padding: 0 1 0 0;
     }
     AssistantMessage Markdown {
@@ -376,7 +376,7 @@ class StatusBar(Horizontal):
         yield Static(Text(self._context_text, style=GRAY), classes="status-right")
 
     def _render_left(self) -> Text:
-        parts: list[tuple[str, str]] = [(self._model, "#c8cdd5")]
+        parts: list[tuple[str, str]] = [(self._model, "default")]
         tail = f"{self._directory}  {self._git_branch}".rstrip()
         parts.append((f"  {tail}", GRAY))
         return Text.assemble(*parts)

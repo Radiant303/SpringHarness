@@ -180,7 +180,7 @@ App 的 CSS（`steps/step07_styling.py:187-221`）里，输入区域从「一个
 #prompt {
     width: auto;               /* Static 默认 1fr，不改成 auto 会挤掉 Input */
     height: auto;
-    color: #c8cdd5;
+    color: ansi_default;
     padding-right: 1;
 }
 #user-input {
@@ -351,7 +351,7 @@ class AssistantMessage(Vertical):
     AssistantMessage .assistant-bullet {
         width: auto;
         height: auto;
-        color: #c8cdd5;
+        color: ansi_default;
         padding: 0 1 0 0;
     }
     AssistantMessage Markdown {
@@ -421,7 +421,7 @@ class ChatApp(App):
     #prompt {
         width: auto;
         height: auto;
-        color: #c8cdd5;
+        color: ansi_default;
         padding-right: 1;
     }
     #user-input {

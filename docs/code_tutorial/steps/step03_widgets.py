@@ -49,7 +49,7 @@ class AssistantMessage(Static):
     """
 
     def __init__(self, text: str, **kwargs: Any) -> None:
-        content = Text.assemble(("● ", "#c8cdd5"), (text, ""))
+        content = Text.assemble(("● ", "default"), (text, ""))
         super().__init__(content, **kwargs)
 
 

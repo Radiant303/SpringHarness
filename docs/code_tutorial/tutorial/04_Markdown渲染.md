@@ -52,7 +52,7 @@ class AssistantMessage(Vertical):
     AssistantMessage .assistant-bullet {
         width: auto;
         height: auto;
-        color: #c8cdd5;
+        color: ansi_default;
         padding: 0 1 0 0;
     }
     AssistantMessage Markdown {
@@ -162,7 +162,7 @@ class AssistantMessage(Vertical):
     AssistantMessage .assistant-bullet {
         width: auto;
         height: auto;
-        color: #c8cdd5;
+        color: ansi_default;
         padding: 0 1 0 0;
     }
     AssistantMessage Markdown {

@@ -174,7 +174,7 @@ class CliApp(App[None]):
     #prompt {
         width: auto;
         height: auto;
-        color: #c8cdd5;
+        color: ansi_default;
         padding-right: 1;
     }
     """

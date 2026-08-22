@@ -60,7 +60,7 @@ class ModelSelectModal(ModalScreen[None]):
     }
     #model-list .model-name {
         width: 24;
-        color: #c8cdd5;
+        color: ansi_default;
     }
     #model-list .model-current {
         color: #4a9eff;
@@ -71,7 +71,7 @@ class ModelSelectModal(ModalScreen[None]):
     #thinking-section {
         height: auto;
         margin-top: 1;
-        color: #c8cdd5;
+        color: ansi_default;
     }
     #thinking-section Static {
         width: auto;

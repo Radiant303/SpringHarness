@@ -58,7 +58,7 @@ KIMI_THEME = Theme(
     warning="#e5c07b",      # 警告黄
     error="#e06c75",
     success="#98c379",
-    foreground="#c8cdd5",   # 前景文字
+    foreground="ansi_default",  # 前景文字跟随终端默认
     background="ansi_default",  # 跟随终端默认背景（透明终端可透出背景）
     surface="ansi_default",     # 面板背景同终端
     panel="ansi_default",
@@ -172,7 +172,7 @@ class AssistantMessage(Vertical):
     AssistantMessage .assistant-bullet {
         width: auto;
         height: auto;
-        color: #c8cdd5;
+        color: ansi_default;
         padding: 0 1 0 0;
     }
     AssistantMessage Markdown {
@@ -434,7 +434,7 @@ class ModelSelectScreen(ModalScreen[None]):
     }
     #model-list .model-name {
         width: 24;
-        color: #c8cdd5;
+        color: ansi_default;
     }
     #model-list .model-current {
         color: #4a9eff;
@@ -445,7 +445,7 @@ class ModelSelectScreen(ModalScreen[None]):
     #thinking-section {
         height: auto;
         margin-top: 1;
-        color: #c8cdd5;
+        color: ansi_default;
     }
     #thinking-section Static {
         width: auto;
@@ -558,7 +558,7 @@ class ChatApp(App[None]):
     #prompt {
         width: auto;
         height: auto;
-        color: #c8cdd5;
+        color: ansi_default;
         padding-right: 1;
     }
     #user-input {

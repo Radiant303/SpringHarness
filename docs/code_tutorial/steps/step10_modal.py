@@ -145,7 +145,7 @@ class AssistantMessage(Vertical):
     AssistantMessage .assistant-bullet {
         width: auto;
         height: auto;
-        color: #c8cdd5;
+        color: ansi_default;
         padding: 0 1 0 0;
     }
     AssistantMessage Markdown {
@@ -407,7 +407,7 @@ class ModelSelectScreen(ModalScreen[None]):
     }
     #model-list .model-name {
         width: 24;
-        color: #c8cdd5;
+        color: ansi_default;
     }
     #model-list .model-current {
         color: #4a9eff;
@@ -418,7 +418,7 @@ class ModelSelectScreen(ModalScreen[None]):
     #thinking-section {
         height: auto;
         margin-top: 1;
-        color: #c8cdd5;
+        color: ansi_default;
     }
     #thinking-section Static {
         width: auto;
@@ -523,7 +523,7 @@ class ChatApp(App[None]):
     #prompt {
         width: auto;
         height: auto;
-        color: #c8cdd5;
+        color: ansi_default;
         padding-right: 1;
     }
     #user-input {
