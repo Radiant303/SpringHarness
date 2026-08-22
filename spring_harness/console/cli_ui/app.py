@@ -140,6 +140,9 @@ class CliApp(App[None]):
     App {
         background: ansi_default;
     }
+    MarkdownH1 {
+        content-align: left middle;  /* 库默认居中，App 级 CSS 才能压住组件自带 DEFAULT_CSS */
+    }
     Screen {
         layout: vertical;
         background: transparent;

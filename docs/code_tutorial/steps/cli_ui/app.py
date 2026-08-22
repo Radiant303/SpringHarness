@@ -34,6 +34,7 @@ from .widgets import (
     WelcomeBox,
     WorkingLine,
 )
+from .utils import format_num
 
 BUILTIN_COMMANDS = [
     ("model", "Switch LLM model"),
@@ -45,7 +46,7 @@ MAX_CONTEXT_TOKENS = 256_000  # 模型上下文窗口大小
 def _context_text(tokens: int, max_tokens: int = MAX_CONTEXT_TOKENS) -> str:
     """状态栏右侧的上下文占用文本：context: 3% (8192/256k)。"""
     pct = round(tokens / max_tokens * 100)
-    return f"context: {pct}% ({tokens}/{max_tokens // 1000}k)"
+    return f"context: {pct}% ({format_num(tokens)}/{format_num(max_tokens)})"
 
 
 class AssistantHandle:
@@ -138,6 +139,9 @@ class CliApp(App[None]):
     CSS = """
     App {
         background: ansi_default;
+    }
+    MarkdownH1 {
+        content-align: left middle;  /* 库默认居中，App 级 CSS 才能压住组件自带 DEFAULT_CSS */
     }
     Screen {
         layout: vertical;
