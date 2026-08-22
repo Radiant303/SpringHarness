@@ -9,14 +9,16 @@
 而是有样式、有前缀图标的自定义组件。
 """
 
-from rich.text import Text
+from typing import Any, cast
 
+from rich.text import Text
 from textual.app import App, ComposeResult
-from textual.widget import Widget
 from textual.containers import VerticalScroll
+from textual.reactive import Reactive, ReactiveType
+from textual.widget import Widget
 from textual.widgets import Input, Static
 
-from cjk_wrap import CJKStatic
+from .cjk_wrap import CJKStatic
 
 
 class UserMessage(CJKStatic):
@@ -30,7 +32,7 @@ class UserMessage(CJKStatic):
     }
     """
 
-    def __init__(self, text: str, **kwargs) -> None:
+    def __init__(self, text: str, **kwargs: Any) -> None:
         # Text.assemble 把多段（文字, 样式）拼成一段富文本
         content = Text.assemble(("✨ ", "yellow"), (text, ""))
         super().__init__(content, **kwargs)
@@ -46,7 +48,7 @@ class AssistantMessage(Static):
     }
     """
 
-    def __init__(self, text: str, **kwargs) -> None:
+    def __init__(self, text: str, **kwargs: Any) -> None:
         content = Text.assemble(("● ", "#c8cdd5"), (text, ""))
         super().__init__(content, **kwargs)
 
@@ -61,17 +63,17 @@ class ChatScroll(VerticalScroll):
     这里把负的滚动值挡回去即可。
     """
 
-    def set_reactive(self, reactive, value) -> None:
+    def set_reactive(self, reactive: Reactive[ReactiveType], value: ReactiveType) -> None:
         if (
             isinstance(value, (int, float))
             and value < 0
             and (reactive is Widget.scroll_y or reactive is Widget.scroll_target_y)
         ):
-            value = 0
+            value = cast(ReactiveType, 0)
         super().set_reactive(reactive, value)
 
 
-class ChatApp(App):
+class ChatApp(App[None]):
     CSS = """
     Screen {
         layout: vertical;

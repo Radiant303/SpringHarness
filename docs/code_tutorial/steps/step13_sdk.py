@@ -14,14 +14,15 @@
 
 import asyncio
 import sys
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # 让 cli_ui 可被 import
 
-from cli_ui import CliApp
+from .cli_ui import CliApp
 
 
-async def stream(write, text, delay=0.03, chunk=4):
+async def stream(write: Callable[[str], Awaitable[None]], text: str, delay: float = 0.03, chunk: int = 4):
     """把 text 按小块流式写给 write（write_thinking / write_answer）。"""
     for i in range(0, len(text), chunk):
         await write(text[i : i + chunk])

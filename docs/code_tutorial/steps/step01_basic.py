@@ -16,7 +16,7 @@ from textual.containers import VerticalScroll
 from textual.widgets import Input, Static
 
 
-class ChatApp(App):
+class ChatApp(App[None]):
     CSS = """
     Screen {
         layout: vertical;

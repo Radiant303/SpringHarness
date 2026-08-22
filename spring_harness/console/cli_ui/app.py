@@ -6,11 +6,16 @@ start_tool_call() / show_tool_call() / show_system() 输出内容；界面、
 """
 
 
+from typing import cast
+
 from textual import on
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
+from textual.theme import Theme
 from textual.widgets import Input, Markdown, Static
-from textual.worker import get_current_worker
+# get_current_worker 的返回类型在 textual 源码里没给 Worker 填泛型参数，
+# 导入符号会被报 partially unknown —— 库的类型缺口，局部忽略，调用点用 cast 收窄。
+from textual.worker import Worker, get_current_worker  # pyright: ignore[reportUnknownVariableType]
 
 from .inputs import CommandDropdown, HistoryInput
 from .modal import ModelSelectModal
@@ -45,7 +50,7 @@ class AssistantHandle:
         self._finished = False
 
     def _check_cancelled(self) -> bool:
-        worker = get_current_worker()
+        worker = cast(Worker[None], get_current_worker())
         return worker is not None and worker.is_cancelled
 
     async def write_thinking(self, text: str) -> None:
@@ -88,7 +93,7 @@ class ToolCallHandle:
         self._message = message
 
     def _check_cancelled(self) -> bool:
-        worker = get_current_worker()
+        worker = cast(Worker[None], get_current_worker())
         return worker is not None and worker.is_cancelled
 
     async def write_args(self, chunk: str) -> None:
@@ -104,7 +109,7 @@ class ToolCallHandle:
         self._message.set_result(result)
 
 
-class CliApp(App):
+class CliApp(App[None]):
     """Claude Code / Kimi Code 风格的终端聊天 App 基类。
 
     用法::
@@ -167,7 +172,7 @@ class CliApp(App):
         model: str = "K3-256k",
         version: str = "0.34.0",
         commands: list[tuple[str, str]] | None = None,
-        theme: object = KIMI_THEME,
+        theme: Theme | None = KIMI_THEME,
     ) -> None:
         super().__init__()
         self.title_text = title

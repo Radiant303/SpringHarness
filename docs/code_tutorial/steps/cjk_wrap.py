@@ -30,12 +30,12 @@
 import unicodedata
 
 from rich.cells import chop_cells
-
 from textual._cells import cell_len
 from textual.content import Content
-from textual.style import Style
+from textual.css.styles import RulesMap
 from textual.strip import Strip
-from textual.visual import RenderOptions, RulesMap, Visual
+from textual.style import Style
+from textual.visual import RenderOptions, Visual, VisualType
 from textual.widgets import Markdown, Static
 from textual.widgets._markdown import MarkdownBlock, MarkdownParagraph
 
@@ -150,7 +150,7 @@ class CJKStatic(Static):
 class CJKMarkdownParagraph(MarkdownParagraph):
     """换行对 CJK 友好的 Markdown 段落。"""
 
-    def update(self, content="", *, layout: bool = True) -> None:
+    def update(self, content: VisualType = "", *, layout: bool = True) -> None:
         if isinstance(content, Content):
             content = CJKContentVisual(content)
         super().update(content, layout=layout)

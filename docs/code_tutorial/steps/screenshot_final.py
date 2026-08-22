@@ -13,8 +13,7 @@ import re
 
 from rich.cells import cell_len
 
-from step12_final import KimiStyleChatApp
-
+from .step12_final import KimiStyleChatApp
 
 _TEXT_NODE_RE = re.compile(
     r'(<text\b[^>]*\btextLength=")([0-9.]+)("[^>]*>)(.*?)(</text>)',
@@ -66,7 +65,7 @@ def _prepare_svg(svg: str) -> str:
 
 async def main() -> None:
     app = KimiStyleChatApp()
-    async with app.run_test(size=(120, 35)) as pilot:
+    async with app.run_test(size=(120, 35)) as pilot:  # pyright: ignore[reportUnknownVariableType]
         inp = app.query_one("#user-input")
         inp.focus()
 

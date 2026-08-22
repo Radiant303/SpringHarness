@@ -5,17 +5,17 @@
 """
 
 from pathlib import Path
+from typing import Any, cast
 
 from rich.spinner import Spinner
 from rich.text import Text
-
 from textual.app import ComposeResult
 from textual.containers import Horizontal, HorizontalGroup, Vertical, VerticalScroll
+from textual.reactive import Reactive, ReactiveType
 from textual.widget import Widget
 from textual.widgets import Static
 
 from .cjk_wrap import CJKMarkdown, CJKStatic
-
 from .theme import ACCENT, GRAY
 
 
@@ -40,6 +40,7 @@ class WelcomeBox(Vertical):
     WelcomeBox .welcome-text {
         width: 1fr;
         height: auto;
+        margin-left: 1;
     }
     WelcomeBox .info {
         width: 1fr;
@@ -53,7 +54,7 @@ class WelcomeBox(Vertical):
         title: str = "Kimi Code",
         model: str = "",
         version: str = "",
-        **kwargs,
+        **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
         self._title = title
@@ -89,7 +90,7 @@ class UserMessage(CJKStatic):
     }
     """
 
-    def __init__(self, text: str, **kwargs) -> None:
+    def __init__(self, text: str, **kwargs: Any) -> None:
         content = Text.assemble(
             ("✨ ", "bold yellow"),
             (text, "bold #FFCB6B"),
@@ -188,7 +189,7 @@ class ToolCallMessage(Vertical):
     }
     """
 
-    def __init__(self, name: str, args: str = "", result: str | None = None, **kwargs) -> None:
+    def __init__(self, name: str, args: str = "", result: str | None = None, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self._name = name
         self._args = args
@@ -210,7 +211,7 @@ class ToolCallMessage(Vertical):
         )
 
     def _render_result(self) -> str:
-        lines = self._result.splitlines()
+        lines = (self._result or "").splitlines()
         hidden = len(lines) - self.MAX_RESULT_LINES
         if hidden > 0:
             lines = lines[: self.MAX_RESULT_LINES] + [f"… (还有 {hidden} 行)"]
@@ -256,7 +257,7 @@ class WorkingLine(Static):
     }
     """
 
-    def __init__(self, **kwargs) -> None:
+    def __init__(self, **kwargs: Any) -> None:
         super().__init__("", **kwargs)
         self.state: str | None = None
         self._spinner: Spinner | None = None
@@ -301,7 +302,7 @@ class SystemMessage(CJKStatic):
     }
     """
 
-    def __init__(self, text: str, **kwargs) -> None:
+    def __init__(self, text: str, **kwargs: Any) -> None:
         super().__init__(Text(text, style=GRAY), **kwargs)
 
 
@@ -322,13 +323,13 @@ class ChatScroll(VerticalScroll):
     }
     """
 
-    def set_reactive(self, reactive, value) -> None:
+    def set_reactive(self, reactive: Reactive[ReactiveType], value: ReactiveType) -> None:
         if (
             isinstance(value, (int, float))
             and value < 0
             and (reactive is Widget.scroll_y or reactive is Widget.scroll_target_y)
         ):
-            value = 0
+            value = cast(ReactiveType, 0)
         super().set_reactive(reactive, value)
 
 
@@ -360,7 +361,7 @@ class StatusBar(Horizontal):
         directory: str | None = None,
         git_branch: str = "",
         context: str = "",
-        **kwargs,
+        **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
         self._model = model

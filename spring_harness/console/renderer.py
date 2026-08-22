@@ -34,7 +34,7 @@ def _args_text(args: object) -> str:
 
 class EventStreamRenderer:
     def __init__(self, sink: RenderSink) -> None:
-        self._sink = sink
+        self._sink:RenderSink = sink
         self._dispatch: dict[type, Callable[[Any], Awaitable[None]]] = {
             PartStartEvent: self._on_part_start,
             PartDeltaEvent: self._on_part_delta,

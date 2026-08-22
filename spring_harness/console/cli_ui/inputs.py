@@ -4,9 +4,12 @@
 从模块常量改成了构造参数。
 """
 
+from typing import Any
+
 from textual import events
 from textual.app import ComposeResult
 from textual.containers import HorizontalGroup, Vertical
+from textual.widget import Widget
 from textual.widgets import Input, Static
 
 
@@ -47,7 +50,7 @@ class CommandDropdown(Vertical):
     }
     """
 
-    def __init__(self, commands: list[tuple[str, str]], **kwargs) -> None:
+    def __init__(self, commands: list[tuple[str, str]], **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self._commands: list[tuple[str, str]] = commands
         self._filtered: list[tuple[str, str]] = self._commands
@@ -91,7 +94,7 @@ class CommandDropdown(Vertical):
             self._update_selection()
             return
         await self.remove_children()
-        rows = [
+        rows: list[Widget] = [
             HorizontalGroup(
                 Static(
                     f"{'→ ' if idx == self._selected_index else '  '}{name}",
@@ -137,7 +140,7 @@ class CommandDropdown(Vertical):
 class HistoryInput(Input):
     """带上下历史记忆的输入框，也负责命令下拉的键盘导航。"""
 
-    def __init__(self, *args, **kwargs) -> None:
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self._history: list[str] = []
         self._history_pos: int | None = None

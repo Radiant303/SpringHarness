@@ -15,14 +15,14 @@ import re
 
 from rich.console import Console
 
-from step12_final import KimiStyleChatApp
+from .step12_final import KimiStyleChatApp
 
 WIDTH, HEIGHT = 120, 40
 
 
 async def main() -> None:
     app = KimiStyleChatApp()
-    async with app.run_test(size=(WIDTH, HEIGHT)) as pilot:
+    async with app.run_test(size=(WIDTH, HEIGHT)) as pilot:  # pyright: ignore[reportUnknownVariableType]
         # 发一条消息，让画面包含：欢迎框 + 对话 + 状态栏 + 输入框
         await pilot.press(*"hello", "enter")
         await pilot.pause(delay=1.0)

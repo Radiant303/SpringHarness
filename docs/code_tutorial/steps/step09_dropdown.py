@@ -13,17 +13,17 @@
 
 import asyncio
 from pathlib import Path
+from typing import Any, cast
 
 from rich.text import Text
-
 from textual import events, on
 from textual.app import App, ComposeResult
-from textual.widget import Widget
 from textual.containers import Horizontal, HorizontalGroup, Vertical, VerticalScroll
+from textual.reactive import Reactive, ReactiveType
+from textual.widget import Widget
 from textual.widgets import Input, Markdown, Static
 
-from cjk_wrap import CJKMarkdown, CJKStatic
-
+from .cjk_wrap import CJKMarkdown, CJKStatic
 
 THINKING = "Simple greeting, respond in Chinese."
 
@@ -104,7 +104,7 @@ class UserMessage(CJKStatic):
     }
     """
 
-    def __init__(self, text: str, **kwargs) -> None:
+    def __init__(self, text: str, **kwargs: Any) -> None:
         content = Text.assemble(("✨ ", "yellow"), (text, ""))
         super().__init__(content, **kwargs)
 
@@ -206,7 +206,7 @@ class CommandDropdown(Vertical):
     }
     """
 
-    def __init__(self, **kwargs) -> None:
+    def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self._commands: list[tuple[str, str]] = COMMANDS
         self._filtered: list[tuple[str, str]] = self._commands
@@ -251,7 +251,7 @@ class CommandDropdown(Vertical):
             self._update_selection()
             return
         await self.remove_children()
-        rows = [
+        rows: list[Widget] = [
             HorizontalGroup(
                 Static(
                     f"{'→ ' if idx == self._selected_index else '  '}{name}",
@@ -297,7 +297,7 @@ class CommandDropdown(Vertical):
 class HistoryInput(Input):
     """带历史记忆的输入框；下拉框可见时，↑↓/Enter/Esc 优先给下拉框。"""
 
-    def __init__(self, *args, **kwargs) -> None:
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self._history: list[str] = []
         self._history_pos: int | None = None
@@ -377,17 +377,17 @@ class ChatScroll(VerticalScroll):
     这里把负的滚动值挡回去即可。
     """
 
-    def set_reactive(self, reactive, value) -> None:
+    def set_reactive(self, reactive: Reactive[ReactiveType], value: ReactiveType) -> None:
         if (
             isinstance(value, (int, float))
             and value < 0
             and (reactive is Widget.scroll_y or reactive is Widget.scroll_target_y)
         ):
-            value = 0
+            value = cast(ReactiveType, 0)
         super().set_reactive(reactive, value)
 
 
-class ChatApp(App):
+class ChatApp(App[None]):
     CSS = """
     Screen {
         layout: vertical;

@@ -12,20 +12,23 @@ thinking→step06 样式→step07 历史→step08 下拉→step09 弹窗→step1
 
 import asyncio
 from pathlib import Path
+from typing import Any, cast
 
 from rich.text import Text
-
 from textual import events, on
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, HorizontalGroup, Vertical, VerticalScroll
+from textual.reactive import Reactive, ReactiveType
 from textual.screen import ModalScreen
 from textual.theme import Theme
 from textual.widget import Widget
 from textual.widgets import Input, Markdown, Static
-from textual.worker import get_current_worker
+from textual.worker import (  # pyright: ignore[reportUnknownVariableType]
+    Worker,
+    get_current_worker,
+)
 
-from cjk_wrap import CJKMarkdown, CJKStatic
-
+from .cjk_wrap import CJKMarkdown, CJKStatic
 
 MODEL_NAME = "K3-256k"
 THINKING_LEVEL = "high"
@@ -122,7 +125,7 @@ class UserMessage(CJKStatic):
     }
     """
 
-    def __init__(self, text: str, **kwargs) -> None:
+    def __init__(self, text: str, **kwargs: Any) -> None:
         content = Text.assemble(
             ("✨ ", "bold yellow"),
             (text, f"bold #FFCB6B"),
@@ -199,13 +202,13 @@ class ChatScroll(VerticalScroll):
     这里把负的滚动值挡回去即可。
     """
 
-    def set_reactive(self, reactive, value) -> None:
+    def set_reactive(self, reactive: Reactive[ReactiveType], value: ReactiveType) -> None:
         if (
             isinstance(value, (int, float))
             and value < 0
             and (reactive is Widget.scroll_y or reactive is Widget.scroll_target_y)
         ):
-            value = 0
+            value = cast(ReactiveType, 0)
         super().set_reactive(reactive, value)
 
 
@@ -281,7 +284,7 @@ class CommandDropdown(Vertical):
     }
     """
 
-    def __init__(self, **kwargs) -> None:
+    def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self._commands: list[tuple[str, str]] = COMMANDS
         self._filtered: list[tuple[str, str]] = self._commands
@@ -325,7 +328,7 @@ class CommandDropdown(Vertical):
             self._update_selection()
             return
         await self.remove_children()
-        rows = [
+        rows: list[Widget] = [
             HorizontalGroup(
                 Static(
                     f"{'→ ' if idx == self._selected_index else '  '}{name}",
@@ -371,7 +374,7 @@ class CommandDropdown(Vertical):
 class HistoryInput(Input):
     """带上下历史记忆的输入框，也负责命令下拉的键盘导航。"""
 
-    def __init__(self, *args, **kwargs) -> None:
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self._history: list[str] = []
         self._history_pos: int | None = None
@@ -439,7 +442,7 @@ class HistoryInput(Input):
         self._draft = ""
 
 
-class ModelSelectScreen(ModalScreen):
+class ModelSelectScreen(ModalScreen[None]):
     """模型选择弹窗（简化版）。"""
 
     CSS = """
@@ -509,7 +512,7 @@ class ModelSelectScreen(ModalScreen):
         ("escape", "cancel", "Cancel"),
     ]
 
-    def __init__(self, **kwargs) -> None:
+    def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self._models = [
             ("K2.7 Coding Highspeed", "Kimi Code"),
@@ -550,7 +553,7 @@ class ModelSelectScreen(ModalScreen):
         self.dismiss(None)
 
 
-class KimiStyleChatApp(App):
+class KimiStyleChatApp(App[None]):
     CSS = """
     App {
         background: ansi_default;
@@ -609,7 +612,7 @@ class KimiStyleChatApp(App):
     }
     """
 
-    def __init__(self, **kwargs) -> None:
+    def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self._message_counter = 0
         self.register_theme(KIMI_THEME)
@@ -716,7 +719,7 @@ class KimiStyleChatApp(App):
         thinking_text = "Simple greeting, respond in Chinese."
         thinking_buffer = ""
         for char in thinking_text:
-            worker = get_current_worker()
+            worker = cast(Worker[None], get_current_worker())
             if worker.is_cancelled:
                 return
             if not thinking_buffer:
@@ -733,7 +736,7 @@ class KimiStyleChatApp(App):
         stream = Markdown.get_stream(answer_md)
         try:
             for i in range(0, len(answer), 8):
-                worker = get_current_worker()
+                worker = cast(Worker[None], get_current_worker())
                 if worker.is_cancelled:
                     break
                 if i == 0:

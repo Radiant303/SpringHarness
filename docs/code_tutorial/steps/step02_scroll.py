@@ -11,9 +11,12 @@
 和第 1 步的区别：scroll_end 换成 anchor，滚动区换成 ChatScroll。
 """
 
+from typing import cast
+
 from textual.app import App, ComposeResult
-from textual.widget import Widget
 from textual.containers import VerticalScroll
+from textual.reactive import Reactive, ReactiveType
+from textual.widget import Widget
 from textual.widgets import Input, Static
 
 
@@ -26,17 +29,17 @@ class ChatScroll(VerticalScroll):
     这里把负的滚动值挡回去即可。
     """
 
-    def set_reactive(self, reactive, value) -> None:
+    def set_reactive(self, reactive: Reactive[ReactiveType], value: ReactiveType) -> None:
         if (
             isinstance(value, (int, float))
             and value < 0
             and (reactive is Widget.scroll_y or reactive is Widget.scroll_target_y)
         ):
-            value = 0
+            value = cast(ReactiveType, 0)
         super().set_reactive(reactive, value)
 
 
-class ChatApp(App):
+class ChatApp(App[None]):
     CSS = """
     Screen {
         layout: vertical;

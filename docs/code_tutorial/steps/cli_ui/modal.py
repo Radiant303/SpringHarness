@@ -1,7 +1,8 @@
 """模型选择弹窗（/model 内置命令使用）。从 step12_final.py 提炼，行为一致。"""
 
-from rich.text import Text
+from typing import Any
 
+from rich.text import Text
 from textual.app import ComposeResult
 from textual.containers import Horizontal, HorizontalGroup, Vertical
 from textual.screen import ModalScreen
@@ -10,7 +11,7 @@ from textual.widgets import Static
 from .theme import ACCENT
 
 
-class ModelSelectModal(ModalScreen):
+class ModelSelectModal(ModalScreen[None]):
     """模型选择弹窗（简化版）。"""
 
     CSS = """
@@ -84,7 +85,7 @@ class ModelSelectModal(ModalScreen):
         self,
         models: list[tuple[str, str]] | None = None,
         current_model: str = "",
-        **kwargs,
+        **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
         self._models = models if models is not None else [
