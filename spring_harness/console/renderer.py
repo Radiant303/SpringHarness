@@ -47,7 +47,7 @@ class EventStreamRenderer:
 
     async def __call__(
         self,
-        ctx: RunContext,
+        _ctx: RunContext[object] | None,
         events: AsyncIterable[AgentStreamEvent | AgentRunResultEvent],
     ) -> None:
         async for event in events:
@@ -91,5 +91,5 @@ class EventStreamRenderer:
                 content = part.content
                 await tool.show_result(content if isinstance(content, str) else str(content))
 
-    async def _on_agent_result(self, event: AgentRunResultEvent) -> None:
+    async def _on_agent_result(self, _event: AgentRunResultEvent) -> None:
         await self._sink.finish()

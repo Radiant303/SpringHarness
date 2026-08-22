@@ -271,11 +271,10 @@ class ChatApp(App[None]):
     def compose(self) -> ComposeResult:
         with ChatScroll(id="chat-scroll"):
             yield WelcomeBox()
-        with Vertical(id="input-area"):
-            with Horizontal(id="input-row"):
-                yield Static(">", id="prompt")
-                # 唯一的区别：这里从 Input 换成了 HistoryInput
-                yield HistoryInput(placeholder="", id="user-input")
+        with Vertical(id="input-area"), Horizontal(id="input-row"):
+            yield Static(">", id="prompt")
+            # 唯一的区别：这里从 Input 换成了 HistoryInput
+            yield HistoryInput(placeholder="", id="user-input")
 
     def on_mount(self) -> None:
         """启动后自动聚焦输入框。"""

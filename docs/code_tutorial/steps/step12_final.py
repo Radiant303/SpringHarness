@@ -12,11 +12,12 @@ thinking→step06 样式→step07 历史→step08 下拉→step09 弹窗→step1
 
 import asyncio
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, ClassVar, cast
 
 from rich.text import Text
 from textual import events, on
 from textual.app import App, ComposeResult
+from textual.binding import Binding
 from textual.containers import Horizontal, HorizontalGroup, Vertical, VerticalScroll
 from textual.reactive import Reactive, ReactiveType
 from textual.screen import ModalScreen
@@ -128,7 +129,7 @@ class UserMessage(CJKStatic):
     def __init__(self, text: str, **kwargs: Any) -> None:
         content = Text.assemble(
             ("✨ ", "bold yellow"),
-            (text, f"bold #FFCB6B"),
+            (text, "bold #FFCB6B"),
         )
         super().__init__(content, **kwargs)
 
@@ -508,8 +509,8 @@ class ModelSelectScreen(ModalScreen[None]):
     }
     """
 
-    BINDINGS = [
-        ("escape", "cancel", "Cancel"),
+    BINDINGS: ClassVar[list[Binding]] = [
+        Binding("escape", "cancel", "Cancel"),
     ]
 
     def __init__(self, **kwargs: Any) -> None:

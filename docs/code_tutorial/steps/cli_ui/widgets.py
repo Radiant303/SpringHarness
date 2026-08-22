@@ -5,7 +5,7 @@
 """
 
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, ClassVar, cast
 
 from rich.spinner import Spinner
 from rich.text import Text
@@ -240,7 +240,7 @@ class WorkingLine(Static):
     所以定时器里反复 update 同一个 Spinner 对象就能形成动画。
     """
 
-    STATES = {
+    STATES: ClassVar[dict] = {
         "idle": ("moon", "", "We see the first gaze, feel life's power transcend."),
         "thinking": ("dots", "Thinking...", "The quiet mind is the calling card of deep thought."),
         "tool": ("line", "Using Tool...", "Give me a place to stand, and I will move Earth."),

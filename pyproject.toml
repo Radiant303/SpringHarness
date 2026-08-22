@@ -19,3 +19,7 @@ dependencies = [
 dev = [
     "basedpyright>=1.39.10",
 ]
+
+[tool.basedpyright]
+typeCheckingMode = "basic"
+pythonVersion = "3.12"
