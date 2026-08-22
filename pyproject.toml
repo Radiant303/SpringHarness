@@ -14,3 +14,8 @@ dependencies = [
     "rich>=15.0.0",
     "textual>=8.2.8",
 ]
+
+[dependency-groups]
+dev = [
+    "basedpyright>=1.39.10",
+]
