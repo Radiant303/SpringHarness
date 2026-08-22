@@ -62,39 +62,39 @@ def _prepare_svg(svg: str) -> str:
     )
     return _fix_svg_text_metrics(svg)
 
+async def _write_svg(svg: str, filename: str) -> None:
+    """异步写入 SVG 文件。"""
+    def write():
+        with open(filename, "w", encoding="utf-8") as f:
+            f.write(svg)
+    await asyncio.to_thread(write)
 
 async def main() -> None:
     app = KimiStyleChatApp()
-    async with app.run_test(size=(120, 35)) as pilot:  # pyright: ignore[reportUnknownVariableType]
+    async with app.run_test(size=(120, 35)) as pilot:
         inp = app.query_one("#user-input")
         inp.focus()
 
-        # 连发三条消息，检查多条之间的间距
         for text in ["你好", "csaca", "再试一次"]:
             await pilot.press(*list(text), "enter")
             await pilot.pause(3)
 
-        # 截图 1：聊天界面
         svg = _prepare_svg(app.export_screenshot())
-        with open("final_chat.svg", "w", encoding="utf-8") as f:
-            f.write(svg)
+        await _write_svg(svg, "final_chat.svg")
 
         # 打开命令下拉
         await pilot.press("/")
         await pilot.pause(0.5)
         svg = _prepare_svg(app.export_screenshot())
-        with open("final_dropdown.svg", "w", encoding="utf-8") as f:
-            f.write(svg)
+        await _write_svg(svg, "final_dropdown.svg")
 
         # 打开 model 弹窗
         await pilot.press(*list("model"), "enter")
         await pilot.pause(0.5)
         svg = _prepare_svg(app.export_screenshot())
-        with open("final_model.svg", "w", encoding="utf-8") as f:
-            f.write(svg)
+        await _write_svg(svg, "final_model.svg")
 
         print("截图已生成: final_chat.svg / final_dropdown.svg / final_model.svg")
-
 
 if __name__ == "__main__":
     asyncio.run(main())

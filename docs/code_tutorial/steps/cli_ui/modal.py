@@ -1,9 +1,10 @@
 """模型选择弹窗（/model 内置命令使用）。从 step12_final.py 提炼，行为一致。"""
 
-from typing import Any
+from typing import Any, ClassVar
 
 from rich.text import Text
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.containers import Horizontal, HorizontalGroup, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Static
@@ -77,8 +78,8 @@ class ModelSelectModal(ModalScreen[None]):
     }
     """
 
-    BINDINGS = [
-        ("escape", "cancel", "Cancel"),
+    BINDINGS: ClassVar[list[Binding]] = [
+        Binding("escape", "cancel", "Cancel"),
     ]
 
     def __init__(
