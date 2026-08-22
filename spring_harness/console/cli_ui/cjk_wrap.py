@@ -28,17 +28,19 @@
 """
 
 import unicodedata
+from typing import ClassVar
 
+from pygments.token import Token
 from rich.cells import chop_cells
-
 from textual._cells import cell_len
 from textual.content import Content
-from textual.style import Style
-from textual.strip import Strip
 from textual.css.styles import RulesMap
+from textual.highlight import HighlightTheme, highlight
+from textual.strip import Strip
+from textual.style import Style
 from textual.visual import RenderOptions, Visual, VisualType
 from textual.widgets import Markdown, Static
-from textual.widgets._markdown import MarkdownBlock, MarkdownParagraph
+from textual.widgets._markdown import MarkdownBlock, MarkdownFence, MarkdownParagraph
 
 
 def _is_wide(char: str) -> bool:
@@ -157,10 +159,31 @@ class CJKMarkdownParagraph(MarkdownParagraph):
         super().update(content, layout=layout)
 
 
-class CJKMarkdown(Markdown):
-    """段落使用 CJK 友好换行的 Markdown 组件（其它块类型不变）。"""
+class DiffHighlightTheme(HighlightTheme):
+    """库的高亮主题漏了 diff 的删除/新增行 token，这里补上（红/绿跟随主题色）。"""
 
-    BLOCKS: dict[str, type[MarkdownBlock]] = {
+    STYLES: ClassVar[dict[tuple[str, ...], str]] = {
+        **HighlightTheme.STYLES,
+        Token.Generic.Deleted: "$text-error",
+        Token.Generic.Inserted: "$text-success",
+    }
+
+
+class DiffMarkdownFence(MarkdownFence):
+    """diff 语言的代码块换用补全后的主题；其它语言走库默认逻辑。"""
+
+    @classmethod
+    def highlight(cls, code: str, language: str, ansi: bool = False, dark: bool = False) -> Content:
+        if language == "diff":
+            return highlight(code, language=language, theme=DiffHighlightTheme)
+        return super().highlight(code, language, ansi=ansi, dark=dark)
+
+
+class CJKMarkdown(Markdown):
+    """段落使用 CJK 友好换行、diff 代码块补红绿配色的 Markdown 组件。"""
+
+    BLOCKS: ClassVar[dict[str, type[MarkdownBlock]]] = {
         **Markdown.BLOCKS,
         "paragraph_open": CJKMarkdownParagraph,
+        "fence": DiffMarkdownFence,
     }
