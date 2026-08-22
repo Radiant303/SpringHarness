@@ -13,9 +13,13 @@ from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.theme import Theme
 from textual.widgets import Input, Markdown, Static
+
 # get_current_worker 的返回类型在 textual 源码里没给 Worker 填泛型参数，
 # 导入符号会被报 partially unknown —— 库的类型缺口，局部忽略，调用点用 cast 收窄。
-from textual.worker import Worker, get_current_worker  # pyright: ignore[reportUnknownVariableType]
+from textual.worker import (  # pyright: ignore[reportUnknownVariableType]
+    Worker,
+    get_current_worker,
+)
 
 from .inputs import CommandDropdown, HistoryInput
 from .modal import ModelSelectModal
@@ -30,10 +34,19 @@ from .widgets import (
     WelcomeBox,
     WorkingLine,
 )
+from .utils import format_num
 
 BUILTIN_COMMANDS = [
     ("model", "Switch LLM model"),
 ]
+
+MAX_CONTEXT_TOKENS = 256_000  # 模型上下文窗口大小
+
+
+def _context_text(tokens: int, max_tokens: int = MAX_CONTEXT_TOKENS) -> str:
+    """状态栏右侧的上下文占用文本：context: 3% (8192/256k)。"""
+    pct = round(tokens / max_tokens * 100)
+    return f"context: {pct}% ({format_num(tokens)}/{format_num(max_tokens)})"
 
 
 class AssistantHandle:
@@ -200,7 +213,7 @@ class CliApp(App[None]):
             with Horizontal(id="input-row"):
                 yield Static(">", id="prompt")
                 yield HistoryInput(placeholder="", id="user-input")
-        yield StatusBar(model=self.model, id="status-bar")
+        yield StatusBar(model=self.model, context=_context_text(0), id="status-bar")
 
     # ---- 子类要实现的回调 ----
 
@@ -269,6 +282,10 @@ class CliApp(App[None]):
         self.query_one("#status-bar", StatusBar).update(
             model=model, directory=directory, git_branch=git_branch, context=context
         )
+
+    def update_context(self, tokens: int) -> None:
+        """更新状态栏右侧的上下文占用显示（token 数）。"""
+        self.set_status(context=_context_text(tokens))
 
     # ---- 框架内部：输入分发 ----
 

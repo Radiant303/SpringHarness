@@ -24,3 +24,5 @@ DEEPSEEK_API_KEY: str = os.getenv("DEEPSEEK_API_KEY","")
 
 # 日志配置
 LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO").upper()
+BASE_DIR = Path(__file__).resolve().parents[3]
+LOG_FILE: str = os.getenv("LOG_FILE", str(BASE_DIR / "logs" / "app.log"))

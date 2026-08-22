@@ -20,6 +20,7 @@ from pydantic_ai import (
 )
 
 from spring_harness.console.sink import RenderSink, ToolCallSink
+from spring_harness.core.log import logger
 
 
 def _args_text(args: object) -> str:
@@ -44,6 +45,7 @@ class EventStreamRenderer:
         }
         self._tool_by_index: dict[int, ToolCallSink] = {}
         self._tool_by_id: dict[str, ToolCallSink] = {}
+        self._context = 0  # 最近一场 run 的 token 用量（input+output ≈ 当前上下文占用）
 
     async def __call__(
         self,
@@ -91,5 +93,12 @@ class EventStreamRenderer:
                 content = part.content
                 await tool.show_result(content if isinstance(content, str) else str(content))
 
-    async def _on_agent_result(self, _event: AgentRunResultEvent) -> None:
+    async def _on_agent_result(self, event: AgentRunResultEvent) -> None:
+        result = event.result
+        if result is not None:
+            usage = result.usage
+            input_token = usage.input_tokens
+            output_token = usage.output_tokens
+            self._context = input_token + output_token
+            await self._sink.update_context(self._context)
         await self._sink.finish()

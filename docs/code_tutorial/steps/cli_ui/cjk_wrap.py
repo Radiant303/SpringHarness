@@ -28,15 +28,14 @@
 """
 
 import unicodedata
-from types import MappingProxyType
-from typing import ClassVar
 
 from rich.cells import chop_cells
+
 from textual._cells import cell_len
 from textual.content import Content
-from textual.css.styles import RulesMap
-from textual.strip import Strip
 from textual.style import Style
+from textual.strip import Strip
+from textual.css.styles import RulesMap
 from textual.visual import RenderOptions, Visual, VisualType
 from textual.widgets import Markdown, Static
 from textual.widgets._markdown import MarkdownBlock, MarkdownParagraph
@@ -161,7 +160,7 @@ class CJKMarkdownParagraph(MarkdownParagraph):
 class CJKMarkdown(Markdown):
     """段落使用 CJK 友好换行的 Markdown 组件（其它块类型不变）。"""
 
-    BLOCKS: ClassVar[MappingProxyType[str, type[MarkdownBlock]]] = MappingProxyType({
+    BLOCKS: dict[str, type[MarkdownBlock]] = {
         **Markdown.BLOCKS,
         "paragraph_open": CJKMarkdownParagraph,
-    })
+    }

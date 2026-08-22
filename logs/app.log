@@ -1,0 +1,4 @@
+2026-08-22 19:37:42.814 | INFO     | __main__:<module>:3 - Hello, World!
+2026-08-22 20:18:07.211 | INFO     | spring_harness.console.renderer:_on_agent_result:100 - Usage: input=779 output=147
+2026-08-22 20:20:35.299 | INFO     | spring_harness.console.renderer:_on_agent_result:100 - Usage: input=779 output=192
+2026-08-22 20:21:16.445 | INFO     | spring_harness.console.renderer:_on_agent_result:100 - Usage: input=60672 output=2325

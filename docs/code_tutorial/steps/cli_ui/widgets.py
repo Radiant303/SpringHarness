@@ -5,10 +5,11 @@
 """
 
 from pathlib import Path
-from typing import Any, ClassVar, cast
+from typing import Any, cast
 
 from rich.spinner import Spinner
 from rich.text import Text
+
 from textual.app import ComposeResult
 from textual.containers import Horizontal, HorizontalGroup, Vertical, VerticalScroll
 from textual.reactive import Reactive, ReactiveType
@@ -16,6 +17,7 @@ from textual.widget import Widget
 from textual.widgets import Static
 
 from .cjk_wrap import CJKMarkdown, CJKStatic
+
 from .theme import ACCENT, GRAY
 
 
@@ -240,7 +242,7 @@ class WorkingLine(Static):
     所以定时器里反复 update 同一个 Spinner 对象就能形成动画。
     """
 
-    STATES: ClassVar[dict] = {
+    STATES = {
         "idle": ("moon", "", "We see the first gaze, feel life's power transcend."),
         "thinking": ("dots", "Thinking...", "The quiet mind is the calling card of deep thought."),
         "tool": ("line", "Using Tool...", "Give me a place to stand, and I will move Earth."),

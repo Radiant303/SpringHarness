@@ -39,3 +39,6 @@ class CliSink:
     async def finish(self):
         self._app.set_working(None)
         await self._close_ensure_assistant()
+
+    async def update_context(self, tokens: int) -> None:
+        self._app.update_context(tokens)
