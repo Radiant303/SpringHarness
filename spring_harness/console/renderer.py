@@ -152,7 +152,7 @@ class EventStreamRenderer:
     async def _on_agent_result(self, event: AgentRunResultEvent) -> None:
         result = event.result
         if result is not None:
-            usage = result.usage
+            usage = result.response.usage
             input_token = usage.input_tokens
             output_token = usage.output_tokens
             self._context = input_token + output_token
