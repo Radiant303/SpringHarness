@@ -200,6 +200,7 @@ class CliApp(App[None]):
         title: str = "Kimi Code",
         model: str = "K3-256k",
         version: str = "0.34.0",
+        max_context:int = MAX_CONTEXT_TOKENS,
         commands: list[tuple[str, str]] | None = None,
         theme: Theme | None = KIMI_THEME,
     ) -> None:
@@ -207,6 +208,8 @@ class CliApp(App[None]):
         self.title_text = title
         self.model = model
         self.version = version
+        self.max_context = max_context
+        self._last_tokens = 0
         self._commands = list(commands or [])
         if not any(name == "model" for name, _ in self._commands):
             self._commands.extend(BUILTIN_COMMANDS)
@@ -305,7 +308,15 @@ class CliApp(App[None]):
 
     def update_context(self, tokens: int) -> None:
         """更新状态栏右侧的上下文占用显示（token 数）。"""
-        self.set_status(context=_context_text(tokens))
+        self._last_tokens = tokens
+        self.set_status(context=_context_text(tokens,max_tokens=self.max_context))
+
+    def set_model(self, model: str, max_context: int) -> None:
+        """切换模型时候更新面板模型名称和上下文信息"""
+        self.model = model
+        self._max_context = max_context
+        self.set_status(model=model)
+        self.set_status(context=_context_text(self._last_tokens, self._max_context))
 
     # ---- 框架内部：输入分发 ----
 

@@ -2,14 +2,14 @@ import sys
 
 from loguru import logger as _raw_loguru_logger
 
-from spring_harness.core.config.settings import LOG_FILE, LOG_LEVEL
+from spring_harness.core.config.settings import log
 
 
 def set_log_level(level:str ='DEBUG'):
     _ = _raw_loguru_logger.remove()
     _ = _raw_loguru_logger.add(sys.stderr, level=level)
     _ = _raw_loguru_logger.add(
-        LOG_FILE,
+        log.log_file,
         rotation="10 MB",
         retention="10 days",
         encoding="utf-8",
@@ -17,6 +17,6 @@ def set_log_level(level:str ='DEBUG'):
     )
 
 
-set_log_level(LOG_LEVEL)
+set_log_level(log.log_level)
 
 logger = _raw_loguru_logger

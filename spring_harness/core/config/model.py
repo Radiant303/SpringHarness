@@ -1,42 +1,94 @@
+from typing import Any
+
 from pydantic_ai import ModelProfile
+from pydantic_ai.models import Model
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.alibaba import AlibabaProvider
 from pydantic_ai.providers.deepseek import DeepSeekProvider
+from pydantic_ai.providers.openai import OpenAIProvider
 
-from spring_harness.core.config.settings import (
-    DASHSCOPE_API_KEY,
-    DASHSCOPE_BASE_URL,
-    DASHSCOPE_MODEL_NAME,
-    DEEPSEEK_API_KEY,
-    DEEPSEEK_MODEL_NAME,
-)
+from spring_harness.core.config.settings import config
 
 
-def get_model():
-    return get_dashscope_model()
+class Setting:
+    def __init__(self) -> None:
+        self.config = config
+        self._providers = {
+            "openai": self._openai,
+            "alibaba": self._alibaba,
+            "deepseek": self._deepseek,
+        }
 
-def get_dashscope_model():
-    return OpenAIChatModel(
-        DASHSCOPE_MODEL_NAME,
-        provider=AlibabaProvider(
-            api_key=DASHSCOPE_API_KEY,
-            base_url=DASHSCOPE_BASE_URL
-        ),
-        profile=ModelProfile(
-            supports_json_schema_output=True,
-            default_structured_output_mode='native',
-        ),
-    )
+    def get_model(self, model_name: str | None = None) -> Model:
+        model_name = model_name or self.config._default_model
+        model_config = self.config.get_model(model_name)
+
+        if not model_config:
+            raise ValueError(f"模型 '{model_name}' 不存在")
+
+        provider_config = self.config.get_provider(model_config._provider)
+        if not provider_config:
+            raise ValueError(f"Provider '{model_config._provider}' 不存在")
+
+        provider_type = provider_config._type
+        creator = self._providers.get(provider_type)
+
+        if not creator:
+            raise ValueError(f"不支持的 Provider 类型: {provider_type}")
+
+        return creator(
+            model_name=model_config._model,
+            provider_config=provider_config,
+            model_config=model_config,
+        )
+
+    def _openai(self, model_name: str, provider_config: Any, model_config: Any) -> Model:
+        return OpenAIChatModel(
+            model_name,
+            provider=OpenAIProvider(
+                base_url=provider_config._base_url,
+                api_key=provider_config._api_key,
+            ),
+            profile=self._profile(),
+        )
+
+    def _alibaba(self, model_name: str, provider_config: Any, model_config: Any) -> Model:
+        return OpenAIChatModel(
+            model_name,
+            provider=AlibabaProvider(
+                base_url=provider_config._base_url,
+                api_key=provider_config._api_key,
+            ),
+            profile=self._profile(native=True),
+        )
+
+    def _deepseek(self, model_name: str, provider_config: Any, model_config: Any) -> Model:
+        return OpenAIChatModel(
+            model_name,
+            provider=DeepSeekProvider(
+                api_key=provider_config._api_key,
+            ),
+            profile=self._profile(),
+        )
+
+    @staticmethod
+    def _profile(native: bool = False) -> ModelProfile:
+        """统一的 profile 配置"""
+        return ModelProfile(
+            supports_json_schema_output=native,
+            supports_json_object_output=not native,
+            default_structured_output_mode='native' if native else 'prompted',
+        )
+
+    def list_models(self) -> list[str]:
+        """列出所有可用模型"""
+        return list(self.config._models.keys())
+
+    def list_providers(self) -> list[str]:
+        """列出所有可用 Provider"""
+        return list(self.config._providers.keys())
 
 
-def get_deepseek_model():
-    return OpenAIChatModel(
-        DEEPSEEK_MODEL_NAME,
-        provider=DeepSeekProvider(
-            api_key=DEEPSEEK_API_KEY
-        ),
-        profile=ModelProfile(
-            supports_json_object_output=True,
-            default_structured_output_mode='prompted',
-        ),
-    )
+# 全局实例
+setting = Setting()
+get_model = setting.get_model

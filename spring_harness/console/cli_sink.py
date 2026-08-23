@@ -42,3 +42,6 @@ class CliSink:
 
     async def update_context(self, tokens: int) -> None:
         self._app.update_context(tokens)
+
+    async def set_model(self, model: str, max_context: int) -> None:
+        self._app.set_model(model, max_context)

@@ -157,6 +157,7 @@ class EventStreamRenderer:
             output_token = usage.output_tokens
             self._context = input_token + output_token
             await self._sink.update_context(self._context)
+            logger.info(f"{result.response.text},{input_token},{output_token}")
         await self._sink.finish()
 
     async def finish_with(self, result: AgentRunResult) -> None:

@@ -1,0 +1,54 @@
+default_model = "kimi-code/k3-256k"
+
+[loop_control]
+max_retries_per_step = 3
+reserved_context_size = 50000
+
+[thinking]
+enabled = true
+effort = "high"
+
+[providers.deepseek]
+type = "openai"
+api_key = "sk-xxxxxxxxxxxxxxxx"
+base_url = "https://api.deepseek.com"
+
+[providers.xx]
+type = "openai"
+api_key = "sk-"
+base_url = "https://xxx.dev/v1"
+
+[models."xxx/gpt-5.6-luna"]
+provider = "xxxx"
+model = "gpt-5.6-luna"
+max_context_size = 262144
+capabilities = [ "thinking", "always_thinking", "image_in", "tool_use" ]
+support_efforts = [ "low", "medium", "high", "xhigh", "max" ]
+default_effort = "medium"
+display_name = "GPT-5.6 Luna"
+
+[models."deepseek/deepseek-v4-flash"]
+provider = "deepseek"
+model = "deepseek-v4-flash"
+max_context_size = 1000000
+max_output_size = 384000
+capabilities = [ "thinking", "tool_use" ]
+display_name = "DeepSeek V4 Flash"
+reasoning_key = "reasoning_content"
+
+[models."deepseek/deepseek-v4-pro"]
+provider = "deepseek"
+model = "deepseek-v4-pro"
+max_context_size = 1000000
+max_output_size = 384000
+capabilities = [ "thinking", "tool_use" ]
+display_name = "DeepSeek V4 Pro"
+reasoning_key = "reasoning_content"
+
+[secondary_model]
+default_effort = "on"
+model = "kimi-code/k3-256k"
+
+[log]
+log_level = "INFO"
+log_file = "logs/app.log"

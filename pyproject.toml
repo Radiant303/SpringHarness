@@ -5,14 +5,17 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "agent-client-protocol>=0.11,<0.12",
     "cjkwrap>=2.2",
     "loguru>=0.7.3",
     "prompt-toolkit>=3.0.53",
     "pydantic-ai>=2.30.0",
-    "pydantic-ai-harness[acp]>=0.21.0",
+    "pydantic-ai-harness>=0.24.0",
+    "pytest>=9.1.1",
     "python-dotenv>=1.2.2",
     "rich>=15.0.0",
     "textual>=8.2.8",
+    "tomli>=2.4.1",
 ]
 
 [dependency-groups]
