@@ -186,6 +186,10 @@ class CliApp(App[None]):
         border: none;
         padding: 0;
         background: transparent;
+
+        & > .input--cursor {
+            color: ansi_default;
+        }
     }
     #prompt {
         width: auto;
