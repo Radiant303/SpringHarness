@@ -17,6 +17,7 @@ dependencies = [
     "rich>=15.0.0",
     "textual>=8.2.8",
     "tomli>=2.4.1",
+    "uvicorn[standard]>=0.52.3",
 ]
 
 [dependency-groups]
@@ -27,3 +28,15 @@ dev = [
 [tool.basedpyright]
 typeCheckingMode = "basic"
 pythonVersion = "3.12"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["spring_harness"]
+
+[project.scripts]
+springacp = "spring_harness.entrypoints.acp:main"
+springcli = "spring_harness.entrypoints.cli:main"
+springweb = "spring_harness.entrypoints.web:main"
