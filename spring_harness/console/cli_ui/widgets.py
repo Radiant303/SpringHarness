@@ -235,23 +235,23 @@ class ToolCallMessage(Vertical):
         self._args += chunk
         self.query_one(".tool-head", CJKStatic).update(self._render_head())
 
-    def set_result(self, result: str) -> None:
+    async def set_result(self, result: str) -> None:
         """补显示工具返回结果；重复调用以最后一次为准。结果到达即撤下等待标记。"""
         self._result = result
         rendered = self._render_result()
         if self.query(".tool-pending"):
-            self.query_one(".tool-pending", CJKStatic).remove()
+            await self.query_one(".tool-pending", CJKStatic).remove()
         if self.query(".tool-result"):
             self.query_one(".tool-result", CJKStatic).update(rendered)
         else:
-            self.mount(CJKStatic(rendered, classes="tool-result"))
+            await self.mount(CJKStatic(rendered, classes="tool-result"))
 
-    def set_pending(self) -> None:
+    async def set_pending(self) -> None:
         """标记为"等待批准/外部执行"（deferred 工具调用暂停）；重复调用幂等。"""
         if not self.query(".tool-pending"):
-            self.mount(CJKStatic("⏸ 等待批准", classes="tool-pending"))
+            await self.mount(CJKStatic("⏸ 等待批准", classes="tool-pending"))
 
-    def set_diff(self, diff_text: str) -> None:
+    async def set_diff(self, diff_text: str) -> None:
         """显示编辑工具的 diff（红绿行）；重复调用以最后一次为准。
 
         时序上 diff 在工具结果之前到达（参数完整时即生成），直接追加挂载即可。
@@ -261,13 +261,13 @@ class ToolCallMessage(Vertical):
         if self.query(".tool-diff"):
             self.query_one(".tool-diff", CJKStatic).update(content)
         else:
-            self.mount(CJKStatic(content, classes="tool-diff"))
+            await self.mount(CJKStatic(content, classes="tool-diff"))
 
 
 class WorkingLine(Static):
     """输入框上方左侧的运行状态行：spinner 动画 + 状态标签 + 一句话。
 
-    由 CliApp.set_working(state) 驱动：state 是 STATES 的键，None 时整行隐藏。
+    由 CliApp.set_working(state) 驱动：state 是 STATES 的键，None 时内容隐藏但保留占位。
     spinner 用 rich 的 Spinner（moon/dots/line），它按时间取帧，
     所以定时器里反复 update 同一个 Spinner 对象就能形成动画。
     """
@@ -286,6 +286,7 @@ class WorkingLine(Static):
         padding: 0;
         margin: 1 1 0 1;
         background: transparent;
+        visibility: hidden;
     }
     """
 
@@ -293,7 +294,6 @@ class WorkingLine(Static):
         super().__init__("", **kwargs)
         self.state: str | None = None
         self._spinner: Spinner | None = None
-        self.display = False
 
     def on_mount(self) -> None:
         self.set_interval(1 / 12, self._advance)
@@ -309,13 +309,16 @@ class WorkingLine(Static):
         parts.append(("· ", GRAY))
         parts.append((text, f"italic {GRAY}"))
         self._spinner = Spinner(spinner, text=Text.assemble(*parts))
-        self.display = True
+        self.styles.visibility = "visible"
         self._advance()
 
     def hide(self) -> None:
+        if self.state is None:
+            return
         self.state = None
         self._spinner = None
-        self.display = False
+        self.update("")
+        self.styles.visibility = "hidden"
 
     def _advance(self) -> None:
         if self._spinner is not None:

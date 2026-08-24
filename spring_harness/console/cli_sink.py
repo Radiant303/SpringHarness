@@ -37,8 +37,11 @@ class CliSink:
         return await self._app.start_tool_call(name)
 
     async def finish(self):
-        self._app.set_working(None)
-        await self._close_ensure_assistant()
+        # Flush Markdown and change the status line in one repaint batch. This
+        # prevents an intermediate full-layout frame at the end of a response.
+        with self._app.batch_update():
+            await self._close_ensure_assistant()
+            self._app.set_working(None)
 
     async def update_context(self, tokens: int) -> None:
         self._app.update_context(tokens)

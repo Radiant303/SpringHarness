@@ -151,13 +151,17 @@ class EventStreamRenderer:
 
     async def _on_agent_result(self, event: AgentRunResultEvent) -> None:
         result = event.result
-        if result is not None:
+        if result is not None and result.response is not None:
             usage = result.response.usage
             input_token = usage.input_tokens
             output_token = usage.output_tokens
             self._context = input_token + output_token
             await self._sink.update_context(self._context)
-            logger.info(f"{result.response.text},{input_token},{output_token}")
+            try:
+                response_text = result.response.text
+            except ValueError:
+                response_text = str(result.output)
+            logger.info(f"{response_text},{input_token},{output_token}")
         await self._sink.finish()
 
     async def finish_with(self, result: AgentRunResult) -> None:

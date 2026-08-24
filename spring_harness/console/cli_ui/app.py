@@ -120,19 +120,19 @@ class ToolCallHandle:
         """补显示工具返回结果。"""
         if self._check_cancelled():
             return
-        self._message.set_result(result)
+        await self._message.set_result(result)
 
     async def show_diff(self, diff: str) -> None:
         """显示编辑工具的 diff（红绿行）。"""
         if self._check_cancelled():
             return
-        self._message.set_diff(diff)
+        await self._message.set_diff(diff)
 
     async def show_pending(self) -> None:
         """标记该调用处于"等待批准/外部执行"状态（deferred 工具）。"""
         if self._check_cancelled():
             return
-        self._message.set_pending()
+        await self._message.set_pending()
 
 
 class CliApp(App[None]):
@@ -283,7 +283,7 @@ class CliApp(App[None]):
         self._scroll.anchor()
 
     def set_working(self, state: str | None) -> None:
-        """输入框上方的运行状态行：idle/thinking/tool/working，None 收起。"""
+        """输入框上方的运行状态行；None 隐藏内容但保留一行占位。"""
         line = self.query_one("#working-line", WorkingLine)
         if state is None:
             line.hide()
