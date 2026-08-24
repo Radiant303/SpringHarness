@@ -1,7 +1,7 @@
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from typing import Any
 
-from pydantic_ai import Agent, AgentRunResult, ToolCallPart
+from pydantic_ai import Agent, AgentRunResult, ModelMessage, ToolCallPart
 from pydantic_ai.tools import DeferredToolApprovalResult, DeferredToolRequests
 
 from spring_harness.console.renderer import EventStreamRenderer
@@ -12,8 +12,9 @@ async def run_with_approval(
     prompt: str,
     renderer: EventStreamRenderer,
     ask: Callable[[ToolCallPart], Awaitable[bool]],
+    message_history: Sequence[ModelMessage] | None = None,
 ) -> AgentRunResult[Any]:
-    result = await agent.run(prompt,event_stream_handler=renderer)
+    result = await agent.run(prompt,event_stream_handler=renderer,message_history=message_history)
     while isinstance(result.output, DeferredToolRequests):
         approvals: dict[str, DeferredToolApprovalResult | bool] = {}
         requests = result.output
