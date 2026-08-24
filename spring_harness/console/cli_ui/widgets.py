@@ -21,7 +21,7 @@ from .theme import ACCENT, GRAY
 
 
 class WelcomeBox(Vertical):
-    """顶部欢迎信息框：蓝色边框 + logo + 信息。"""
+    """顶部欢迎信息框：欢迎语和运行信息。"""
 
     DEFAULT_CSS = """
     WelcomeBox {
@@ -32,16 +32,9 @@ class WelcomeBox(Vertical):
         padding: 1 2;
         margin: 1 1 0 1;
     }
-    WelcomeBox .logo {
-        width: 7;
-        height: 2;
-        background: #4a9eff;
-        color: #1b1e24;
-    }
     WelcomeBox .welcome-text {
         width: 1fr;
         height: auto;
-        margin-left: 1;
     }
     WelcomeBox .info {
         width: 1fr;
@@ -64,11 +57,9 @@ class WelcomeBox(Vertical):
 
     def compose(self) -> ComposeResult:
         cwd = Path.cwd()
-        with HorizontalGroup():
-            yield Static(" ▪  ▪ ", classes="logo")
-            with Vertical(classes="welcome-text"):
-                yield Static(Text(f"Welcome to {self._title}!", style=f"bold {ACCENT}"))
-                yield Static(Text("Send /help for help information.", style=GRAY))
+        with Vertical(classes="welcome-text"):
+            yield Static(Text(f"Welcome to {self._title}!", style=f"bold {ACCENT}"))
+            yield Static(Text("Send /help for help information.", style=GRAY))
         yield Static(
             Text.assemble(
                 ("Directory: ", GRAY), (f"{cwd}\n", "#9aa3b0"),
