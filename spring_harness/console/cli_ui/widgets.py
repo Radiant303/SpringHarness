@@ -87,7 +87,7 @@ class UserMessage(CJKStatic):
     UserMessage {
         width: 1fr;
         height: auto;
-        margin: 1 1 0 1;
+        margin: 1 1 1 1;
     }
     """
 
@@ -114,7 +114,7 @@ class AssistantMessage(Vertical):
     AssistantMessage .thinking-row {
         width: 1fr;
         height: auto;
-        margin-top: 1;
+        margin-top: 0;
     }
     AssistantMessage .thinking-bullet {
         width: auto;
@@ -131,7 +131,7 @@ class AssistantMessage(Vertical):
     AssistantMessage .answer-row {
         width: 1fr;
         height: auto;
-        margin-top: 1;
+        margin-top: 0;
     }
     AssistantMessage .assistant-bullet {
         width: auto;
@@ -180,7 +180,7 @@ class ToolCallMessage(Vertical):
     ToolCallMessage .tool-head {
         width: 1fr;
         height: auto;
-        margin-top: 1;
+        margin-top: 0;
     }
     ToolCallMessage .tool-result {
         width: 1fr;
