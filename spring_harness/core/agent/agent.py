@@ -41,9 +41,6 @@ approval_fs = ApprovalRequiredToolset(
 # output_type 含 DeferredToolRequests：有调用被挂起时 run 的输出就是它而不是 str
 cap_agent = Agent(
     get_model(),
-    capabilities=[
-        Shell(cwd="./"),
-    ],
     toolsets=[approval_fs],
     output_type=[str, DeferredToolRequests],
 )
