@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import sys
 import threading
 import time
@@ -75,7 +76,8 @@ with ImportProgressBar(total_steps=5) as progress:
     progress.next_stage()
     from spring_harness.console.renderer import EventStreamRenderer
     progress.next_stage()
-    from spring_harness.core.agent.agent import cap_agent
+    from spring_harness.core.agent.agent import create_agent
+    from spring_harness.core.agent.deps import deps
     progress.next_stage()
     from spring_harness.console.cli_sink import CliSink
     progress.next_stage()
@@ -94,10 +96,11 @@ class MyBot(CliApp):
         sink = CliSink(self)
         renderer = EventStreamRenderer(sink)
         result = await run_with_approval(
-            cap_agent,
+            create_agent(Path.cwd()),
             text,
             renderer,
             self.ask_approval,
+            deps=deps(Path.cwd()),
             message_history=self._message_history,
         )
 

@@ -5,6 +5,7 @@ from pydantic_ai import Agent, AgentRunResult, ModelMessage, ToolCallPart
 from pydantic_ai.tools import DeferredToolApprovalResult, DeferredToolRequests
 
 from spring_harness.console.renderer import EventStreamRenderer
+from spring_harness.core.agent.deps import CodingAgentDeps
 
 
 async def run_with_approval(
@@ -12,9 +13,15 @@ async def run_with_approval(
     prompt: str,
     renderer: EventStreamRenderer,
     ask: Callable[[ToolCallPart], Awaitable[bool]],
+    deps: CodingAgentDeps,
     message_history: Sequence[ModelMessage] | None = None,
 ) -> AgentRunResult[Any]:
-    result = await agent.run(prompt,event_stream_handler=renderer,message_history=message_history)
+    result = await agent.run(
+        prompt,
+        deps=deps,
+        event_stream_handler=renderer,
+        message_history=message_history,
+    )
     while isinstance(result.output, DeferredToolRequests):
         approvals: dict[str, DeferredToolApprovalResult | bool] = {}
         requests = result.output
@@ -23,7 +30,13 @@ async def run_with_approval(
             ask_result = await ask(call)
             approvals[call.tool_call_id] = ask_result
         results = requests.build_results(approvals=approvals)
-        result = await agent.run(None, message_history=result.all_messages(),deferred_tool_results=results, event_stream_handler=renderer)
+        result = await agent.run(
+            None,
+            deps=deps,
+            message_history=result.all_messages(),
+            deferred_tool_results=results,
+            event_stream_handler=renderer,
+        )
 
     await renderer.finish_with(result)
     return result
