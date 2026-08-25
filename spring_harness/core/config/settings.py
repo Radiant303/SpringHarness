@@ -6,7 +6,7 @@ import tomli as tomllib
 
 
 def _load_toml_config() -> dict[str, Any]:
-    config_file = Path(__file__).resolve().parents[3] / "config.toml"
+    config_file = Path.home() / ".springharness" / "config.toml"
     if not config_file.exists():
         raise FileNotFoundError(f"Configuration file not found: {config_file}")
     with config_file.open("rb") as f:
