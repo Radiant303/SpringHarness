@@ -1,10 +1,11 @@
-from typing import cast
 from pathlib import Path
+from typing import cast
 
 from pydantic_ai.models import Model
 from starlette.applications import Starlette
 
-from spring_harness.core.agent.agent import SpringAgent
+from spring_harness.core.agent.agent import create_agent
+from spring_harness.core.agent.deps import deps
 from spring_harness.core.config.model import setting
 from spring_harness.core.services.model_service import resolve_model
 
@@ -19,8 +20,8 @@ class SpringWEB:
         }
 
     def run_web_server(self, root_dir: str | Path | None = None) -> Starlette:
-        agent = SpringAgent(root_dir or Path.cwd()).agent
-        return agent.to_web(models=self._resolve_models(setting.list_models()))
+        agent = create_agent(root_dir or Path.cwd())
+        return agent.to_web(models=self._resolve_models(setting.list_models()),deps=deps(workspace=Path.cwd()))
 
 
 web = SpringWEB()

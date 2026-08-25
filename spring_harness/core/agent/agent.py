@@ -1,33 +1,38 @@
-"""用于定义agent能力"""
+# spring_harness/core/agent.py
+
+from os import PathLike
+from pathlib import Path
 
 from pydantic_ai import Agent
 from pydantic_ai.tools import DeferredToolRequests
-from pydantic_ai.toolsets import ApprovalRequiredToolset
-from pathlib import Path
-from os import PathLike
 
-from pydantic_ai_harness import FileSystem
-
+from spring_harness.capabilities.filesystem import filesystem
+from spring_harness.core.agent.deps import CodingAgentDeps
 from spring_harness.core.config.model import get_model
+from spring_harness.instructions.default import register_default_instructions
 
 
-class SpringAgent:
-    def __init__(self, root_dir: str | PathLike[str] | Path = ".") -> None:
-        self.root_dir = Path(root_dir).expanduser().resolve()
-        self.fs_toolset = FileSystem(root_dir=str(self.root_dir)).get_toolset()
-        self.approval_fs = ApprovalRequiredToolset(
-            self.fs_toolset,
-            approval_required_func=lambda ctx, tool_def, args: tool_def.name in {"edit_file", "write_file"},
-        )
+def create_agent(
+    root_dir: str | PathLike[str] | Path = ".",
+) -> Agent[CodingAgentDeps, DeferredToolRequests | str]:
+    """
+    创建 Spring Harness Agent
+    """
 
-        self.agent = Agent(
-            get_model(),
-            toolsets=[self.approval_fs],
-            output_type=[str, DeferredToolRequests],
-        )
+    root = Path(root_dir).expanduser().resolve()
 
-    async def get_agent(self) -> Agent[object, DeferredToolRequests | str]:
-        return self.agent
+    agent = Agent(
+        model=get_model(),
+        toolsets=[
+            filesystem(str(root)),
+        ],
+        output_type=[
+            str,
+            DeferredToolRequests,
+        ],
+        deps_type=CodingAgentDeps,
+    )
 
+    register_default_instructions(agent)
 
-cap_agent = SpringAgent().agent
+    return agent

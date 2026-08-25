@@ -1,9 +1,6 @@
-from pydantic_ai import Agent, DeferredToolRequests
 from pydantic_ai.models import Model
-from pydantic_ai_harness.experimental.acp import run_acp_stdio_sync
 
-from spring_harness.core.agent.agent import cap_agent
-from spring_harness.core.config.model import get_model, setting
+from spring_harness.core.config.model import get_model
 from spring_harness.core.config.settings import config
 
 

@@ -18,6 +18,7 @@ dependencies = [
     "textual>=8.2.8",
     "tomli>=2.4.1",
     "uvicorn[standard]>=0.52.3",
+    "watchdog>=6.0.0",
 ]
 
 [dependency-groups]
