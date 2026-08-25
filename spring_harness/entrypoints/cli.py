@@ -92,18 +92,18 @@ class MyBot(CliApp):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._message_history: list[ModelMessage] = []
+        self._session_deps = CodingAgentDeps.create_default(Path.cwd())
 
 
     async def handle_input(self, text: str) -> None:
         sink = CliSink(self)
         renderer = EventStreamRenderer(sink)
-        session_deps = CodingAgentDeps.create_default(Path.cwd())
         result = await run_with_approval(
             create_agent(Path.cwd()),
             text,
             renderer,
             self.ask_approval,
-            deps=session_deps,
+            deps=self._session_deps,
             message_history=self._message_history,
         )
 

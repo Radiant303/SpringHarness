@@ -4,7 +4,6 @@ from pydantic_ai import AgentRunResult, ModelRequest, ModelRequestContext, RunCo
 from pydantic_ai.capabilities import Hooks
 
 from spring_harness.core.agent.deps import CodingAgentDeps
-from spring_harness.core.log import logger
 
 hooks = Hooks()
 
