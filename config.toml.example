@@ -51,4 +51,3 @@ model = "kimi-code/k3-256k"
 
 [log]
 log_level = "INFO"
-log_file = "logs/app.log"

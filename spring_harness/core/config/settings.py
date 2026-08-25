@@ -197,15 +197,10 @@ class SecondaryModel(ConfigBase):
 @dataclass
 class Log(ConfigBase):
     _log_level: str = "INFO"
-    _log_file: str = "logs/app.log"
 
     @property
     def log_level(self) -> str:
         return self._log_level
-
-    @property
-    def log_file(self) -> str:
-        return self._log_file
 
 
 @dataclass
@@ -237,7 +232,6 @@ class Config(ConfigBase):
         log_data = data.get("log", {})
         log = Log(
             _log_level=log_data.get("log_level", "INFO"),
-            _log_file=log_data.get("log_file", "logs/app.log"),
         )
 
         return cls(
