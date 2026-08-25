@@ -18,13 +18,15 @@ class ACP:
         name: str | None = "spring-harness",
     ) -> None:
         """启动ACP服务"""
+        session_deps = CodingAgentDeps.create_default(Path.cwd())
+
         return run_acp_stdio_sync(
             agent,
             name=name,
             version=version,
             models=setting.list_models(),
             model_resolver=resolve_model,
-            deps=deps(Path.cwd())
+            deps=session_deps
         )
 
 acp = ACP()

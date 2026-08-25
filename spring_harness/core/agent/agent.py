@@ -9,8 +9,8 @@ from pydantic_ai.tools import DeferredToolRequests
 from spring_harness.capabilities.filesystem import filesystem
 from spring_harness.core.agent.deps import CodingAgentDeps
 from spring_harness.core.config.model import get_model
+from spring_harness.core.hooks.model import hooks
 from spring_harness.instructions.default import register_default_instructions
-from spring_harness.utils.monitor_file import DirectoryMonitor
 
 
 def create_agent(
@@ -31,6 +31,7 @@ def create_agent(
             DeferredToolRequests,
         ],
         deps_type=CodingAgentDeps,
+        capabilities=[hooks],
     )
 
     register_default_instructions(agent)

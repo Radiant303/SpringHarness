@@ -5,7 +5,7 @@ from pydantic_ai.models import Model
 from starlette.applications import Starlette
 
 from spring_harness.core.agent.agent import create_agent
-from spring_harness.core.agent.deps import deps
+from spring_harness.core.agent.deps import CodingAgentDeps, deps
 from spring_harness.core.config.model import setting
 from spring_harness.core.services.model_service import resolve_model
 
@@ -20,8 +20,10 @@ class SpringWEB:
         }
 
     def run_web_server(self, root_dir: str | Path | None = None) -> Starlette:
-        agent = create_agent(root_dir or Path.cwd())
-        return agent.to_web(models=self._resolve_models(setting.list_models()),deps=deps(workspace=Path.cwd()))
+        workspace = Path(root_dir or Path.cwd()).expanduser().resolve()
+        agent = create_agent(workspace)
+        session_deps = CodingAgentDeps.create_default(workspace)
+        return agent.to_web(models=self._resolve_models(setting.list_models()),deps=session_deps)
 
 
 web = SpringWEB()

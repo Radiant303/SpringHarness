@@ -7,6 +7,8 @@ import time
 from pydantic_ai import ModelMessage
 from tqdm import tqdm
 
+from spring_harness.core.agent.deps import CodingAgentDeps
+
 
 class ImportProgressBar:
     def __init__(self, total_steps: int):
@@ -95,12 +97,13 @@ class MyBot(CliApp):
     async def handle_input(self, text: str) -> None:
         sink = CliSink(self)
         renderer = EventStreamRenderer(sink)
+        session_deps = CodingAgentDeps.create_default(Path.cwd())
         result = await run_with_approval(
             create_agent(Path.cwd()),
             text,
             renderer,
             self.ask_approval,
-            deps=deps(Path.cwd()),
+            deps=session_deps,
             message_history=self._message_history,
         )
 

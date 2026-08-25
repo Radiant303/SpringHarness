@@ -288,41 +288,34 @@ class DirectoryMonitor:
 
         return changes
 
+    def changes_to_string(self, changes: list[FileChange]) -> str | None:
+        """将文件变化格式化为适合发送给大模型的文本。
 
-# =============================================================
-# 使用示例
-# =============================================================
+        输出包含变化摘要、相对路径、状态和 unified diff。相对路径可避免
+        将本机绝对路径传给大模型；没有变化时返回 `None`。
+        """
+        if not changes:
+            return None
 
-if __name__ == "__main__":
-    # 监控当前目录下所有的 .txt 文件
-    monitor = DirectoryMonitor(".", file_pattern="*.txt")
+        sections = [f"检测到 {len(changes)} 个文件变化："]
+        for index, change in enumerate(changes, start=1):
+            relative_path = change.get_relative_path(self.directory)
+            diff = "".join(change.diff).rstrip("\n")
+            if not diff:
+                diff = "（无差异内容）"
 
-    # 开始监控
-    monitor.start()
+            sections.append(
+                "\n".join(
+                    [
+                        f"\n文件 {index}",
+                        f"路径: {relative_path}",
+                        f"状态: {change.status.name} ({change.status.value})",
+                        "差异:",
+                        "```diff",
+                        diff,
+                        "```",
+                    ]
+                )
+            )
 
-    # 模拟等待用户修改文件
-    time.sleep(10)
-
-    # 停止监控并获取变化
-    changes = monitor.stop()
-
-    # 处理变化结果
-    print(f"检测到 {len(changes)} 个文件变化")
-
-    for change in changes:
-        print(f"\n文件: {change.get_relative_path(monitor.directory)}")
-        print(f"状态: {change.status.value}")
-        print(f"差异行数: {len(change.diff)}")
-
-        # 你可以在这里自定义处理逻辑
-        # 例如：发送到服务器、写入日志、触发其他操作等
-
-        # 示例：收集所有变化的信息
-        change_info = {
-            "file": str(change.get_relative_path(monitor.directory)),
-            "status": change.status.value,
-            "old_content": change.old_content,
-            "new_content": change.new_content,
-            "diff": change.diff
-        }
-        print(f"变化信息: {change_info}")
+        return "\n".join(sections)
