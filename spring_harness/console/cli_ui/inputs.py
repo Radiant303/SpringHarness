@@ -138,13 +138,32 @@ class CommandDropdown(Vertical):
         return None
 
 
+_LINE_BOUNDARIES = "\r\n\v\f\x1c\x1d\x1e\x85\u2028\u2029"
+
+
+def _normalize_newlines(text: str) -> str:
+    """把各种换行符统一为 ``\\n``，并保留原文末尾是否带换行。
+
+    终端 bracketed paste 的换行可能是裸 ``\\r``（Windows Terminal 的惯例），
+    而 Rich Content / TextArea 只认 ``\\n`` —— 不归一化的话，多行内容显示时
+    会整段挤成一行。``splitlines`` 认识全部换行符（\\r\\n、裸 \\r、\\v、\\f、
+    \\x1c-\\x1e、\\x85、\\u2028/\\u2029），借它做全覆盖归一化。
+    """
+    if not text:
+        return text
+    normalized = "\n".join(text.splitlines())
+    if text[-1] in _LINE_BOUNDARIES:
+        normalized += "\n"
+    return normalized
+
+
 class HistoryInput(TextArea):
     """多行输入框：Enter 提交、Shift+Enter/Ctrl+J 换行、↑↓ 翻历史、命令下拉导航。
 
     长粘贴折叠：粘贴超过 PASTE_PLACEHOLDER_THRESHOLD 字符的内容时不直接展开，
     只插入 ``[paste #N +M lines]`` / ``[paste #N C chars]`` 占位符（原文存
-    ``_pastes``），提交时由 expand_pastes() 还原 —— 聊天区只显示紧凑的
-    占位符版本，模型收到完整内容。
+    ``_pastes``），提交时由 expand_pastes() 还原 —— 聊天区和模型都拿到完整
+    内容；占位符版本只留在输入框和历史里，↑ 翻回来时仍是紧凑形态。
     """
 
     PASTE_PLACEHOLDER_THRESHOLD = 800
@@ -185,6 +204,8 @@ class HistoryInput(TextArea):
         self._insert_clipboard(self.app.clipboard)
 
     def _insert_clipboard(self, text: str) -> None:
+        # 先归一化换行：裸 \r 的粘贴直接进 TextArea / 聊天区都会丢换行
+        text = _normalize_newlines(text)
         if len(text) > self.PASTE_PLACEHOLDER_THRESHOLD:
             self._paste_seq += 1
             n_lines = len(text.splitlines())

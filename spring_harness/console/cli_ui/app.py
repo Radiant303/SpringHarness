@@ -357,7 +357,8 @@ class CliApp(App[None]):
         input_widget = event.input
         input_widget.push_history(display_text)
         input_widget.text = ""
-        # 占位符还原：模型收完整粘贴内容，聊天区和历史只显示紧凑的占位符版本
+        # 占位符还原：聊天区和模型都显示/收到完整粘贴内容；
+        # 占位符版本只留在输入框和历史里，↑ 翻回来时仍是紧凑形态
         full_text = input_widget.expand_pastes(display_text)
 
         if display_text.startswith("/"):
@@ -369,7 +370,7 @@ class CliApp(App[None]):
             self._scroll.anchor()
             return
 
-        await self._scroll.mount(UserMessage(display_text))
+        await self._scroll.mount(UserMessage(full_text))
         self._scroll.anchor()
         self.run_worker(self._run_handle_input(full_text))
 
