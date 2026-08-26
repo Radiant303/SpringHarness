@@ -6,6 +6,8 @@ start_tool_call() / show_tool_call() / show_system() 输出内容；界面、
 """
 
 
+import time
+
 from typing import cast
 
 from pydantic_ai import ToolCallPart
@@ -61,6 +63,7 @@ class AssistantHandle:
     def __init__(self, message: AssistantMessage) -> None:
         self._message = message
         self._thinking = ""
+        self._thinking_start: float | None = None
         self._answer_stream = None
         self._finished = False
 
@@ -74,6 +77,7 @@ class AssistantHandle:
             return
         if not self._thinking:
             self._message.query_one(".thinking-row").remove_class("stream-pending")
+            self._thinking_start = time.monotonic()
         self._thinking += text
         # 包成 Text：思考文本里的 […] 会被 Static 按 Rich markup 解析而抛 MarkupError
         self._message.query_one("#thinking-content", Static).update(Text(self._thinking))
@@ -90,10 +94,15 @@ class AssistantHandle:
         await self._answer_stream.write(text)
 
     async def finish(self) -> None:
-        """收尾：关掉 Markdown 流。重复调用安全。"""
+        """收尾：thinking 折叠成一行摘要（全文占屏），关掉 Markdown 流。重复调用安全。"""
         if self._finished:
             return
         self._finished = True
+        if self._thinking and self._thinking_start is not None:
+            elapsed = time.monotonic() - self._thinking_start
+            self._message.query_one("#thinking-content", Static).update(
+                Text(f"Thought for {elapsed:.1f}s")
+            )
         if self._answer_stream is not None:
             await self._answer_stream.stop()
 
@@ -118,11 +127,11 @@ class ToolCallHandle:
             return
         self._message.append_args(chunk)
 
-    async def show_result(self, result: str) -> None:
-        """补显示工具返回结果。"""
+    async def show_result(self, result: str, is_error: bool = False) -> None:
+        """补显示工具返回结果；is_error=True 标记失败（图标变红 ✗）。"""
         if self._check_cancelled():
             return
-        await self._message.set_result(result)
+        await self._message.set_result(result, is_error=is_error)
 
     async def show_diff(self, diff: str) -> None:
         """显示编辑工具的 diff（红绿行）。"""

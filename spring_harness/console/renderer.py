@@ -12,6 +12,7 @@ from pydantic_ai import (
     PartDeltaEvent,
     PartEndEvent,
     PartStartEvent,
+    RetryPromptPart,
     RunContext,
     TextPart,
     TextPartDelta,
@@ -143,11 +144,16 @@ class EventStreamRenderer:
 
     async def _on_tool_result(self, event: FunctionToolResultEvent) -> None:
         part = event.part
-        if isinstance(part, ToolReturnPart):
-            tool = self._tool_by_id.pop(part.tool_call_id, None)
-            if tool is not None:
-                content = part.content
-                await tool.show_result(content if isinstance(content, str) else str(content))
+        if not isinstance(part, ToolReturnPart | RetryPromptPart):
+            return
+        tool = self._tool_by_id.pop(part.tool_call_id, None)
+        if tool is not None:
+            # RetryPromptPart = 工具执行/参数校验失败，框架会让模型重试；标红 ✗
+            content = part.content
+            await tool.show_result(
+                content if isinstance(content, str) else str(content),
+                is_error=isinstance(part, RetryPromptPart),
+            )
 
     async def _on_agent_result(self, event: AgentRunResultEvent) -> None:
         result = event.result

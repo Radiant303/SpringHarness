@@ -151,16 +151,24 @@ class AssistantMessage(Vertical):
 
 
 class ToolCallMessage(Vertical):
-    """工具调用消息：一行 ⚡ ToolName(参数摘要)，结果灰字缩进、超长截断。
+    """工具调用消息：一行图标 + ToolName(参数摘要)，结果灰字缩进、超长截断。
 
     两种用法：
     - 静态：构造时直接给 args / result（show_tool_call 走这条路）；
     - 流式：构造时只给 name，之后用 append_args() 逐段累加参数、
       set_result() 后补结果（start_tool_call 返回的句柄走这条路）。
+
+    完成态图标：运行中 ⚡（蓝）→ set_result() 后 ✓（绿）/ ✗（红，is_error=True）。
     """
 
     MAX_RESULT_LINES = 5
     MAX_ARGS_LEN = 40
+
+    _HEAD_ICONS: ClassVar[dict[str, tuple[str, str]]] = {
+        "running": ("⚡ ", ACCENT),
+        "ok": ("✓ ", "bold #98c379"),
+        "error": ("✗ ", "bold #e06c75"),
+    }
 
     DEFAULT_CSS = """
     ToolCallMessage {
@@ -177,17 +185,20 @@ class ToolCallMessage(Vertical):
         width: 1fr;
         height: auto;
         padding-left: 2;
+        border-left: solid #3a3f4a;
         color: #7a8391;
     }
     ToolCallMessage .tool-diff {
         width: 1fr;
         height: auto;
         padding-left: 2;
+        border-left: solid #3a3f4a;
     }
     ToolCallMessage .tool-pending {
         width: 1fr;
         height: auto;
         padding-left: 2;
+        border-left: solid #3a3f4a;
         color: #e5c07b;
     }
     """
@@ -198,6 +209,8 @@ class ToolCallMessage(Vertical):
         self._args = args
         self._result = result
         self._diff: str | None = None
+        # 静态用法（构造即带 result）直接是完成态
+        self._status = "running" if result is None else "ok"
 
     def compose(self) -> ComposeResult:
         yield CJKStatic(self._render_head(), classes="tool-head")
@@ -208,8 +221,9 @@ class ToolCallMessage(Vertical):
         args = self._args
         if len(args) > self.MAX_ARGS_LEN:
             args = args[: self.MAX_ARGS_LEN - 1] + "…"
+        icon, icon_style = self._HEAD_ICONS[self._status]
         return Text.assemble(
-            ("⚡ ", ACCENT),
+            (icon, icon_style),
             (self._name, f"bold {ACCENT}"),
             (f"({args})", "#9aa3b0"),
         )
@@ -228,9 +242,11 @@ class ToolCallMessage(Vertical):
         self._args += chunk
         self.query_one(".tool-head", CJKStatic).update(self._render_head())
 
-    async def set_result(self, result: str) -> None:
-        """补显示工具返回结果；重复调用以最后一次为准。结果到达即撤下等待标记。"""
+    async def set_result(self, result: str, is_error: bool = False) -> None:
+        """补显示工具返回结果；重复调用以最后一次为准。结果到达即撤下等待标记、刷新完成态图标。"""
         self._result = result
+        self._status = "error" if is_error else "ok"
+        self.query_one(".tool-head", CJKStatic).update(self._render_head())
         rendered = self._render_result()
         if self.query(".tool-pending"):
             await self.query_one(".tool-pending", CJKStatic).remove()
