@@ -23,7 +23,7 @@ class SpringWEB:
         workspace = Path(root_dir or Path.cwd()).expanduser().resolve()
         agent = create_agent(workspace)
         session_deps = CodingAgentDeps.create_default(workspace)
-        return agent.to_web(models=self._resolve_models(setting.list_models()),deps=session_deps)
+        return agent.to_web(models=self._resolve_models(setting.list_models()),deps=session_deps,html_source="https://cdn.jsdelivr.net/npm/@pydantic/ai-chat-ui@2.3.0/dist/index.html")
 
 
 web = SpringWEB()
