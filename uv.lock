@@ -1374,6 +1374,11 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/ba/42/d08d467b6b0cce694eaa71b631dadb524a3a10de51139356afd9e6811338/pydantic_ai_harness-0.24.0-py3-none-any.whl", hash = "sha256:f1b738b788b48a30570d47ea094b0e6cbcb4ff1b3ec5a889d0d37691733178a1", size = 734392, upload-time = "2026-08-20T02:26:45.606Z" },
 ]
 
+[package.optional-dependencies]
+skills = [
+    { name = "pyyaml" },
+]
+
 [[package]]
 name = "pydantic-ai-slim"
 version = "2.33.0"
@@ -1945,7 +1950,7 @@ dependencies = [
     { name = "loguru" },
     { name = "prompt-toolkit" },
     { name = "pydantic-ai" },
-    { name = "pydantic-ai-harness" },
+    { name = "pydantic-ai-harness", extra = ["skills"] },
     { name = "pydantic-ai-slim", extra = ["web"] },
     { name = "pytest" },
     { name = "python-dotenv" },
@@ -1968,7 +1973,7 @@ requires-dist = [
     { name = "loguru", specifier = ">=0.7.3" },
     { name = "prompt-toolkit", specifier = ">=3.0.53" },
     { name = "pydantic-ai", specifier = ">=2.30.0" },
-    { name = "pydantic-ai-harness", specifier = ">=0.24.0" },
+    { name = "pydantic-ai-harness", extras = ["skills"], specifier = ">=0.24.0" },
     { name = "pydantic-ai-slim", extras = ["web"], specifier = ">=2.33.0" },
     { name = "pytest", specifier = ">=9.1.1" },
     { name = "python-dotenv", specifier = ">=1.2.2" },

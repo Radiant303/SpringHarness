@@ -5,6 +5,7 @@ from pathlib import Path
 
 from pydantic_ai import Agent
 from pydantic_ai.tools import DeferredToolRequests
+from pydantic_ai_harness import Skills
 
 from spring_harness.capabilities.filesystem import filesystem
 from spring_harness.core.agent.deps import CodingAgentDeps
@@ -31,7 +32,7 @@ def create_agent(
             DeferredToolRequests,
         ],
         deps_type=CodingAgentDeps,
-        capabilities=[hooks],
+        capabilities=[hooks,Skills(Path.home() / ".springharness" / "skills")],
     )
 
     register_default_instructions(agent)

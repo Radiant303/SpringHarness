@@ -161,7 +161,6 @@ class EventStreamRenderer:
                 response_text = result.response.text
             except ValueError:
                 response_text = str(result.output)
-            logger.info(f"{response_text},{input_token},{output_token}")
         await self._sink.finish()
 
     async def finish_with(self, result: AgentRunResult) -> None:
