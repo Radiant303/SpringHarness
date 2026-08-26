@@ -1,7 +1,7 @@
 """输入相关组件：命令历史输入框 + 斜杠命令下拉框。
 
-代码从 step12_final.py 提炼，行为一致；CommandDropdown 的命令列表
-从模块常量改成了构造参数。
+HistoryInput 已升级为多行 TextArea（粘贴折叠 / 高度自适应），
+不再是 step12_final.py 的单行 Input。
 """
 
 from typing import Any
@@ -9,8 +9,9 @@ from typing import Any
 from textual import events
 from textual.app import ComposeResult
 from textual.containers import HorizontalGroup, Vertical
+from textual.message import Message
 from textual.widget import Widget
-from textual.widgets import Input, Static
+from textual.widgets import Static, TextArea
 
 
 class CommandDropdown(Vertical):
@@ -137,16 +138,90 @@ class CommandDropdown(Vertical):
         return None
 
 
-class HistoryInput(Input):
-    """带上下历史记忆的输入框，也负责命令下拉的键盘导航。"""
+class HistoryInput(TextArea):
+    """多行输入框：Enter 提交、Shift+Enter/Ctrl+J 换行、↑↓ 翻历史、命令下拉导航。
+
+    长粘贴折叠：粘贴超过 PASTE_PLACEHOLDER_THRESHOLD 字符的内容时不直接展开，
+    只插入 ``[paste #N +M lines]`` / ``[paste #N C chars]`` 占位符（原文存
+    ``_pastes``），提交时由 expand_pastes() 还原 —— 聊天区只显示紧凑的
+    占位符版本，模型收到完整内容。
+    """
+
+    PASTE_PLACEHOLDER_THRESHOLD = 800
+
+    class Submitted(Message):
+        """Enter 提交。value 是输入框原始文本（占位符未展开）。"""
+
+        def __init__(self, input: "HistoryInput", value: str) -> None:
+            self.input = input
+            self.value = value
+            super().__init__()
+
+        @property
+        def control(self) -> "HistoryInput":
+            return self.input
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
+        self.show_line_numbers = False
         self._history: list[str] = []
         self._history_pos: int | None = None
         self._draft: str = ""
+        self._pastes: dict[str, str] = {}  # 占位符 → 粘贴原文
+        self._paste_seq = 0
 
-    async def on_key(self, event: events.Key) -> None:
+    # ---- 粘贴折叠 ----
+
+    async def _on_paste(self, event: events.Paste) -> None:
+        # 终端 bracketed paste。Textual 会沿 MRO 依次调用各级 _on_paste，
+        # 必须 prevent_default 才能阻断 TextArea 默认的全文插入
+        event.prevent_default()
+        event.stop()
+        if event.text:
+            self._insert_clipboard(event.text)
+
+    def action_paste(self) -> None:
+        # ctrl+v 走 app.clipboard，和 bracketed paste 同一套折叠逻辑
+        self._insert_clipboard(self.app.clipboard)
+
+    def _insert_clipboard(self, text: str) -> None:
+        if len(text) > self.PASTE_PLACEHOLDER_THRESHOLD:
+            self._paste_seq += 1
+            n_lines = len(text.splitlines())
+            placeholder = (
+                f"[paste #{self._paste_seq} +{n_lines} lines]"
+                if n_lines > 1
+                else f"[paste #{self._paste_seq} {len(text)} chars]"
+            )
+            self._pastes[placeholder] = text
+            text = placeholder
+        self.replace(text, *self.selection)
+
+    def expand_pastes(self, text: str) -> str:
+        """提交时把占位符还原成粘贴原文；被用户改残的占位符原样保留。"""
+        for placeholder, content in self._pastes.items():
+            text = text.replace(placeholder, content)
+        return text
+
+    # ---- undo/redo ----
+
+    def undo(self) -> None:
+        # 规避 Textual 时序 bug：_undo_batch 先回滚文本并 _refresh_size，
+        # 最后才由 edit.after 恢复选区——中途光标还停在旧位置，撤销多行编辑
+        # 后光标落在越界行，scroll_cursor_visible 抛 ValueError 崩溃。
+        # 提前把光标挪到 (0,0)（任何文档都合法），正确选区由 edit.after 恢复。
+        self.move_cursor((0, 0))
+        super().undo()
+
+    def redo(self) -> None:
+        # 同 undo()
+        self.move_cursor((0, 0))
+        super().redo()
+
+    # ---- 键盘 ----
+
+    async def _on_key(self, event: events.Key) -> None:
+        # 所有需要"压住 TextArea 默认行为/绑定"的键都在这里拦（_on_key 先于绑定处理）
         dropdown = self.app.query_one("#command-dropdown", CommandDropdown)
 
         if dropdown.visible:
@@ -154,42 +229,60 @@ class HistoryInput(Input):
                 event.stop()
                 dropdown.move_up()
                 return
-            elif event.key == "down":
+            if event.key == "down":
                 event.stop()
                 dropdown.move_down()
                 return
-            elif event.key == "enter":
+            if event.key == "enter":
                 event.stop()
+                event.prevent_default()  # 阻断 TextArea 默认的 enter 换行
                 selected = dropdown.select_current()
                 if selected is not None:
-                    self.value = f"/{selected}"
+                    self.text = f"/{selected}"
                     dropdown.hide()
-                    # 立即触发提交
-                    self.post_message(Input.Submitted(self, self.value))
+                    self.post_message(self.Submitted(self, self.text))
                 return
-            elif event.key == "escape":
+            if event.key == "escape":
                 event.stop()
                 dropdown.hide()
                 return
 
-        if event.key == "up":
+        # TextArea 默认 enter 换行；改为 enter 提交，Shift+Enter / Ctrl+J 换行
+        if event.key == "enter":
+            event.stop()
+            event.prevent_default()
+            self.post_message(self.Submitted(self, self.text))
+            return
+        if event.key in ("shift+enter", "ctrl+j"):
+            event.stop()
+            event.prevent_default()
+            self.insert("\n")
+            return
+
+        # ↑↓：光标在首行 / 末行时翻历史，否则留给 TextArea 正常移动光标
+        if event.key == "up" and self.cursor_location[0] == 0:
             event.stop()
             self._history_previous()
-        elif event.key == "down":
+            return
+        if event.key == "down" and self.cursor_at_last_line:
             event.stop()
             self._history_next()
-        else:
+            return
+        if event.key not in ("up", "down"):
             self._history_pos = None
+
+        await super()._on_key(event)
 
     def _history_previous(self) -> None:
         if not self._history:
             return
         if self._history_pos is None:
-            self._draft = self.value
+            self._draft = self.text
             self._history_pos = len(self._history) - 1
         elif self._history_pos > 0:
             self._history_pos -= 1
-        self.value = self._history[self._history_pos]
+        self.text = self._history[self._history_pos]
+        self.move_cursor(self.document.end)
 
     def _history_next(self) -> None:
         if self._history_pos is None:
@@ -197,9 +290,10 @@ class HistoryInput(Input):
         self._history_pos += 1
         if self._history_pos >= len(self._history):
             self._history_pos = None
-            self.value = self._draft
+            self.text = self._draft
         else:
-            self.value = self._history[self._history_pos]
+            self.text = self._history[self._history_pos]
+        self.move_cursor(self.document.end)
 
     def push_history(self, text: str) -> None:
         if text:

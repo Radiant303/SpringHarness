@@ -16,7 +16,7 @@ from textual import on
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.theme import Theme
-from textual.widgets import Input, Markdown, Static
+from textual.widgets import Markdown, Static, TextArea
 
 # get_current_worker 的返回类型在 textual 源码里没给 Worker 填泛型参数，
 # 导入符号会被报 partially unknown —— 库的类型缺口，局部忽略，调用点用 cast 收窄。
@@ -185,7 +185,8 @@ class CliApp(App[None]):
     }
     #input-row {
         width: 1fr;
-        height: 3;
+        height: auto;
+        max-height: 8;  /* 输入内容最多 6 行 + 上下边框 2 行 */
         background: transparent;
         border: round #7a8391;
         padding: 0 1;
@@ -194,13 +195,11 @@ class CliApp(App[None]):
     #user-input {
         width: 1fr;
         height: auto;
+        max-height: 6;
         border: none;
         padding: 0;
         background: transparent;
-
-        & > .input--cursor {
-            color: ansi_default;
-        }
+        scrollbar-size: 0 0;
     }
     #prompt {
         width: auto;
@@ -340,26 +339,29 @@ class CliApp(App[None]):
 
     # ---- 框架内部：输入分发 ----
 
-    @on(Input.Changed)
-    def on_input_changed(self, event: Input.Changed) -> None:
-        """输入变化时，根据内容决定是否显示命令下拉。"""
-        if event.input.id != "user-input":
+    @on(TextArea.Changed)
+    def on_text_area_changed(self, event: TextArea.Changed) -> None:
+        """输入变化时：调整输入框高度（最多 6 行）+ 按需显示命令下拉。"""
+        if event.text_area.id != "user-input":
             return
-        dropdown = self.query_one("#command-dropdown", CommandDropdown)
-        dropdown.filter(event.value)
+        input_widget = event.text_area
+        # 高度跟随文档行数；超长行软换行占的额外行不细算（长粘贴已折叠成占位符）
+        input_widget.styles.height = max(1, min(6, input_widget.document.line_count))
+        self.query_one("#command-dropdown", CommandDropdown).filter(input_widget.text)
 
-    async def on_input_submitted(self, event: Input.Submitted) -> None:
-        user_text = event.value.strip()
-
-        input_widget = self.query_one("#user-input", HistoryInput)
-        input_widget.push_history(user_text)
-        input_widget.value = ""
-
-        if not user_text:
+    async def on_history_input_submitted(self, event: HistoryInput.Submitted) -> None:
+        display_text = event.value.strip()
+        if not display_text:
             return
 
-        if user_text.startswith("/"):
-            command = user_text[1:]
+        input_widget = event.input
+        input_widget.push_history(display_text)
+        input_widget.text = ""
+        # 占位符还原：模型收完整粘贴内容，聊天区和历史只显示紧凑的占位符版本
+        full_text = input_widget.expand_pastes(display_text)
+
+        if display_text.startswith("/"):
+            command = display_text[1:]
             if command == "model":
                 self.push_screen(ModelSelectModal(current_model=self.model))
             else:
@@ -367,9 +369,9 @@ class CliApp(App[None]):
             self._scroll.anchor()
             return
 
-        await self._scroll.mount(UserMessage(user_text))
+        await self._scroll.mount(UserMessage(display_text))
         self._scroll.anchor()
-        self.run_worker(self._run_handle_input(user_text))
+        self.run_worker(self._run_handle_input(full_text))
 
     async def _run_handle_input(self, text: str) -> None:
         """在 worker 里跑用户代码；结束时给没收尾的 assistant 兜底 finish。"""
