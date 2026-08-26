@@ -220,6 +220,8 @@ class CliApp(App[None]):
         theme: Theme | None = KIMI_THEME,
     ) -> None:
         super().__init__()
+        # 鼠标滚轮每次滚动的行数（App 默认 2.0）
+        self.scroll_sensitivity_y = 3.0
         self.title_text = title
         self.model = model
         self.version = version
