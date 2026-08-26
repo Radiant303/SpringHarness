@@ -211,6 +211,7 @@ class ToolCallMessage(Vertical):
         self._diff: str | None = None
         # 静态用法（构造即带 result）直接是完成态
         self._status = "running" if result is None else "ok"
+        self._collapsed = False
 
     def compose(self) -> ComposeResult:
         yield CJKStatic(self._render_head(), classes="tool-head")
@@ -245,6 +246,7 @@ class ToolCallMessage(Vertical):
     async def set_result(self, result: str, is_error: bool = False) -> None:
         """补显示工具返回结果；重复调用以最后一次为准。结果到达即撤下等待标记、刷新完成态图标。"""
         self._result = result
+        self._collapsed = False  # 新结果到达时恢复展开
         self._status = "error" if is_error else "ok"
         self.query_one(".tool-head", CJKStatic).update(self._render_head())
         rendered = self._render_result()
@@ -258,7 +260,24 @@ class ToolCallMessage(Vertical):
     async def set_pending(self) -> None:
         """标记为"等待批准/外部执行"（deferred 工具调用暂停）；重复调用幂等。"""
         if not self.query(".tool-pending"):
-            await self.mount(CJKStatic("⏸ 等待批准", classes="tool-pending"))
+            # ⏸ 在 Windows Terminal 会被渲染成彩色 emoji 方块，用文字安全字符 ◆
+            await self.mount(CJKStatic("◆ 等待批准", classes="tool-pending"))
+
+    def collapse(self) -> None:
+        """把结果收成一行摘要：run 结束、最终答案出现后由 CliSink.finish() 统一调用。
+
+        执行过程中结果保持展开（实时反馈）；答案出来后历史细节不再重要，
+        收起让对话更紧凑（Claude Code 同款行为）。重复调用幂等。
+        """
+        if not self._result or self._collapsed:
+            return
+        self._collapsed = True
+        lines = self._result.splitlines()
+        summary = lines[0] if lines else ""
+        if len(lines) > 1:
+            summary += f"  … (共 {len(lines)} 行)"
+        if self.query(".tool-result"):
+            self.query_one(".tool-result", CJKStatic).update(Text(summary))
 
     async def set_diff(self, diff_text: str) -> None:
         """显示编辑工具的 diff（红绿行）；重复调用以最后一次为准。

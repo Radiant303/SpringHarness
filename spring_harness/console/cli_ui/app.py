@@ -305,9 +305,12 @@ class CliApp(App[None]):
         else:
             line.show_state(state)
 
-    async def ask_approval(self, call: ToolCallPart) -> bool:
-        """弹窗询问是否批准这一条工具调用：True 批准 / False 拒绝。多条挂起逐条问。"""
-        return await self.push_screen_wait(ApprovalModal(call))
+    async def ask_approval(self, call: ToolCallPart, diff: str | None = None) -> bool:
+        """弹窗询问是否批准这一条工具调用：True 批准 / False 拒绝。多条挂起逐条问。
+
+        diff：编辑类工具的改动预览（调用方用 renderer.make_diff 生成），随参数一起展示。
+        """
+        return await self.push_screen_wait(ApprovalModal(call, diff=diff))
 
     def set_status(
         self,

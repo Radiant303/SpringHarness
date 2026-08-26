@@ -1,4 +1,4 @@
-from spring_harness.console.cli_ui import AssistantHandle, CliApp, ToolCallHandle
+from spring_harness.console.cli_ui import AssistantHandle, CliApp, ToolCallHandle, ToolCallMessage
 
 
 class CliSink:
@@ -41,6 +41,9 @@ class CliSink:
         # prevents an intermediate full-layout frame at the end of a response.
         with self._app.batch_update():
             await self._close_ensure_assistant()
+            # 最终答案已出现：把所有工具结果收成一行摘要，对话更紧凑
+            for message in self._app.query(ToolCallMessage):
+                message.collapse()
             self._app.set_working(None)
 
     async def update_context(self, tokens: int) -> None:

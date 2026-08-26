@@ -1,10 +1,10 @@
 import os
-from pathlib import Path
 import sys
 import threading
 import time
+from pathlib import Path
 
-from pydantic_ai import ModelMessage
+from pydantic_ai import ModelMessage, ToolCallPart
 from tqdm import tqdm
 
 from spring_harness.core.agent.deps import CodingAgentDeps
@@ -76,10 +76,9 @@ with ImportProgressBar(total_steps=5) as progress:
 
     from spring_harness.console.approval import run_with_approval
     progress.next_stage()
-    from spring_harness.console.renderer import EventStreamRenderer
+    from spring_harness.console.renderer import EventStreamRenderer, make_diff
     progress.next_stage()
     from spring_harness.core.agent.agent import create_agent
-    from spring_harness.core.agent.deps import deps
     progress.next_stage()
     from spring_harness.console.cli_sink import CliSink
     progress.next_stage()
@@ -98,11 +97,16 @@ class MyBot(CliApp):
     async def handle_input(self, text: str) -> None:
         sink = CliSink(self)
         renderer = EventStreamRenderer(sink)
+
+        async def ask_with_preview(call: ToolCallPart) -> bool:
+            # 编辑类工具把改动 diff 带进审批弹窗，比截断的 JSON 参数更有决策价值
+            return await self.ask_approval(call, diff=make_diff(call.tool_name, call.args))
+
         result = await run_with_approval(
             create_agent(Path.cwd()),
             text,
             renderer,
-            self.ask_approval,
+            ask_with_preview,
             deps=self._session_deps,
             message_history=self._message_history,
         )

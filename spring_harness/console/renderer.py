@@ -37,7 +37,7 @@ def _args_text(args: object) -> str:
     return str(args)
 
 
-def _make_diff(tool_name: str, args: object) -> str | None:
+def make_diff(tool_name: str, args: object) -> str | None:
     """编辑类工具的调用参数 → unified diff 文本；其它工具或参数不全返回 None。
 
     diff 展示的是"打算怎么改"（来自调用参数而非执行结果），
@@ -123,7 +123,7 @@ class EventStreamRenderer:
         tool = self._tool_by_index.pop(event.index, None)
         part = event.part
         if tool is not None and isinstance(part, ToolCallPart):
-            diff = _make_diff(part.tool_name, part.args)
+            diff = make_diff(part.tool_name, part.args)
             if diff is not None:
                 await tool.show_diff(diff)
 
