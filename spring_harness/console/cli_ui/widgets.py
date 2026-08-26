@@ -214,12 +214,14 @@ class ToolCallMessage(Vertical):
             (f"({args})", "#9aa3b0"),
         )
 
-    def _render_result(self) -> str:
+    def _render_result(self) -> Text:
+        # 必须包成 Text：工具输出是任意文本，里面的 […] 会被 Static 按
+        # Rich markup 解析，形如 capabilities=[hooks] 的内容直接抛 MarkupError
         lines = (self._result or "").splitlines()
         hidden = len(lines) - self.MAX_RESULT_LINES
         if hidden > 0:
             lines = lines[: self.MAX_RESULT_LINES] + [f"… (还有 {hidden} 行)"]
-        return "\n".join(lines)
+        return Text("\n".join(lines))
 
     def append_args(self, chunk: str) -> None:
         """流式累加参数文本并刷新标题行（超长部分显示为 …）。"""

@@ -9,6 +9,7 @@ start_tool_call() / show_tool_call() / show_system() 输出内容；界面、
 from typing import cast
 
 from pydantic_ai import ToolCallPart
+from rich.text import Text
 from textual import on
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
@@ -74,7 +75,8 @@ class AssistantHandle:
         if not self._thinking:
             self._message.query_one(".thinking-row").remove_class("stream-pending")
         self._thinking += text
-        self._message.query_one("#thinking-content", Static).update(self._thinking)
+        # 包成 Text：思考文本里的 […] 会被 Static 按 Rich markup 解析而抛 MarkupError
+        self._message.query_one("#thinking-content", Static).update(Text(self._thinking))
 
     async def write_answer(self, text: str) -> None:
         """累加 Markdown 回答（可多次调用）。首个 chunk 到达前整行隐藏。"""
