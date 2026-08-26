@@ -175,6 +175,10 @@ class DiffMarkdownFence(MarkdownFence):
 
     @classmethod
     def highlight(cls, code: str, language: str, ansi: bool = False, dark: bool = False) -> Content:
+        # 无语言标记的代码块直接纯文本：否则 highlight() 会用 pygments 猜词法器，
+        # 树状图（├── └──）这类内容被猜错后，框线/中文字符全被标成 Error token 染红
+        if not language:
+            return Content(code)
         if language == "diff":
             return highlight(code, language=language, theme=DiffHighlightTheme)
         return super().highlight(code, language, ansi=ansi, dark=dark)
