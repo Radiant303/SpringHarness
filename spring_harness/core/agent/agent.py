@@ -5,6 +5,7 @@ from pathlib import Path
 
 from pydantic_ai import Agent
 from pydantic_ai.tools import DeferredToolRequests
+from pydantic_ai_harness import Shell
 
 from spring_harness.capabilities.code_mode import code_mode
 from spring_harness.capabilities.filesystem import filesystem
@@ -39,6 +40,7 @@ def create_agent(
             skills(),
             repo_context(root),
             code_mode(root),
+            Shell()
         ],
     )
 
