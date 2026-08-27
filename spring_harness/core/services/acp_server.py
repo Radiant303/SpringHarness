@@ -3,7 +3,7 @@ from pathlib import Path
 from pydantic_ai import Agent, DeferredToolRequests
 from pydantic_ai_harness.experimental.acp import run_acp_stdio_sync
 
-from spring_harness.core.agent.deps import CodingAgentDeps, deps
+from spring_harness.core.agent.deps import CodingAgentDeps
 from spring_harness.core.config.model import setting
 from spring_harness.core.services.model_service import resolve_model
 

@@ -5,7 +5,7 @@ from pydantic_ai.models import Model
 from starlette.applications import Starlette
 
 from spring_harness.core.agent.agent import create_agent
-from spring_harness.core.agent.deps import CodingAgentDeps, deps
+from spring_harness.core.agent.deps import CodingAgentDeps
 from spring_harness.core.config.model import setting
 from spring_harness.core.services.model_service import resolve_model
 

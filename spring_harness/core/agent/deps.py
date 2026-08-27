@@ -18,6 +18,3 @@ class CodingAgentDeps:
             workspace=workspace,
             monitor=monitor,
         )
-
-
-deps = CodingAgentDeps.create_default
