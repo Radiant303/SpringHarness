@@ -71,24 +71,19 @@ class ImportProgressBar:
             sys.stdout = self._orig_stdout
 
 
-with ImportProgressBar(total_steps=8) as progress:
+with ImportProgressBar(total_steps=1):
+    from concurrent.futures import ThreadPoolExecutor
+
+    from pydantic_ai import Agent, ModelMessage, ToolCallPart
 
     from spring_harness.console.approval import run_with_approval
-    progress.next_stage()
-    from spring_harness.console.renderer import EventStreamRenderer, make_diff
-    progress.next_stage()
-    from spring_harness.core.agent.agent import create_agent
-    progress.next_stage()
     from spring_harness.console.cli_sink import CliSink
-    progress.next_stage()
     from spring_harness.console.cli_ui.app import CliApp
-    progress.next_stage()
-    from concurrent.futures import ThreadPoolExecutor
-    progress.next_stage()
+    from spring_harness.console.renderer import EventStreamRenderer, make_diff
+    from spring_harness.core.agent.agent import create_agent
     from spring_harness.core.agent.deps import CodingAgentDeps
-    progress.next_stage()
-    from pydantic_ai import Agent, ModelMessage, ToolCallPart
-    progress.next_stage()
+
+
 
 class MyBot(CliApp):
     def __init__(self, *args, **kwargs):
