@@ -5,10 +5,11 @@ from pathlib import Path
 
 from pydantic_ai import Agent
 from pydantic_ai.tools import DeferredToolRequests
-from pydantic_ai_harness import CodeMode, RepoContext, Skills
-from pydantic_monty import MountDir
 
+from spring_harness.capabilities.code_mode import code_mode
 from spring_harness.capabilities.filesystem import filesystem
+from spring_harness.capabilities.repo_context import repo_context
+from spring_harness.capabilities.skills import skills
 from spring_harness.core.agent.deps import CodingAgentDeps
 from spring_harness.core.config.model import get_model
 from spring_harness.core.hooks.model import hooks
@@ -33,7 +34,12 @@ def create_agent(
             DeferredToolRequests,
         ],
         deps_type=CodingAgentDeps,
-        capabilities=[hooks,Skills(Path.home() / ".springharness" / "skills"),RepoContext(workspace_dir=Path('.')),CodeMode(mount=MountDir(virtual_path='/work', host_path=root, mode='overlay'),tools=['read_file', 'search_files'])] # 还可以有草稿区
+        capabilities=[
+            hooks,
+            skills(),
+            repo_context(root),
+            code_mode(root),
+        ],
     )
 
     register_default_instructions(agent)
