@@ -1,3 +1,4 @@
+import asyncio
 from typing import Any
 
 from pydantic_ai import AgentRunResult, ModelRequest, ModelRequestContext, RunContext
@@ -13,7 +14,7 @@ async def start_monitor(
     *,
     result: AgentRunResult[Any],
 ) -> AgentRunResult[Any]:
-    ctx.deps.monitor.start()
+    await asyncio.to_thread(ctx.deps.monitor.start)
     return result
 
 
@@ -22,7 +23,7 @@ async def stop_monitor(
     ctx: RunContext[CodingAgentDeps],
     request_context: ModelRequestContext
 ) -> ModelRequestContext:
-    changes = ctx.deps.monitor.stop()
+    changes = await asyncio.to_thread(ctx.deps.monitor.stop)
     changes_text = ctx.deps.monitor.changes_to_string(changes)
     if changes_text is not None:
         request_context.messages.append(ModelRequest.user_text_prompt(changes_text))

@@ -169,11 +169,20 @@ class DirectoryMonitor:
             time.sleep(interval)
         return previous
 
-    def _snapshot_directory(self):
-        """获取目录当前状态的快照"""
+    def _snapshot_directory(self, stable_check: bool = False):
+        """获取目录当前状态的快照
+
+        参数：
+            stable_check: True 时对监控期间报告过变化的文件做稳定性重读
+                （防止读到写入中途的内容），其余文件只读一遍
+        """
         snapshot = {}
+        changed = self.changed_files | self.created_files
         for file_path in self._get_all_files():
-            content = self._read_stable_file(file_path)
+            if stable_check and file_path in changed:
+                content = self._read_stable_file(file_path)
+            else:
+                content = self._read_file(file_path)
             if content is not None:
                 snapshot[file_path] = content
         return snapshot
@@ -304,8 +313,8 @@ class DirectoryMonitor:
             self.observer.join()
             self.observer = None
 
-        # 获取最终快照
-        current_contents: dict[Path, list[str]] = self._snapshot_directory()
+        # 获取最终快照（监控期间动过的文件做稳定性重读，其余只读一遍）
+        current_contents: dict[Path, list[str]] = self._snapshot_directory(stable_check=True)
 
         # 找出所有变化的文件
         all_files = set(self.old_contents.keys()) | set(current_contents.keys())
