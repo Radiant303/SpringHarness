@@ -378,6 +378,10 @@ class CliApp(App[None]):
         """在 worker 里跑用户代码；结束时给没收尾的 assistant 兜底 finish。"""
         try:
             await self.handle_input(text)
+        except Exception as e:
+            # 一次运行失败（如工具重试超限 UnexpectedModelBehavior）不应拖垮整个 TUI，
+            # 降级为聊天区的一条系统消息
+            await self.show_system(f"❌ {type(e).__name__}: {e}")
         finally:
             for handle in self._active_handles:
                 await handle.finish()
