@@ -1,13 +1,12 @@
+import asyncio
 import os
 import sys
 import threading
 import time
 from pathlib import Path
+from typing import Any
 
-from pydantic_ai import ModelMessage, ToolCallPart
 from tqdm import tqdm
-
-from spring_harness.core.agent.deps import CodingAgentDeps
 
 
 class ImportProgressBar:
@@ -72,7 +71,7 @@ class ImportProgressBar:
             sys.stdout = self._orig_stdout
 
 
-with ImportProgressBar(total_steps=5) as progress:
+with ImportProgressBar(total_steps=8) as progress:
 
     from spring_harness.console.approval import run_with_approval
     progress.next_stage()
@@ -84,15 +83,26 @@ with ImportProgressBar(total_steps=5) as progress:
     progress.next_stage()
     from spring_harness.console.cli_ui.app import CliApp
     progress.next_stage()
-
-
+    from concurrent.futures import ThreadPoolExecutor
+    progress.next_stage()
+    from spring_harness.core.agent.deps import CodingAgentDeps
+    progress.next_stage()
+    from pydantic_ai import Agent, ModelMessage, ToolCallPart
+    progress.next_stage()
 
 class MyBot(CliApp):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._message_history: list[ModelMessage] = []
         self._session_deps = CodingAgentDeps.create_default(Path.cwd())
+        self._agent = None
+        self._executor = ThreadPoolExecutor(max_workers=1)
+        self._executor_future = self._executor.submit(create_agent, Path.cwd())
 
+    async def _get_agent(self) -> Agent[Any, Any]:
+        if self._agent is None:
+             self._agent = await asyncio.wrap_future(self._executor_future)
+        return self._agent
 
     async def handle_input(self, text: str) -> None:
         sink = CliSink(self)
@@ -103,7 +113,7 @@ class MyBot(CliApp):
             return await self.ask_approval(call, diff=make_diff(call.tool_name, call.args))
 
         result = await run_with_approval(
-            create_agent(Path.cwd()),
+            await self._get_agent(),
             text,
             renderer,
             ask_with_preview,
