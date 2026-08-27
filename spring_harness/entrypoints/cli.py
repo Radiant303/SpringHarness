@@ -107,14 +107,21 @@ class MyBot(CliApp):
             # 编辑类工具把改动 diff 带进审批弹窗，比截断的 JSON 参数更有决策价值
             return await self.ask_approval(call, diff=make_diff(call.tool_name, call.args))
 
-        result = await run_with_approval(
-            await self._get_agent(),
-            text,
-            renderer,
-            ask_with_preview,
-            deps=self._session_deps,
-            message_history=self._message_history,
-        )
+        try:
+            result = await run_with_approval(
+                await self._get_agent(),
+                text,
+                renderer,
+                ask_with_preview,
+                deps=self._session_deps,
+                message_history=self._message_history,
+            )
+        except Exception:
+            # 失败时 result 不存在，all_messages() 无从谈起；钩子里存的消息快照
+            # 是抢救上下文的唯一通道，不用它这一轮（用户问题+模型的全部尝试）就蒸发了
+            if self._session_deps.last_messages:
+                self._message_history = self._session_deps.last_messages
+            raise
 
         self._message_history = result.all_messages()
 

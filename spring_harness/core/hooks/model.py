@@ -23,6 +23,8 @@ async def stop_monitor(
     ctx: RunContext[CodingAgentDeps],
     request_context: ModelRequestContext
 ) -> ModelRequestContext:
+    ctx.deps.last_messages = list(request_context.messages)
+
     changes = await asyncio.to_thread(ctx.deps.monitor.stop)
     changes_text = ctx.deps.monitor.changes_to_string(changes)
     if changes_text is not None:
