@@ -7,6 +7,7 @@ from enum import Enum
 from pathlib import Path
 from threading import Lock
 
+import pathspec
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
@@ -41,16 +42,24 @@ class DirectoryMonitor:
     返回变化的数据而不是直接打印
     """
 
-    def __init__(self, directory_path, file_pattern="*"):
+    def __init__(self, directory_path, file_pattern="*",
+                 exclude_dot_dirs=True, use_gitignore=True):
         """
         初始化目录监控器
 
         参数：
             directory_path: 要监控的目录路径
             file_pattern: 文件匹配模式（如 "*.py" 只监控Python文件）
+            exclude_dot_dirs: 是否排除以 . 开头的文件夹（如 .git、.idea）
+            use_gitignore: 是否按 gitignore 语法排除监控目录下 .gitignore 中的规则
         """
         self.directory = Path(directory_path).resolve()
         self.file_pattern = file_pattern
+        self.exclude_dot_dirs = exclude_dot_dirs
+        self.use_gitignore = use_gitignore
+
+        # 解析后的 .gitignore 规则（None 表示未启用或文件不存在）
+        self._gitignore_spec: pathspec.GitIgnoreSpec | None = None
 
         # 保存初始文件内容 {文件路径: 文件内容}
         self.old_contents: dict[Path, list[str]] = {}
@@ -73,13 +82,70 @@ class DirectoryMonitor:
         if not self.directory.is_dir():
             raise ValueError(f"路径不是目录: {self.directory}")
 
+    def _load_gitignore(self):
+        """读取并解析监控目录下的 .gitignore 文件（不存在则跳过）
+
+        支持完整 gitignore 语法：通配符（*、**、?）、! 取反、/ 锚定、
+        目录规则（dir/）和 # 注释。
+        """
+        self._gitignore_spec = None
+        if not self.use_gitignore:
+            return
+        gitignore = self.directory / ".gitignore"
+        if not gitignore.is_file():
+            return
+        try:
+            lines = gitignore.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            return
+        self._gitignore_spec = pathspec.GitIgnoreSpec.from_lines(lines)
+
+    def _match_gitignore(self, relative: Path, is_dir: bool = False) -> bool:
+        """检查相对路径是否命中 gitignore 规则"""
+        if self._gitignore_spec is None:
+            return False
+        path = relative.as_posix()
+        if self._gitignore_spec.check_file(path).include:
+            return True
+        # 目录需额外尝试带尾斜杠的形式，以匹配 "dir/" 这类目录规则
+        return bool(
+            is_dir and self._gitignore_spec.check_file(path + "/").include
+        )
+
+    def _is_excluded(self, filepath):
+        """检查路径是否应被排除（. 开头的目录或 .gitignore 规则）"""
+        try:
+            resolved = Path(filepath).resolve()
+            relative = resolved.relative_to(self.directory)
+        except (ValueError, OSError, RuntimeError):
+            return True  # 不在监控目录内，视为排除
+
+        # 父目录中的 . 开头目录（不检查文件名本身）
+        if self.exclude_dot_dirs and any(
+            part.startswith(".") for part in relative.parts[:-1]
+        ):
+            return True
+
+        return self._match_gitignore(relative)
+
     def _get_all_files(self):
-        """获取目录下所有匹配的文件"""
+        """获取目录下所有匹配的文件（跳过排除目录和 .gitignore 规则）"""
         files = []
-        for file_path in self.directory.rglob(self.file_pattern):
-            if file_path.is_file():
-                files.append(file_path)
-        return files
+        for dirpath, dirnames, filenames in os.walk(self.directory):
+            keep = []
+            for dirname in dirnames:
+                if self.exclude_dot_dirs and dirname.startswith("."):
+                    continue
+                relative_dir = (Path(dirpath) / dirname).relative_to(self.directory)
+                # 被 gitignore 忽略的目录不再深入遍历
+                if self._match_gitignore(relative_dir, is_dir=True):
+                    continue
+                keep.append(dirname)
+            dirnames[:] = keep
+            for filename in filenames:
+                if fnmatch.fnmatch(filename, self.file_pattern):
+                    files.append(Path(dirpath) / filename)
+        return [f for f in files if not self._is_excluded(f)]
 
     def _read_file(self, filepath):
         """读取文件内容"""
@@ -123,7 +189,9 @@ class DirectoryMonitor:
         self.changed_files.add(filepath)
 
     def _matches_pattern(self, filepath):
-        """检查文件是否匹配模式"""
+        """检查文件是否匹配模式且不在排除范围内"""
+        if self._is_excluded(filepath):
+            return False
         if self.file_pattern == "*":
             return True
         return fnmatch.fnmatch(Path(filepath).name, self.file_pattern)
@@ -147,6 +215,9 @@ class DirectoryMonitor:
         """开始监控目录"""
         if self._running:
             return
+
+        # 加载 .gitignore（每次 start 重新读取，允许两次运行之间修改）
+        self._load_gitignore()
 
         # 保存初始快照
         self.old_contents = self._snapshot_directory()
