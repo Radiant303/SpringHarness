@@ -181,7 +181,6 @@ class MyBot(CliApp):
                 # push_screen_wait 必须在 worker 里调（textual 硬性限制），弹窗流程包一层
                 self.run_worker(self._resume_via_modal(sessions))
             else:
-                # 显式范围检查：负索引不抛 IndexError，/resume 0 会静默选中最后一个
                 n = int(arg) if arg.isdigit() else -1
                 if not 1 <= n <= len(sessions):
                     await self.show_system(f"无效编号：{arg}")
