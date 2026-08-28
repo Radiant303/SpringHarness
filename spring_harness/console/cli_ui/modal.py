@@ -5,12 +5,14 @@ from typing import Any, ClassVar
 
 from pydantic_ai import ToolCallPart
 from rich.text import Text
+from textual import on
 from textual.app import ComposeResult
 from textual.containers import Horizontal, HorizontalGroup, Vertical, VerticalScroll
 from textual.content import Content
 from textual.highlight import highlight
 from textual.screen import ModalScreen
-from textual.widgets import Static
+from textual.widgets import OptionList, Static
+from textual.widgets.option_list import Option
 
 from .cjk_wrap import DiffHighlightTheme
 from .theme import ACCENT
@@ -42,7 +44,8 @@ class ApprovalModal(ModalScreen[bool]):
         width: 90%;          /* 自适应终端宽度，长 diff 行不再被裁 */
         max-width: 140;
         height: auto;
-        background: #16181d;  /* 微亮于纯黑终端：对话框要有"浮起"的面板感 */
+        /* 近黑底色：与压暗背景融为一体，圆角边框角落不露出方块感（同 SessionSelectModal） */
+        background: #0b0d10;
         border: round #e5c07b;
         padding: 1 2;
     }
@@ -67,7 +70,7 @@ class ApprovalModal(ModalScreen[bool]):
         scrollbar-color: #3a3f4a;
         scrollbar-color-hover: #7a8391;
         scrollbar-color-active: #7a8391;
-        scrollbar-background: #16181d;
+        scrollbar-background: #0b0d10;  /* 跟随面板底色 */
     }
     #approval-help {
         color: #7a8391;
@@ -238,6 +241,91 @@ class ModelSelectModal(ModalScreen[None]):
                 yield Static(" Low   ")
                 yield Static(Text("[ High ]", style=f"bold {ACCENT}"))
                 yield Static("   Max")
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+
+class SessionSelectModal(ModalScreen[int | None]):
+    """会话选择弹窗：↑↓ 选择，Enter 确认，Esc 取消。
+
+    dismiss 返回列表下标（调用方按新→旧排序传入），None 表示取消。
+    current 传当前会话在列表中的下标：高亮色 + ● 标记，并作为初始高亮项。
+    """
+
+    CSS = """
+    SessionSelectModal {
+        align: center middle;
+        background: black 60%;  /* 压暗背后的聊天内容，弹窗才是焦点 */
+    }
+    #session-dialog {
+        width: 72;
+        height: auto;
+        /* 近黑底色：与压暗后的背景融为一体，圆角边框的角落格子不再露出方块感。
+           面板感交给蓝色描边，不靠底色。 */
+        background: #0b0d10;
+        border: round #4a9eff;
+        padding: 1 2;
+    }
+    #session-title {
+        color: #4a9eff;
+        text-style: bold;
+    }
+    #session-help {
+        color: #7a8391;
+        margin-bottom: 1;
+    }
+    #session-list {
+        height: auto;
+        max-height: 12;  /* 超高滚动 */
+        background: transparent;
+        border: none;    /* OptionList 自带的框是第二层嵌套边框，干掉 */
+        padding: 0;
+        scrollbar-size-vertical: 1;
+        scrollbar-color: #3a3f4a;
+        scrollbar-color-hover: #7a8391;
+        scrollbar-background: #0b0d10;  /* 跟随面板底色 */
+    }
+    #session-list .option-list--option-highlighted {
+        /* 默认高亮是刺眼的亮紫底，换成克制的深灰 */
+        background: #2a2f3a;
+        color: ansi_default;
+    }
+    #session-list .option-list--option-hover {
+        /* 鼠标悬停默认也是紫底，一并收编 */
+        background: #23272f;
+    }
+    """
+
+    BINDINGS: ClassVar[list] = [("escape", "cancel", "Cancel")]
+
+    def __init__(self, items: list[str], current: int | None = None, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self._items = items
+        self._current = current
+
+    def compose(self) -> ComposeResult:
+        options = []
+        for i, label in enumerate(self._items):
+            if i == self._current:
+                # 当前会话：主题色加粗 + 圆点标记
+                options.append(Option(Text.assemble(("● ", ACCENT), (label, f"bold {ACCENT}"))))
+            else:
+                options.append(Option(f"  {label}"))
+        with Vertical(id="session-dialog"):
+            yield Static("Resume session", id="session-title")
+            yield Static("↑↓ navigate · Enter select · Esc cancel", id="session-help")
+            yield OptionList(*options, id="session-list")
+
+    def on_mount(self) -> None:
+        option_list = self.query_one(OptionList)
+        option_list.focus()
+        if self._current is not None and self._items:
+            option_list.highlighted = self._current
+
+    @on(OptionList.OptionSelected)
+    def _select(self, event: OptionList.OptionSelected) -> None:
+        self.dismiss(event.option_index)
 
     def action_cancel(self) -> None:
         self.dismiss(None)
