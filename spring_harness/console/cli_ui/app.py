@@ -7,7 +7,6 @@ start_tool_call() / show_tool_call() / show_system() 输出内容；界面、
 
 
 import time
-
 from typing import cast
 
 from pydantic_ai import ToolCallPart
@@ -21,6 +20,7 @@ from textual.widgets import Markdown, Static, TextArea
 # get_current_worker 的返回类型在 textual 源码里没给 Worker 填泛型参数，
 # 导入符号会被报 partially unknown —— 库的类型缺口，局部忽略，调用点用 cast 收窄。
 from textual.worker import (  # pyright: ignore[reportUnknownVariableType]
+    NoActiveWorker,
     Worker,
     get_current_worker,
 )
@@ -68,7 +68,10 @@ class AssistantHandle:
         self._finished = False
 
     def _check_cancelled(self) -> bool:
-        worker = cast(Worker[None], get_current_worker())
+        try:
+            worker = cast(Worker[None], get_current_worker())
+        except NoActiveWorker:
+            return False
         return worker is not None and worker.is_cancelled
 
     async def write_thinking(self, text: str) -> None:
@@ -118,7 +121,10 @@ class ToolCallHandle:
         self._message = message
 
     def _check_cancelled(self) -> bool:
-        worker = cast(Worker[None], get_current_worker())
+        try:
+            worker = cast(Worker[None], get_current_worker())
+        except NoActiveWorker:
+            return False
         return worker is not None and worker.is_cancelled
 
     async def write_args(self, chunk: str) -> None:
