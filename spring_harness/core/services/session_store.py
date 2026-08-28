@@ -66,8 +66,12 @@ class SessionStore:
                 meta = json.loads(first)
             except json.JSONDecodeError:
                 continue
-            if meta.get("type") == "meta" and meta.get("workspace") == str(workspace):
-                result.append((cls(path), meta))
+            if not isinstance(meta, dict) or meta.get("type") != "meta":
+                continue
+            if meta.get("workspace") != str(workspace):
+                continue
+            result.append((cls(path), meta))
+
         return result
 
 
