@@ -92,7 +92,7 @@ with ImportProgressBar(total_steps=1):
     from spring_harness.console.renderer import EventStreamRenderer, make_diff
     from spring_harness.core.agent.agent import create_agent
     from spring_harness.core.agent.deps import CodingAgentDeps
-    from spring_harness.core.services.session_store import SessionStore, _session_title
+    from spring_harness.core.services.session_store import SessionStore, format_local_time
 
 
 class MyBot(CliApp):
@@ -174,17 +174,20 @@ class MyBot(CliApp):
                 await self.show_system("当前项目没有历史会话")
                 return
             if not arg:
+                # title 已由 list_sessions 备好（索引命中或兜底现算），这里直接用；
+                # 时间显示 +8，优先用 updated_at（最后活跃），老文件只有 created_at
                 lines = [
-                    f"{i}. {meta['created_at'][:10]}  {_session_title(store)}"
+                    f"{i}. {format_local_time(meta.get('updated_at') or meta['created_at'])}  {meta.get('title') or '(空会话)'}"
                     for i, (store, meta) in enumerate(sessions, 1)
                 ]
                 await self.show_system("用 /resume <编号> 切换：\n" + "\n".join(lines))
                 return
-            try:
-                self._store, _ = sessions[int(arg) - 1]
-            except (ValueError, IndexError):
+            # 显式范围检查：负索引不抛 IndexError，/resume 0 会静默选中最后一个
+            n = int(arg) if arg.isdigit() else -1
+            if not 1 <= n <= len(sessions):
                 await self.show_system(f"无效编号：{arg}")
                 return
+            self._store, _ = sessions[n - 1]
             self._message_history = self._store.load_messages()
             await self._rebuild_chat(self._message_history)
             await self.show_system(f"已切换到会话 {arg}")
