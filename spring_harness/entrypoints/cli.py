@@ -93,6 +93,7 @@ with ImportProgressBar(total_steps=1):
     from spring_harness.console.renderer import EventStreamRenderer, make_diff
     from spring_harness.core.agent.agent import create_agent
     from spring_harness.core.agent.deps import CodingAgentDeps
+    from spring_harness.core.config.settings import config
     from spring_harness.core.services.session_store import (
         SessionStore,
         format_local_time,
@@ -250,8 +251,11 @@ class MyBot(CliApp):
 
 def main() -> None:
     resume = "--continue" in sys.argv or "-c" in sys.argv
+    model_config = config.get_default_model_config()
     MyBot(
-        title="Spring Harness", model="K100-99M", version="0.1.0",
+        title="Spring Harness", model=model_config.display_name,
+        max_context=model_config.max_context_size,
+        version="0.1.0",
         resume_last=resume,
         commands=[("new", "New session"), ("resume", "Resume a session")],
     ).run(mouse=True)

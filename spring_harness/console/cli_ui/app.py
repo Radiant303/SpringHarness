@@ -254,7 +254,7 @@ class CliApp(App[None]):
             with Horizontal(id="input-row"):
                 yield Static(">", id="prompt")
                 yield HistoryInput(placeholder="", id="user-input")
-        yield StatusBar(model=self.model, context=_context_text(0), id="status-bar")
+        yield StatusBar(model=self.model, context=_context_text(0, self.max_context), id="status-bar")
 
     # ---- 子类要实现的回调 ----
 
