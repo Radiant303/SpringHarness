@@ -8,6 +8,8 @@ from typing import Any
 
 from tqdm import tqdm
 
+from spring_harness.console.cli_ui import ModelSelectModal
+
 
 class ImportProgressBar:
     def __init__(self, total_steps: int):
@@ -109,6 +111,7 @@ class MyBot(CliApp):
         self._agent = None
         self._executor = ThreadPoolExecutor(max_workers=1)
         self._executor_future = self._executor.submit(create_agent, Path.cwd())
+        self._model_id = config.default_model
 
         sessions = SessionStore.list_sessions(Path.cwd())
         if resume_last and sessions:
@@ -158,7 +161,7 @@ class MyBot(CliApp):
 
     async def handle_command(self, command: str) -> None:
         if self._busy:
-            await self.show_system("运行中，不能切换 session")
+            await self.show_system("运行中，不能执行命令")
             return
 
         name, _, arg = command.partition(" ")
@@ -187,6 +190,10 @@ class MyBot(CliApp):
                 await self._switch_to(sessions[n - 1][0])
             return
 
+        if name == "model":
+            self.run_worker(self._select_model_via_modal())
+            return
+
         await super().handle_command(command)
 
     async def _switch_to(self, store: SessionStore) -> None:
@@ -209,6 +216,29 @@ class MyBot(CliApp):
         picked = await self.push_screen_wait(SessionSelectModal(labels, current=current))
         if picked is not None:
             await self._switch_to(sessions[len(sessions) - 1 - picked][0])
+
+    async def _select_model_via_modal(self) -> None:
+        models = [(mid, m.display_name, m.provider) for mid, m in config.models.items()]
+        picked = await self.push_screen_wait(
+            ModelSelectModal(models=models, current_model=self._model_id)
+        )
+        if picked is None or picked == self._model_id:
+            return
+
+        try:
+            config.set_default_model(picked)
+        except (OSError, ValueError) as e:
+            await self.show_system(f"❌ 写入配置失败：{e}")
+            return
+
+        self._model_id = picked
+        self._agent = None
+        self._executor_future = self._executor.submit(create_agent, Path.cwd(), model_name=picked)
+
+        model_cfg = config.get_model(picked)
+        self.set_model(model_cfg.display_name, model_cfg.max_context_size)
+        await self.show_system(f"已切换到 {model_cfg.display_name}")
+
 
     async def _rebuild_chat(self, messages: list[ModelMessage]) -> None:
         await self._scroll.remove_children()

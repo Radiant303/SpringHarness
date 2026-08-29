@@ -17,6 +17,7 @@ from spring_harness.instructions.default import register_default_instructions
 
 def create_agent(
     root_dir: str | PathLike[str] | Path = ".",
+    model_name: str | None = None,
 ) -> Agent[CodingAgentDeps, DeferredToolRequests | str]:
     """
     创建 Spring Harness Agent
@@ -24,7 +25,7 @@ def create_agent(
     root = Path(root_dir).expanduser().resolve()
 
     agent = Agent(
-        model=get_model(),
+        model=get_model(model_name),
         toolsets=[
             filesystem(str(root)),
         ],

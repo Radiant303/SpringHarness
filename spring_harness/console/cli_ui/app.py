@@ -26,7 +26,7 @@ from textual.worker import (
 )
 
 from .inputs import CommandDropdown, HistoryInput
-from .modal import ApprovalModal, ModelSelectModal
+from .modal import ApprovalModal
 from .theme import KIMI_THEME
 from .utils import format_num
 from .widgets import (
@@ -263,7 +263,7 @@ class CliApp(App[None]):
         raise NotImplementedError
 
     async def handle_command(self, command: str) -> None:
-        """处理斜杠命令（/model 内置弹窗，不会进这里）。默认提示未知命令。"""
+        """处理斜杠命令（含 /model：框架只提供弹窗组件，切换逻辑归子类）。默认提示未知命令。"""
         await self.show_system(f"Unknown command: /{command}")
 
     # ---- 显示类方法（async，可在 handle_input 里直接 await）----
@@ -368,11 +368,7 @@ class CliApp(App[None]):
         full_text = input_widget.expand_pastes(display_text)
 
         if display_text.startswith("/"):
-            command = display_text[1:]
-            if command == "model":
-                self.push_screen(ModelSelectModal(current_model=self.model))
-            else:
-                await self.handle_command(command)
+            await self.handle_command(display_text[1:])
             self._scroll.anchor()
             return
 

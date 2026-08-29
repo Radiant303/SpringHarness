@@ -1,15 +1,15 @@
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Self
 
 import tomli as tomllib
 
-
+CONFIG_PATH = Path.home() / ".springharness" / "config.toml"
 def _load_toml_config() -> dict[str, Any]:
-    config_file = Path.home() / ".springharness" / "config.toml"
-    if not config_file.exists():
-        raise FileNotFoundError(f"Configuration file not found: {config_file}")
-    with config_file.open("rb") as f:
+    if not CONFIG_PATH.exists():
+        raise FileNotFoundError(f"Configuration file not found: {CONFIG_PATH}")
+    with CONFIG_PATH.open("rb") as f:
         return tomllib.load(f)
 
 
@@ -276,6 +276,22 @@ class Config(ConfigBase):
     def get_default_model_config(self) -> Model | None:
         """获取默认模型配置"""
         return self.get_model(self._default_model)
+
+    def set_default_model(self, model_id: str) -> None:
+        """切换默认模型：更新内存，并把 default_model 行写回 config.toml。"""
+        if model_id not in self._models:
+            raise ValueError(f"模型 '{model_id}' 不存在")
+        text = CONFIG_PATH.read_text(encoding="utf-8")
+        new_text, n = re.subn(
+            r"(?m)^default_model\s*=.*$",
+            f'default_model = "{model_id}"',
+            text,
+        )
+        if n == 0:
+            raise ValueError(f"{CONFIG_PATH} 中缺少 default_model 配置项")
+        CONFIG_PATH.write_text(new_text, encoding="utf-8")
+        self._default_model = model_id
+
 
     def get_model_full_config(self, model_id: str) -> dict[str, Any]:
         """获取模型的完整配置（包含 Provider 信息）"""

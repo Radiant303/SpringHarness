@@ -7,7 +7,8 @@ from pydantic_ai import ToolCallPart
 from rich.text import Text
 from textual import on
 from textual.app import ComposeResult
-from textual.containers import Horizontal, HorizontalGroup, Vertical, VerticalScroll
+from textual.binding import Binding
+from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.content import Content
 from textual.highlight import highlight
 from textual.screen import ModalScreen
@@ -130,8 +131,14 @@ class ApprovalModal(ModalScreen[bool]):
         self.dismiss(False)
 
 
-class ModelSelectModal(ModalScreen[None]):
-    """模型选择弹窗（简化版）。"""
+class ModelSelectModal(ModalScreen[str | None]):
+    """模型选择弹窗：Tab 循环切换 provider 过滤，↑↓ 选择，Enter 确认，Esc 取消。
+
+    dismiss 返回模型 id，None 表示取消。
+    models 每项为 (模型id, 显示名, provider)；current_model 传当前模型 id：
+    "> " 前缀 + 主题色标记，并作为初始高亮项。
+    Thinking 行为静态展示，不可交互。
+    """
 
     CSS = """
     ModelSelectModal {
@@ -174,17 +181,23 @@ class ModelSelectModal(ModalScreen[None]):
     }
     #model-list {
         height: auto;
-        max-height: 10;
+        max-height: 10;  /* 超高滚动 */
+        background: transparent;
+        border: none;    /* OptionList 自带的框是第二层嵌套边框，干掉 */
+        padding: 0;
+        scrollbar-size-vertical: 1;
+        scrollbar-color: #3a3f4a;
+        scrollbar-color-hover: #7a8391;
+        scrollbar-background: transparent;
     }
-    #model-list .model-name {
-        width: 24;
+    #model-list .option-list--option-highlighted {
+        /* 默认高亮是刺眼的亮紫底，换成克制的深灰 */
+        background: #2a2f3a;
         color: ansi_default;
     }
-    #model-list .model-current {
-        color: #4a9eff;
-    }
-    #model-list .model-provider {
-        color: #7a8391;
+    #model-list .option-list--option-hover {
+        /* 鼠标悬停默认也是紫底，一并收编 */
+        background: #23272f;
     }
     #thinking-section {
         height: auto;
@@ -197,22 +210,48 @@ class ModelSelectModal(ModalScreen[None]):
     """
 
     BINDINGS: ClassVar[list] = [
+        # priority：压过 App 层的 Tab=切换焦点 默认行为
+        Binding("tab", "next_provider", "Next provider", priority=True),
         ("escape", "cancel", "Cancel"),
     ]
 
     def __init__(
         self,
-        models: list[tuple[str, str]] | None = None,
+        models: list[tuple[str, str, str]],
         current_model: str = "",
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
-        self._models = models if models is not None else [
-            ("K2.7 Coding Highspeed", "Kimi Code"),
-            ("K3", "Kimi Code"),
-            ("K3-256k", "Kimi Code"),
-        ]
+        self._models = models
         self._current_model = current_model
+        # provider 标签页从模型列表派生，按出现顺序去重
+        self._providers: list[str] = []
+        for _, _, provider in models:
+            if provider not in self._providers:
+                self._providers.append(provider)
+        self._active_provider: str | None = None  # None = All（不过滤）
+
+    def _visible_models(self) -> list[tuple[str, str, str]]:
+        """当前标签页下可见的模型；All 时不过滤。"""
+        if self._active_provider is None:
+            return self._models
+        return [m for m in self._models if m[2] == self._active_provider]
+
+    def _options(self) -> list[Option]:
+        # 列表行复刻旧样式：名称列宽 24，当前项 "> " 前缀 + 主题色
+        options = []
+        for model_id, display_name, provider in self._visible_models():
+            if model_id == self._current_model:
+                options.append(Option(Text.assemble(
+                    (f"> {display_name:<24}", f"bold {ACCENT}"),
+                    (provider, "#7a8391"),
+                )))
+            else:
+                options.append(Option(Text.assemble(
+                    f"  {display_name:<24}",
+                    (provider, "#7a8391"),
+                )))
+        return options
 
     def compose(self) -> ComposeResult:
         with Vertical(id="model-dialog"):
@@ -221,26 +260,49 @@ class ModelSelectModal(ModalScreen[None]):
             yield Static("Note: Switching models invalidates the existing prompt cache. Use /new to avoid extra token costs.", id="model-warning")
 
             with Horizontal(id="provider-tabs"):
-                yield Static(" All ", classes="provider-tab -active")
-                yield Static(" ruoli ", classes="provider-tab")
-                yield Static(" deepseek ", classes="provider-tab")
+                yield Static(" All ", id="tab-all", classes="provider-tab -active")
+                for provider in self._providers:
+                    yield Static(f" {provider} ", id=f"tab-{provider}", classes="provider-tab")
 
-            with Vertical(id="model-list"):
-                for name, provider in self._models:
-                    is_current = name == self._current_model
-                    name_text = f"> {name}" if is_current else f"  {name}"
-                    name_classes = "model-name model-current" if is_current else "model-name"
-                    provider_text = f"{provider} ← current" if is_current else provider
-                    yield HorizontalGroup(
-                        Static(name_text, classes=name_classes),
-                        Static(provider_text, classes="model-provider"),
-                    )
+            yield OptionList(*self._options(), id="model-list")
 
             with Horizontal(id="thinking-section"):
                 yield Static("Thinking  (←→ to switch)   ")
                 yield Static(" Low   ")
                 yield Static(Text("[ High ]", style=f"bold {ACCENT}"))
                 yield Static("   Max")
+
+    def on_mount(self) -> None:
+        option_list = self.query_one(OptionList)
+        option_list.focus()
+        for i, (model_id, _, _) in enumerate(self._visible_models()):
+            if model_id == self._current_model:
+                option_list.highlighted = i
+                break
+
+    def action_next_provider(self) -> None:
+        """Tab：在 All → 各 provider 之间循环，重建过滤后的列表。"""
+        choices: list[str | None] = [None, *self._providers]
+        idx = choices.index(self._active_provider)
+        self._active_provider = choices[(idx + 1) % len(choices)]
+
+        self.query_one("#tab-all", Static).set_class(self._active_provider is None, "-active")
+        for provider in self._providers:
+            self.query_one(f"#tab-{provider}", Static).set_class(
+                self._active_provider == provider, "-active"
+            )
+
+        option_list = self.query_one(OptionList)
+        option_list.clear_options()
+        options = self._options()
+        if options:
+            option_list.add_options(options)
+            option_list.highlighted = 0
+
+    @on(OptionList.OptionSelected)
+    def _select(self, event: OptionList.OptionSelected) -> None:
+        # option_index 是过滤后列表里的下标，必须经 _visible_models 映射回模型 id
+        self.dismiss(self._visible_models()[event.option_index][0])
 
     def action_cancel(self) -> None:
         self.dismiss(None)
