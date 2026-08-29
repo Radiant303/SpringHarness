@@ -1,4 +1,3 @@
-# spring_harness/capabilities/repo_context.py
 from pathlib import Path
 
 from pydantic_ai_harness import RepoContext
