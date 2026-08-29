@@ -1,14 +1,9 @@
-import asyncio
 import os
 import sys
 import threading
 import time
-from pathlib import Path
-from typing import Any
 
 from tqdm import tqdm
-
-from spring_harness.console.cli_ui import ModelSelectModal
 
 
 class ImportProgressBar:
@@ -74,7 +69,10 @@ class ImportProgressBar:
 
 
 with ImportProgressBar(total_steps=1):
+    import asyncio
     from concurrent.futures import ThreadPoolExecutor
+    from pathlib import Path
+    from typing import Any
 
     from pydantic_ai import (
         Agent,
@@ -89,6 +87,7 @@ with ImportProgressBar(total_steps=1):
 
     from spring_harness.console.approval import run_with_approval
     from spring_harness.console.cli_sink import CliSink
+    from spring_harness.console.cli_ui import ModelSelectModal
     from spring_harness.console.cli_ui.app import CliApp
     from spring_harness.console.cli_ui.modal import SessionSelectModal
     from spring_harness.console.cli_ui.widgets import WelcomeBox
@@ -100,8 +99,6 @@ with ImportProgressBar(total_steps=1):
         SessionStore,
         format_local_time,
     )
-
-
 class MyBot(CliApp):
     def __init__(self, *args, resume_last: bool = False, **kwargs):
         super().__init__(*args, **kwargs)
