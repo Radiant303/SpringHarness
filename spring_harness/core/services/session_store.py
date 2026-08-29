@@ -14,28 +14,32 @@ INDEX_FILE = SESSIONS_ROOT / "session_index.jsonl"
 class SessionStore:
     """一个 session 一个 JSONL 文件：首行 meta，之后每行一条 ModelMessage。"""
 
-    def __init__(self, path: Path):
+    def __init__(self, path: Path, pending_meta: dict | None = None):
         self.path = path
+        self._pending_meta = pending_meta
 
     @classmethod
     def create(cls, workspace: Path) -> "SessionStore":
         now = datetime.datetime.now(datetime.UTC)
         # 日期分片目录 + 文件名带时间戳和 uuid，字典序即时间序
-        day_dir = SESSIONS_ROOT / now.strftime("%Y/%m/%d")
-        day_dir.mkdir(parents=True, exist_ok=True)
         stamp = now.strftime("%Y-%m-%dT%H-%M-%S")
-        path = day_dir / f"rollout-{stamp}-{uuid.uuid4()}.jsonl"
+        path = SESSIONS_ROOT / now.strftime("%Y/%m/%d") / f"rollout-{stamp}-{uuid.uuid4()}.jsonl"
         meta = {
             "type": "meta",
             "id": path.stem,
             "workspace": str(workspace),
-            "created_at": datetime.datetime.now(datetime.UTC).isoformat(),
+            "created_at": now.isoformat(),
         }
-        path.write_text(json.dumps(meta, ensure_ascii=False) + "\n", encoding="utf-8")
-        return cls(path)
+        return cls(path, pending_meta=meta)
 
     def append(self, messages: list[ModelMessage]) -> None:
         """每轮结束后调用，追加增量。append 单行天然原子，不需要 tmp+rename。"""
+        if self._pending_meta is not None:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            self.path.write_text(
+                json.dumps(self._pending_meta, ensure_ascii=False) + "\n", encoding="utf-8"
+            )
+            self._pending_meta = None
         with self.path.open("a", encoding="utf-8") as f:
             for msg in messages:
                 # ModelMessagesTypeAdapter 是 list 的适配器，包一层单元素列表
@@ -73,8 +77,12 @@ class SessionStore:
             meta = cls._read_meta(path)
             if meta is None or meta.get("workspace") != str(workspace):
                 continue
-            meta["title"] = _session_title(cls(path))
-            result.append((cls(path), meta))
+            store = cls(path)
+            messages = store.load_messages()
+            if not messages:
+                continue
+            meta["title"] = _first_user_text(messages) or "(空会话)"
+            result.append((store, meta))
         return result
 
 
@@ -130,11 +138,6 @@ def _first_user_text(messages: list[ModelMessage], limit: int = 30) -> str | Non
                     text = part.content.replace("\n", " ")
                     return text[:limit] + ("…" if len(text) > limit else "")
     return None
-
-
-def _session_title(store: SessionStore, limit: int = 30) -> str:
-    """会话标题 = 第一条用户消息截断。只用于索引未收录的老文件兜底。"""
-    return _first_user_text(store.load_messages(), limit) or "(空会话)"
 
 
 LOCAL_TZ = timezone(timedelta(hours=8))  # 展示层统一 +8
