@@ -13,6 +13,7 @@ from spring_harness.core.config.model import get_model
 from spring_harness.core.hooks.model import hooks
 from spring_harness.instructions.default import register_default_instructions
 from spring_harness.toolsets.filesystem import filesystem
+from spring_harness.toolsets.repo_knowledge import approval_required_knowledge_toolsets
 
 
 def create_agent(
@@ -28,6 +29,7 @@ def create_agent(
         model=get_model(model_name),
         toolsets=[
             filesystem(str(root)),
+            approval_required_knowledge_toolsets
         ],
         output_type=[
             str,
