@@ -1,5 +1,3 @@
-# spring_harness/core/agent.py
-
 from os import PathLike
 from pathlib import Path
 

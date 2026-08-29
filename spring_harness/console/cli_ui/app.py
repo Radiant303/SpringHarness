@@ -19,7 +19,7 @@ from textual.widgets import Markdown, Static, TextArea
 
 # get_current_worker 的返回类型在 textual 源码里没给 Worker 填泛型参数，
 # 导入符号会被报 partially unknown —— 库的类型缺口，局部忽略，调用点用 cast 收窄。
-from textual.worker import (  # pyright: ignore[reportUnknownVariableType]
+from textual.worker import (
     NoActiveWorker,
     Worker,
     get_current_worker,

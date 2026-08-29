@@ -1,6 +1,7 @@
+import datetime
 import json
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta, timezone
 from pathlib import Path
 
 from pydantic_ai import ModelMessage, ModelRequest, UserPromptPart
@@ -18,7 +19,7 @@ class SessionStore:
 
     @classmethod
     def create(cls, workspace: Path) -> "SessionStore":
-        now = datetime.now()
+        now = datetime.datetime.now(datetime.UTC)
         # 日期分片目录 + 文件名带时间戳和 uuid，字典序即时间序
         day_dir = SESSIONS_ROOT / now.strftime("%Y/%m/%d")
         day_dir.mkdir(parents=True, exist_ok=True)
@@ -28,7 +29,7 @@ class SessionStore:
             "type": "meta",
             "id": path.stem,
             "workspace": str(workspace),
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": datetime.datetime.now(datetime.UTC).isoformat(),
         }
         path.write_text(json.dumps(meta, ensure_ascii=False) + "\n", encoding="utf-8")
         return cls(path)
@@ -86,7 +87,7 @@ class SessionStore:
             "workspace": meta.get("workspace"),
             "created_at": meta.get("created_at"),
             "title": old.get("title") or _first_user_text(messages),
-            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.datetime.now(datetime.UTC).isoformat(),
         }
         with INDEX_FILE.open("a", encoding="utf-8") as f:
             f.write(json.dumps(record, ensure_ascii=False) + "\n")
@@ -141,13 +142,11 @@ LOCAL_TZ = timezone(timedelta(hours=8))  # 展示层统一 +8
 
 def format_local_time(iso: str) -> str:
     """UTC ISO 时间戳 → +8 的 'MM-dd HH:mm'；解析失败原样返回前 10 位。
-
-    存储一律 UTC（created_at/updated_at），时区只是展示层的事。
     """
     try:
-        dt = datetime.fromisoformat(iso)
+        dt = datetime.datetime.fromisoformat(iso)
     except ValueError:
         return iso[:10]
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)  # 无 tzinfo 的历史数据按 UTC 对待
+        dt = dt.replace(tzinfo=datetime.UTC)
     return dt.astimezone(LOCAL_TZ).strftime("%m-%d %H:%M")

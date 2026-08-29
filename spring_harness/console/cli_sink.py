@@ -1,4 +1,9 @@
-from spring_harness.console.cli_ui import AssistantHandle, CliApp, ToolCallHandle, ToolCallMessage
+from spring_harness.console.cli_ui import (
+    AssistantHandle,
+    CliApp,
+    ToolCallHandle,
+    ToolCallMessage,
+)
 
 
 class CliSink:
@@ -37,8 +42,6 @@ class CliSink:
         return await self._app.start_tool_call(name)
 
     async def finish(self):
-        # Flush Markdown and change the status line in one repaint batch. This
-        # prevents an intermediate full-layout frame at the end of a response.
         with self._app.batch_update():
             await self._close_ensure_assistant()
             # 最终答案已出现：把所有工具结果收成一行摘要，对话更紧凑

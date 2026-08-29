@@ -16,7 +16,7 @@ class ImportProgressBar:
         self.stop_event = threading.Event()
         self.pbar = None
         self._orig_stdout = sys.stdout
-        self.ready_event = threading.Event()  # 添加就绪事件
+        self.ready_event = threading.Event()
 
     def __enter__(self):
         sys.stdout = open(os.devnull, 'w', encoding='utf-8')
@@ -146,8 +146,6 @@ class MyBot(CliApp):
                 message_history=self._message_history,
             )
         except Exception:
-            # 失败时 result 不存在，all_messages() 无从谈起；钩子里存的消息快照
-            # 是抢救上下文的唯一通道，不用它这一轮（用户问题+模型的全部尝试）就蒸发了
             if self._session_deps.last_messages:
                 self._message_history = self._session_deps.last_messages
             raise
@@ -209,17 +207,15 @@ class MyBot(CliApp):
         )
         picked = await self.push_screen_wait(SessionSelectModal(labels, current=current))
         if picked is not None:
-            await self._switch_to(sessions[len(sessions) - 1 - picked][0])  # 映射回正序下标
+            await self._switch_to(sessions[len(sessions) - 1 - picked][0])
 
     async def _rebuild_chat(self, messages: list[ModelMessage]) -> None:
         await self._scroll.remove_children()
-        # remove_children 连 WelcomeBox 一起清了，补挂回来
+        # remove_children 连 WelcomeBox 一起清了，所以需要重写
         await self._scroll.mount(
             WelcomeBox(title=self.title_text, model=self.model, version=self.version)
         )
 
-        # ToolCallPart 在 ModelResponse 里，结果 ToolReturnPart 在后面那条
-        # ModelRequest 里，靠 tool_call_id 配对；见到 return 再一起渲染
         pending: dict[str, ToolCallPart] = {}
 
         for msg in messages:
@@ -233,10 +229,9 @@ class MyBot(CliApp):
                             await self.show_tool_call(
                                 call.tool_name,
                                 args=str(call.args),
-                                result=str(part.content)[:500],  # 展示层截断，数据完整
+                                result=str(part.content)[:500],
                             )
             elif isinstance(msg, ModelResponse):
-                # 一条回复可能有多个 TextPart，合并进同一条 assistant 消息
                 texts = [p for p in msg.parts if isinstance(p, TextPart)]
                 if texts:
                     handle = await self.start_assistant()
@@ -246,10 +241,7 @@ class MyBot(CliApp):
                 for p in msg.parts:
                     if isinstance(p, ToolCallPart):
                         pending[p.tool_call_id] = p
-            # SystemPromptPart / ThinkingPart 跳过：前者不是给用户看的，
-            # 后者的耗时统计是运行时数据，历史里回放不出来
 
-        # 没等到结果的调用（上次会话在工具执行中被杀）：展示为无结果，还原现场
         for call in pending.values():
             await self.show_tool_call(call.tool_name, args=str(call.args))
 
