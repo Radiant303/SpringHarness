@@ -66,6 +66,10 @@ def make_diff(tool_name: str, args: object) -> str | None:
                 [], content.splitlines(keepends=True),
                 fromfile="/dev/null", tofile=f"b/{path}",
             ))
+    elif tool_name == "edit_knowledge":
+        diff = args.get("diff")
+        if isinstance(diff, str):
+            return diff
     return None
 
 
