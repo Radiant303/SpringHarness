@@ -237,6 +237,9 @@ class MyBot(CliApp):
         self._executor_future = self._executor.submit(create_agent, Path.cwd(), model_name=picked)
 
         model_cfg = config.get_model(picked)
+        if model_cfg is None:
+            await self.show_system(f"模型配置不存在: {picked}")
+            return
         self.set_model(model_cfg.display_name, model_cfg.max_context_size)
         await self.show_system(f"已切换到 {model_cfg.display_name}" + ("" if persist else "（仅本次会话）"))
 
@@ -283,6 +286,8 @@ class MyBot(CliApp):
 def main() -> None:
     resume = "--continue" in sys.argv or "-c" in sys.argv
     model_config = config.get_default_model_config()
+    if model_config is None:
+        raise SystemExit("默认模型未配置或不存在，请检查配置文件的 default_model 项")
     MyBot(
         title="Spring Harness", model=model_config.display_name,
         max_context=model_config.max_context_size,
