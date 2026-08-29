@@ -132,7 +132,7 @@ class KnowledgeStore:
         }[type]
 
     def read_index_knowledge(self, type: KnowledgeType) -> str:
-        """读取指定类型的知识索引内容。返回目录内容和所在行数以及文件哈希值（单行标题 # ## ### #### ##### ######）
+        """读取指定类型的知识索引内容。
 
         Args:
             type: 知识类型
@@ -153,7 +153,7 @@ class KnowledgeStore:
 
     @_recoverable
     def read_knowledge(self, type: KnowledgeType, *, offset: int = 1, limit: int | None = None) -> str:
-        """读取指定类型的知识内容。返回文件哈希值和带行号的内容
+        """读取指定类型的知识内容。
 
         Args:
             type: 知识类型
@@ -176,7 +176,7 @@ class KnowledgeStore:
 
     @_recoverable
     def edit_knowledge(self, type: KnowledgeType, diff: str, *, expected_hash: str | None = None) -> str:
-        """使用 unified diff 补丁编辑知识文件，只需输出改动部分而无需输出旧文本。
+        """使用 unified diff 补丁编辑知识文件。
 
         Args:
             type: 知识类型
