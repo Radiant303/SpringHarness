@@ -339,9 +339,9 @@ class CliApp(App[None]):
     def set_model(self, model: str, max_context: int) -> None:
         """切换模型时候更新面板模型名称和上下文信息"""
         self.model = model
-        self._max_context = max_context
+        self.max_context = max_context
         self.set_status(model=model)
-        self.set_status(context=_context_text(self._last_tokens, self._max_context))
+        self.set_status(context=_context_text(self._last_tokens, self.max_context))
 
     # ---- 框架内部：输入分发 ----
 
