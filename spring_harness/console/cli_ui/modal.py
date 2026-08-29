@@ -131,10 +131,11 @@ class ApprovalModal(ModalScreen[bool]):
         self.dismiss(False)
 
 
-class ModelSelectModal(ModalScreen[str | None]):
-    """模型选择弹窗：Tab 循环切换 provider 过滤，↑↓ 选择，Enter 确认，Esc 取消。
+class ModelSelectModal(ModalScreen[tuple[str, bool] | None]):
+    """模型选择弹窗：Tab 循环切换 provider 过滤，↑↓ 选择，Esc 取消。
 
-    dismiss 返回模型 id，None 表示取消。
+    Enter 确认 = 切换并写回默认配置；Alt+S = 仅本次会话切换（不写盘）。
+    dismiss 返回 (模型id, 是否写回默认配置)，None 表示取消。
     models 每项为 (模型id, 显示名, provider)；current_model 传当前模型 id：
     "> " 前缀 + 主题色标记，并作为初始高亮项。
     Thinking 行为静态展示，不可交互。
@@ -212,6 +213,7 @@ class ModelSelectModal(ModalScreen[str | None]):
     BINDINGS: ClassVar[list] = [
         # priority：压过 App 层的 Tab=切换焦点 默认行为
         Binding("tab", "next_provider", "Next provider", priority=True),
+        ("alt+s", "session_only", "Session only"),
         ("escape", "cancel", "Cancel"),
     ]
 
@@ -302,7 +304,16 @@ class ModelSelectModal(ModalScreen[str | None]):
     @on(OptionList.OptionSelected)
     def _select(self, event: OptionList.OptionSelected) -> None:
         # option_index 是过滤后列表里的下标，必须经 _visible_models 映射回模型 id
-        self.dismiss(self._visible_models()[event.option_index][0])
+        model_id = self._visible_models()[event.option_index][0]
+        self.dismiss((model_id, True))
+
+    def action_session_only(self) -> None:
+        """Alt+S：切换当前高亮的模型，但不写回默认配置（仅本次会话生效）。"""
+        highlighted = self.query_one(OptionList).highlighted
+        if highlighted is None:
+            return
+        model_id = self._visible_models()[highlighted][0]
+        self.dismiss((model_id, False))
 
     def action_cancel(self) -> None:
         self.dismiss(None)

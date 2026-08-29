@@ -219,17 +219,18 @@ class MyBot(CliApp):
 
     async def _select_model_via_modal(self) -> None:
         models = [(mid, m.display_name, m.provider) for mid, m in config.models.items()]
-        picked = await self.push_screen_wait(
+        result = await self.push_screen_wait(
             ModelSelectModal(models=models, current_model=self._model_id)
         )
-        if picked is None or picked == self._model_id:
+        if result is None:
             return
-
-        try:
-            config.set_default_model(picked)
-        except (OSError, ValueError) as e:
-            await self.show_system(f"❌ 写入配置失败：{e}")
-            return
+        picked, persist = result   # Enter=True 写回配置；Alt+S=False 仅本次会话
+        if persist:
+            try:
+                config.set_default_model(picked)
+            except (OSError, ValueError) as e:
+                await self.show_system(f"❌ 写入配置失败：{e}")
+                return
 
         self._model_id = picked
         self._agent = None
@@ -237,7 +238,7 @@ class MyBot(CliApp):
 
         model_cfg = config.get_model(picked)
         self.set_model(model_cfg.display_name, model_cfg.max_context_size)
-        await self.show_system(f"已切换到 {model_cfg.display_name}")
+        await self.show_system(f"已切换到 {model_cfg.display_name}" + ("" if persist else "（仅本次会话）"))
 
 
     async def _rebuild_chat(self, messages: list[ModelMessage]) -> None:
