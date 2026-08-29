@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from pydantic_ai import Agent, DeferredToolRequests, RunContext
 
 from spring_harness.core.agent.deps import CodingAgentDeps

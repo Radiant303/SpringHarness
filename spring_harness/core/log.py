@@ -1,4 +1,3 @@
-import sys
 from pathlib import Path
 
 from loguru import logger as _raw_loguru_logger
