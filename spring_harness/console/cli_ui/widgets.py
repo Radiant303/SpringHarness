@@ -162,6 +162,7 @@ class ToolCallMessage(Vertical):
     """
 
     MAX_RESULT_LINES = 5
+    MAX_LINE_CHARS = 80  # 单行字符上限：无换行的超长结果也要截断
     MAX_ARGS_LEN = 40
 
     _HEAD_ICONS: ClassVar[dict[str, tuple[str, str]]] = {
@@ -236,6 +237,13 @@ class ToolCallMessage(Vertical):
         hidden = len(lines) - self.MAX_RESULT_LINES
         if hidden > 0:
             lines = lines[: self.MAX_RESULT_LINES] + [f"… (还有 {hidden} 行)"]
+        # 行数之外再按字符兜底：无换行的超长单行也要截断
+        lines = [
+            line[: self.MAX_LINE_CHARS] + f" … (省略 {len(line) - self.MAX_LINE_CHARS} 字符)"
+            if len(line) > self.MAX_LINE_CHARS
+            else line
+            for line in lines
+        ]
         return Text("\n".join(lines))
 
     def append_args(self, chunk: str) -> None:
@@ -273,9 +281,15 @@ class ToolCallMessage(Vertical):
             return
         self._collapsed = True
         lines = self._result.splitlines()
-        summary = lines[0] if lines else ""
+        first = lines[0] if lines else ""
+        summary = first[: self.MAX_LINE_CHARS]
+        notes = []
         if len(lines) > 1:
-            summary += f"  … (共 {len(lines)} 行)"
+            notes.append(f"共 {len(lines)} 行")
+        if len(first) > self.MAX_LINE_CHARS:
+            notes.append(f"共 {len(first)} 字符")
+        if notes:
+            summary += "  … (" + ", ".join(notes) + ")"
         if self.query(".tool-result"):
             self.query_one(".tool-result", CJKStatic).update(Text(summary))
 
