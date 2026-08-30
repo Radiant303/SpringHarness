@@ -88,6 +88,7 @@ class EventStreamRenderer:
         self._tool_by_index: dict[int, ToolCallSink] = {}
         self._tool_by_id: dict[str, ToolCallSink] = {}
         self._context = 0  # 最近一场 run 的 token 用量（input+output ≈ 当前上下文占用）
+        self._last_usage: int | None = None
 
     async def __call__(
         self,
@@ -100,9 +101,11 @@ class EventStreamRenderer:
                 await handler(event)
             if _ctx is not None and isinstance(_ctx.deps, CodingAgentDeps) and _ctx.deps.usage_log:
                 usage = _ctx.deps.usage_log[-1]
-                input_tokens = usage.input_tokens
-                output_tokens = usage.output_tokens
-                await self._sink.update_context(input_tokens + output_tokens)
+                tokens = usage.input_tokens + usage.output_tokens
+                if tokens != self._last_usage:
+                    self._last_usage = tokens
+                    await self._sink.update_context(tokens)
+
 
     async def _on_part_start(self, event: PartStartEvent) -> None:
         part = event.part
