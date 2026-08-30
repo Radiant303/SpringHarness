@@ -1,7 +1,13 @@
 import asyncio
 from typing import Any
 
-from pydantic_ai import AgentRunResult, ModelRequest, ModelRequestContext, RunContext
+from pydantic_ai import (
+    AgentRunResult,
+    ModelRequest,
+    ModelRequestContext,
+    ModelResponse,
+    RunContext,
+)
 from pydantic_ai.capabilities import Hooks
 
 from spring_harness.core.agent.deps import CodingAgentDeps
@@ -30,3 +36,13 @@ async def stop_monitor(
     if changes_text is not None:
         request_context.messages.append(ModelRequest.user_text_prompt(changes_text))
     return request_context
+
+@hooks.on.after_model_request
+async def log_request_usage(
+    ctx: RunContext[CodingAgentDeps],
+    *,
+    request_context: ModelRequestContext,
+    response: ModelResponse,
+) -> ModelResponse:
+    ctx.deps.usage_log.append(response.usage)
+    return response

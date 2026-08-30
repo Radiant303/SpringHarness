@@ -24,6 +24,7 @@ from pydantic_ai import (
 )
 
 from spring_harness.console.sink import RenderSink, ToolCallSink
+from spring_harness.core.agent.deps import CodingAgentDeps
 from spring_harness.core.log import logger
 
 
@@ -97,6 +98,11 @@ class EventStreamRenderer:
             handler = self._dispatch.get(type(event))
             if handler is not None:
                 await handler(event)
+            if _ctx is not None and isinstance(_ctx.deps, CodingAgentDeps) and _ctx.deps.usage_log:
+                usage = _ctx.deps.usage_log[-1]
+                input_tokens = usage.input_tokens
+                output_tokens = usage.output_tokens
+                await self._sink.update_context(input_tokens + output_tokens)
 
     async def _on_part_start(self, event: PartStartEvent) -> None:
         part = event.part
