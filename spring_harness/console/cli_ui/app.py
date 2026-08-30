@@ -83,6 +83,7 @@ class AssistantHandle:
             self._thinking_start = time.monotonic()
         self._thinking += text
         # 包成 Text：思考文本里的 […] 会被 Static 按 Rich markup 解析而抛 MarkupError
+        # 去除首行换行
         self._message.query_one("#thinking-content", Static).update(Text(self._thinking.lstrip("\n")))
 
     async def write_answer(self, text: str) -> None:
