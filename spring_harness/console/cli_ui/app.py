@@ -83,7 +83,7 @@ class AssistantHandle:
             self._thinking_start = time.monotonic()
         self._thinking += text
         # 包成 Text：思考文本里的 […] 会被 Static 按 Rich markup 解析而抛 MarkupError
-        self._message.query_one("#thinking-content", Static).update(Text(self._thinking))
+        self._message.query_one("#thinking-content", Static).update(Text(self._thinking.lstrip("\n")))
 
     async def write_answer(self, text: str) -> None:
         """累加 Markdown 回答（可多次调用）。首个 chunk 到达前整行隐藏。"""
