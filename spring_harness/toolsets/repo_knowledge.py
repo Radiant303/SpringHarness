@@ -132,7 +132,7 @@ class KnowledgeStore:
         }[type]
 
     def read_index_knowledge(self, type: KnowledgeType) -> str:
-        """读取指定类型的知识索引内容。
+        """读取指定类型的知识索引内容。这里返回拿到的只是对于知识类型的索引内容，如果想拿到具体内容请使用read_knowledge工具。
 
         Args:
             type: 知识类型
