@@ -16,7 +16,11 @@ def register_default_instructions(
 
     @agent.instructions
     async def input_style(ctx: RunContext[CodingAgentDeps]) -> str:
-        return "Your outputs are reasonably concise."
+        return (
+            "Your outputs are reasonably concise. "
+            "Avoid emojis and decorative icons. "
+            "Only use an emoji when it is strictly necessary for meaning."
+        )
 
     @agent.instructions
     async def tone_format(self) -> str:
