@@ -76,13 +76,17 @@ class AssistantHandle:
         return worker is not None and worker.is_cancelled
 
     async def _flush_thinking(self, _batch: str) -> None:
-        """pacer 只管节奏；thinking 渲染用的是全文 self._thinking。"""
+        """pacer 只管节奏；thinking 渲染用的是全文 self._thinking。
+        首次 flush 才揭示整行：● 出现后必然跟着内容。"""
+        self._message.query_one(".thinking-row").remove_class("stream-pending")
         self._message.query_one("#thinking-content", Static).update(
             Text(self._thinking.lstrip("\n"))
         )
 
     async def _flush_answer(self, batch: str) -> None:
         if self._answer_stream is not None:
+            # 首次 flush 才揭示整行：● 出现后必然跟着内容
+            self._message.query_one(".answer-row").remove_class("stream-pending")
             await self._answer_stream.write(batch)
 
 
@@ -91,7 +95,6 @@ class AssistantHandle:
         if self._finished or self._check_cancelled():
             return
         if not self._thinking:
-            self._message.query_one(".thinking-row").remove_class("stream-pending")
             self._thinking_start = time.monotonic()
         self._thinking += text
         # 包成 Text：思考文本里的 […] 会被 Static 按 Rich markup 解析而抛 MarkupError
@@ -103,7 +106,6 @@ class AssistantHandle:
         if self._finished or self._check_cancelled():
             return
         if self._answer_stream is None:
-            self._message.query_one(".answer-row").remove_class("stream-pending")
             self._answer_stream = Markdown.get_stream(
                 self._message.query_one("#answer-md", Markdown)
             )
