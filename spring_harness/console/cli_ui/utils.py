@@ -16,7 +16,7 @@ class DeltaCoalescer:
     def __init__(
         self,
         flush_fn: Callable[[str], Awaitable[None]],
-        interval: float = 1 / 30,
+        interval: float = 1 / 120,
         max_chars: int = 200,
     ) -> None:
         self._flush_fn = flush_fn
