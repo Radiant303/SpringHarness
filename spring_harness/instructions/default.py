@@ -15,6 +15,16 @@ def register_default_instructions(
         return f"Your working directory is {ctx.deps.workspace}; you must only read, write, and operate on files within this directory and cannot access anything outside it."
 
     @agent.instructions
+    async def code_mode_sandbox_paths() -> str:
+        return (
+            "Inside the `run_code` sandbox, the workspace is mounted at `/work` "
+            "(overlay mode: readable and writable, but writes are discarded when the call ends) "
+            "and `/scratch` is a writable scratch area persisted to the workspace's `.agent-scratch/`. "
+            "Always use absolute virtual paths such as `Path('/work/a.txt')`; "
+            "relative paths and any path outside these mounts are rejected with `PermissionError`."
+        )
+
+    @agent.instructions
     async def input_style(ctx: RunContext[CodingAgentDeps]) -> str:
         return (
             "Your outputs are reasonably concise. "
