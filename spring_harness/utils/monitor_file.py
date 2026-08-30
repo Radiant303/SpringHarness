@@ -51,15 +51,21 @@ class DirectoryMonitor:
             directory_path: 要监控的目录路径
             file_pattern: 文件匹配模式（如 "*.py" 只监控Python文件）
             exclude_dot_dirs: 是否排除以 . 开头的文件夹（如 .git、.idea）
-            use_gitignore: 是否按 gitignore 语法排除监控目录下 .gitignore 中的规则
+            use_gitignore: 是否按 gitignore 语法排除最近的 .gitignore
+                （从监控目录向上查找）中的规则
         """
         self.directory = Path(directory_path).resolve()
         self.file_pattern = file_pattern
         self.exclude_dot_dirs = exclude_dot_dirs
         self.use_gitignore = use_gitignore
 
-        # 解析后的 .gitignore 规则（None 表示未启用或文件不存在）
+        # 解析后的 .gitignore 规则（None 表示未启用或未找到）
         self._gitignore_spec: pathspec.GitIgnoreSpec | None = None
+        # .gitignore 所在目录（监控目录本身或其某个祖先目录）
+        self._gitignore_root: Path = self.directory
+        # .gitignore 文件路径与修改时间，用于会话期间变更后自动重读
+        self._gitignore_path: Path | None = None
+        self._gitignore_mtime: float | None = None
 
         # 保存初始文件内容 {文件路径: 文件内容}
         self.old_contents: dict[Path, list[str]] = {}
@@ -83,28 +89,57 @@ class DirectoryMonitor:
             raise ValueError(f"路径不是目录: {self.directory}")
 
     def _load_gitignore(self):
-        """读取并解析监控目录下的 .gitignore 文件（不存在则跳过）
+        """从监控目录向上查找最近的 .gitignore 并解析（找不到则跳过）
 
+        向上遍历时遇到 .git（仓库边界）或文件系统根即停止。
         支持完整 gitignore 语法：通配符（*、**、?）、! 取反、/ 锚定、
         目录规则（dir/）和 # 注释。
         """
         self._gitignore_spec = None
+        self._gitignore_root = self.directory
+        self._gitignore_path = None
+        self._gitignore_mtime = None
         if not self.use_gitignore:
             return
-        gitignore = self.directory / ".gitignore"
-        if not gitignore.is_file():
+        current = self.directory
+        while True:
+            gitignore = current / ".gitignore"
+            if gitignore.is_file():
+                try:
+                    lines = gitignore.read_text(encoding="utf-8").splitlines()
+                    mtime = gitignore.stat().st_mtime
+                except OSError:
+                    return
+                self._gitignore_spec = pathspec.GitIgnoreSpec.from_lines(lines)
+                self._gitignore_root = current
+                self._gitignore_path = gitignore
+                self._gitignore_mtime = mtime
+                return
+            # 到达仓库边界或文件系统根就停止（仓库根的 .gitignore 已检查过）
+            if (current / ".git").exists() or current.parent == current:
+                return
+            current = current.parent
+
+    def _reload_gitignore_if_changed(self):
+        """.gitignore 在会话期间被修改或删除时重新加载"""
+        if self._gitignore_path is None:
             return
         try:
-            lines = gitignore.read_text(encoding="utf-8").splitlines()
+            mtime = self._gitignore_path.stat().st_mtime
         except OSError:
-            return
-        self._gitignore_spec = pathspec.GitIgnoreSpec.from_lines(lines)
+            mtime = None  # 文件已被删除
+        if mtime != self._gitignore_mtime:
+            self._load_gitignore()
 
     def _match_gitignore(self, relative: Path, is_dir: bool = False) -> bool:
         """检查相对路径是否命中 gitignore 规则"""
+        self._reload_gitignore_if_changed()
         if self._gitignore_spec is None:
             return False
-        path = relative.as_posix()
+        # 规则相对 .gitignore 所在目录生效，匹配前需拼上
+        # 监控目录相对该目录的前缀，与 git 的语义一致
+        path = (self.directory.relative_to(self._gitignore_root)
+                / relative).as_posix()
         if self._gitignore_spec.check_file(path).include:
             return True
         # 目录需额外尝试带尾斜杠的形式，以匹配 "dir/" 这类目录规则
