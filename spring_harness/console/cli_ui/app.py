@@ -28,7 +28,7 @@ from textual.worker import (
 from .inputs import CommandDropdown, HistoryInput
 from .modal import ApprovalModal
 from .theme import KIMI_THEME
-from .utils import DeltaCoalescer, format_num
+from .utils import LinePacer, format_num
 from .widgets import (
     AssistantMessage,
     ChatScroll,
@@ -66,8 +66,8 @@ class AssistantHandle:
         self._thinking_start: float | None = None
         self._answer_stream = None
         self._finished = False
-        self._thinking_coalescer = DeltaCoalescer(self._flush_thinking)   # 新增
-        self._answer_coalescer = DeltaCoalescer(self._flush_answer)       # 新增
+        self._thinking_pacer = LinePacer(self._flush_thinking)
+        self._answer_pacer = LinePacer(self._flush_answer)
     def _check_cancelled(self) -> bool:
         try:
             worker = cast(Worker[None], get_current_worker())
@@ -76,7 +76,7 @@ class AssistantHandle:
         return worker is not None and worker.is_cancelled
 
     async def _flush_thinking(self, _batch: str) -> None:
-        """coalescer 只管节奏；thinking 渲染用的是全文 self._thinking。"""
+        """pacer 只管节奏；thinking 渲染用的是全文 self._thinking。"""
         self._message.query_one("#thinking-content", Static).update(
             Text(self._thinking.lstrip("\n"))
         )
@@ -96,7 +96,7 @@ class AssistantHandle:
         self._thinking += text
         # 包成 Text：思考文本里的 […] 会被 Static 按 Rich markup 解析而抛 MarkupError
         # 去除首行换行
-        self._thinking_coalescer.write(text)
+        self._thinking_pacer.write(text)
 
     async def write_answer(self, text: str) -> None:
         """累加 Markdown 回答（可多次调用）。首个 chunk 到达前整行隐藏。"""
@@ -107,15 +107,15 @@ class AssistantHandle:
             self._answer_stream = Markdown.get_stream(
                 self._message.query_one("#answer-md", Markdown)
             )
-        self._answer_coalescer.write(text)
+        self._answer_pacer.write(text)
 
     async def finish(self) -> None:
         """收尾：thinking 折叠成一行摘要（全文占屏），关掉 Markdown 流。重复调用安全。"""
         if self._finished:
             return
         self._finished = True
-        await self._thinking_coalescer.drain()
-        await self._answer_coalescer.drain()
+        await self._thinking_pacer.drain()
+        await self._answer_pacer.drain()
 
         if self._thinking and self._thinking_start is not None:
             elapsed = time.monotonic() - self._thinking_start
