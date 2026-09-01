@@ -79,6 +79,7 @@ with ImportProgressBar(total_steps=1):
         ModelMessage,
         ModelRequest,
         ModelResponse,
+        RetryPromptPart,
         TextPart,
         ToolCallPart,
         ToolReturnPart,
@@ -255,7 +256,10 @@ class MyBot(CliApp):
                 for part in msg.parts:
                     if isinstance(part, UserPromptPart) and isinstance(part.content, str):
                         await self.show_user(part.content)
-                    elif isinstance(part, ToolReturnPart):
+                    elif isinstance(part, ToolReturnPart | RetryPromptPart) and part.tool_call_id:
+                        # RetryPromptPart 也是这次调用的"结果"（校验/执行失败，
+                        # 框架让模型重试），不收进来它就会滞留 pending，
+                        # 最后被当成孤儿调用渲染到整个会话末尾
                         call = pending.pop(part.tool_call_id, None)
                         if call is not None:
                             await self.show_tool_call(
