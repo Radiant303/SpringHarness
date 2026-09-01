@@ -32,6 +32,7 @@ from .utils import LinePacer, format_num
 from .widgets import (
     AssistantMessage,
     ChatScroll,
+    PlanMessage,
     StatusBar,
     SystemMessage,
     ToolCallMessage,
@@ -256,6 +257,7 @@ class CliApp(App[None]):
             self._commands.extend(BUILTIN_COMMANDS)
         self._message_counter = 0
         self._active_handles: list[AssistantHandle] = []
+        self._plan_widget: PlanMessage | None = None
         if theme is not None:
             self.register_theme(theme)
             self.theme = theme.name
@@ -319,6 +321,23 @@ class CliApp(App[None]):
     async def show_tool_call(self, name: str, args: str = "", result: str | None = None) -> None:
         """显示一条工具调用：⚡ Name(参数) + 灰字缩进的结果。"""
         await self._scroll.mount(ToolCallMessage(name, args, result))
+        self._scroll.anchor()
+
+    async def show_plan(self, items: list) -> None:
+        """显示计划清单。组件还在聊天末尾就原地更新；若后面已有新内容
+        （工具调用/回答），在末尾挂一份最新快照，旧块留作历史（同 codex
+        每次 update_plan 追加新块的语义，保证最新计划始终贴近队尾可见）。
+        items 见 PlanMessage。
+        """
+        if not items:
+            return
+        widget = self._plan_widget
+        children = self._scroll.children
+        if widget is not None and widget.is_attached and children and children[-1] is widget:
+            await widget.update_items(items)
+        else:
+            self._plan_widget = PlanMessage(items)
+            await self._scroll.mount(self._plan_widget)
         self._scroll.anchor()
 
     async def show_system(self, text: str) -> None:

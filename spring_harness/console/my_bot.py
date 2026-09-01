@@ -15,6 +15,7 @@ from pydantic_ai import (
     UserPromptPart,
 )
 
+from spring_harness.capabilities.planning import load_plan_items
 from spring_harness.console.approval import run_with_approval
 from spring_harness.console.cli_sink import CliSink
 from spring_harness.console.cli_ui import ModelSelectModal
@@ -62,7 +63,12 @@ class MyBot(CliApp):
             create_agent, Path.cwd(),
             model_name=model_name or self._model_id,
             session_id=self._store.path.stem,
+            plan_on_change=self._on_plan_change,
         )
+
+    async def _on_plan_change(self, items: list) -> None:
+        """计划变更回调：在 agent 运行的事件循环里被 store 包装层 await。"""
+        await self.show_plan(items)
 
     async def on_mount(self) -> None:
         super().on_mount()
@@ -193,6 +199,7 @@ class MyBot(CliApp):
 
     async def _rebuild_chat(self, messages: list[ModelMessage]) -> None:
         await self._scroll.remove_children()
+        self._plan_widget = None  # remove_children 已把旧 PlanMessage 摘掉
         await self._scroll.mount(
             WelcomeBox(
                 title=self.title_text, model=self.model,
@@ -228,5 +235,10 @@ class MyBot(CliApp):
 
         for call in pending.values():
             await self.show_tool_call(call.tool_name, args=str(call.args))
+
+        # 该会话持久化的计划也一并重建到末尾
+        items = await load_plan_items(self._store.path.stem)
+        if items:
+            await self.show_plan(items)
 
         self._scroll.anchor()

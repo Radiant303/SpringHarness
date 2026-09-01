@@ -153,6 +153,97 @@ class AssistantMessage(Vertical):
             yield CJKMarkdown(id="answer-md")
 
 
+class PlanMessage(Vertical):
+    """计划清单：● Plan (2/5) 标题行 + 每步一行（图标列 + 文本列）。
+
+    样式仿 codex 的 PlanUpdateCell：完成项 ✓ 暗色删除线、进行中 □ 青色加粗
+    （有 active_form 显示 active_form）、待办 □ 暗色；另补取消 ✗、阻塞黄色。
+    每步是独立的 HorizontalGroup（图标列固定 2 格），长文本换行后对齐文本列，
+    同 codex 快照里的悬挂缩进效果。
+    items 鸭子类型：需有 .content/.status/.active_form，status 为 str 枚举。
+    """
+
+    DEFAULT_CSS = """
+    PlanMessage {
+        width: 1fr;
+        height: auto;
+        margin: 0 1 1 1;
+    }
+    PlanMessage .plan-head {
+        width: 1fr;
+        height: auto;
+    }
+    PlanMessage .plan-rows {
+        width: 1fr;
+        height: auto;
+        padding-left: 2;
+    }
+    PlanMessage .plan-icon {
+        width: 2;
+        height: auto;
+    }
+    PlanMessage .plan-label {
+        width: 1fr;
+        height: auto;
+    }
+    """
+
+    _STATUS_STYLE: ClassVar[dict[str, tuple[str, str]]] = {
+        "completed": ("✓", "dim strike"),
+        "in_progress": ("□", "bold cyan"),
+        "pending": ("□", "dim"),
+        "cancelled": ("✗", "dim strike"),
+        "blocked": ("□", "yellow"),
+    }
+
+    def __init__(self, items: list[Any], **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self._items = list(items)
+
+    def compose(self) -> ComposeResult:
+        yield Static(self._render_head(), classes="plan-head")
+        yield Vertical(classes="plan-rows")
+
+    async def on_mount(self) -> None:
+        await self._rebuild_rows()
+
+    async def update_items(self, items: list[Any]) -> None:
+        """原地刷新清单（组件未挂载时静默丢弃，下次事件会重建）。"""
+        self._items = list(items)
+        if self.is_attached:
+            self.query_one(".plan-head", Static).update(self._render_head())
+            await self._rebuild_rows()
+
+    async def _rebuild_rows(self) -> None:
+        rows = self.query_one(".plan-rows")
+        await rows.remove_children()
+        await rows.mount_all(self._render_row(item) for item in self._items)
+
+    def _render_head(self) -> Text:
+        total = len(self._items)
+        done = sum(1 for i in self._items if self._status(i) == "completed")
+        text = Text()
+        text.append("● ", style=ACCENT)
+        text.append("Plan ", style="bold")
+        text.append(f"{done}/{total}", style=GRAY)
+        return text
+
+    def _render_row(self, item: Any) -> HorizontalGroup:
+        status = self._status(item)
+        icon, style = self._STATUS_STYLE.get(status, ("○", "dim"))
+        label = item.active_form if status == "in_progress" and item.active_form else item.content
+        # Text 不解析 markup，计划文本里的 […] 不会触发 MarkupError
+        return HorizontalGroup(
+            Static(Text(f"{icon} ", style=style), classes="plan-icon"),
+            CJKStatic(Text(label, style=style), classes="plan-label"),
+        )
+
+    @staticmethod
+    def _status(item: Any) -> str:
+        status = getattr(item, "status", "pending")
+        return getattr(status, "value", str(status))
+
+
 class ToolCallMessage(Vertical):
     """工具调用消息：一行图标 + ToolName(参数摘要)，结果灰字缩进、超长截断。
 
