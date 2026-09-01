@@ -38,7 +38,7 @@ class CommandDropdown(Vertical):
     }
     CommandDropdown .command-desc {
         width: 1fr;
-        color: #7a8391;
+        color: ansi_bright_black;
     }
     CommandDropdown .selected .command-name {
         color: #ffffff;
@@ -46,7 +46,7 @@ class CommandDropdown(Vertical):
     }
     CommandDropdown .dropdown-count {
         width: 1fr;
-        color: #7a8391;
+        color: ansi_bright_black;
         padding: 0 1;
     }
     """

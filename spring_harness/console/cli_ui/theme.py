@@ -7,7 +7,9 @@ variables 里补 ansi-background / ansi-foreground，三者缺一不可。
 from textual.theme import Theme
 
 ACCENT = "#4a9eff"
-GRAY = "#7a8391"
+# codex 的灰是默认前景 + dim（不硬编码 RGB）。CSS 里没有 dim 颜色，
+# 用终端 8 号色（bright_black / ansi_bright_black）等效：跟随终端主题的中性灰。
+GRAY = "bright_black"
 
 # Kimi Code CLI 风格配色
 KIMI_THEME = Theme(

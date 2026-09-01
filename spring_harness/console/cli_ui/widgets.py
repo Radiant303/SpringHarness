@@ -63,13 +63,13 @@ class WelcomeBox(Vertical):
             yield Static(Text(f"Welcome to {self._title}!", style=f"bold {ACCENT}"))
             yield Static(Text("Send /help for help information.", style=GRAY))
         lines: list[tuple[str, str]] = [
-            ("Directory: ", GRAY), (f"{cwd}\n", "#9aa3b0"),
+            ("Directory: ", GRAY), (f"{cwd}\n", "default"),
         ]
         if self._session:
-            lines += [("Session:   ", GRAY), (f"{self._session}\n", "#9aa3b0")]
+            lines += [("Session:   ", GRAY), (f"{self._session}\n", "default")]
         lines += [
-            ("Model:     ", GRAY), (f"{self._model}\n", "#9aa3b0"),
-            ("Version:   ", GRAY), (self._version, "#9aa3b0"),
+            ("Model:     ", GRAY), (f"{self._model}\n", "default"),
+            ("Version:   ", GRAY), (self._version, "default"),
         ]
         yield Static(Text.assemble(*lines), classes="info")
 
@@ -113,13 +113,13 @@ class AssistantMessage(Vertical):
     AssistantMessage .thinking-bullet {
         width: auto;
         height: auto;
-        color: #7a8391;
+        color: ansi_bright_black;
         padding: 0 1 0 0;
     }
     AssistantMessage #thinking-content {
         width: 1fr;
         height: auto;
-        color: #7a8391;
+        color: ansi_bright_black;
         text-style: italic;
     }
     AssistantMessage .answer-row {
@@ -281,7 +281,7 @@ class ToolCallMessage(Vertical):
         height: auto;
         padding-left: 2;
         border-left: solid #3a3f4a;
-        color: #7a8391;
+        color: ansi_bright_black;
     }
     ToolCallMessage .tool-diff {
         width: 1fr;
@@ -321,7 +321,7 @@ class ToolCallMessage(Vertical):
         return Text.assemble(
             (icon, icon_style),
             (self._name, f"bold {ACCENT}"),
-            (f"({args})", "#9aa3b0"),
+            (f"({args})", "default"),
         )
 
     def _render_result(self) -> Text:
@@ -469,7 +469,7 @@ class SystemMessage(CJKStatic):
         width: 1fr;
         height: auto;
         margin: 0 1;
-        color: #7a8391;
+        color: ansi_bright_black;
     }
     """
 

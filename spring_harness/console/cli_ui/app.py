@@ -212,7 +212,7 @@ class CliApp(App[None]):
         height: auto;
         max-height: 8;  /* 输入内容最多 6 行 + 上下边框 2 行 */
         background: transparent;
-        border: round #7a8391;
+        border: round ansi_bright_black;
         padding: 0 1;
         margin: 0 1 0 1;
     }

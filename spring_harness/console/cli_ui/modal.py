@@ -69,12 +69,12 @@ class ApprovalModal(ModalScreen[bool]):
         scrollbar-size-horizontal: 1;
         /* 默认滚动条是刺眼的 ANSI 蓝，换成和引导线一致的灰 */
         scrollbar-color: #3a3f4a;
-        scrollbar-color-hover: #7a8391;
-        scrollbar-color-active: #7a8391;
+        scrollbar-color-hover: ansi_bright_black;
+        scrollbar-color-active: ansi_bright_black;
         scrollbar-background: #0b0d10;  /* 跟随面板底色 */
     }
     #approval-help {
-        color: #7a8391;
+        color: ansi_bright_black;
     }
     """
 
@@ -105,7 +105,7 @@ class ApprovalModal(ModalScreen[bool]):
         with Vertical(id="approval-dialog"):
             yield Static("Approve this tool call?", id="approval-title")
             yield Static(
-                Text.assemble(("⚡ ", ACCENT), (self._call.tool_name, "bold"), (f"({args})", "#9aa3b0")),
+                Text.assemble(("⚡ ", ACCENT), (self._call.tool_name, "bold"), (f"({args})", "default")),
                 id="approval-call",
             )
             if self._diff:
@@ -113,9 +113,9 @@ class ApprovalModal(ModalScreen[bool]):
                     yield Static(self._render_preview())
             yield Static(
                 Text.assemble(
-                    ("[y]", "bold #e5c07b"), (" Approve   ", "#9aa3b0"),
-                    ("[n]", "bold #e5c07b"), (" Reject   ", "#9aa3b0"),
-                    ("[Esc]", "bold #e5c07b"), (" Reject", "#9aa3b0"),
+                    ("[y]", "bold #e5c07b"), (" Approve   ", "default"),
+                    ("[n]", "bold #e5c07b"), (" Reject   ", "default"),
+                    ("[Esc]", "bold #e5c07b"), (" Reject", "default"),
                 ),
                 id="approval-help",
             )
@@ -158,7 +158,7 @@ class ModelSelectModal(ModalScreen[tuple[str, bool] | None]):
         margin-bottom: 1;
     }
     #model-help {
-        color: #7a8391;
+        color: ansi_bright_black;
         margin-bottom: 1;
     }
     #model-warning {
@@ -173,7 +173,7 @@ class ModelSelectModal(ModalScreen[tuple[str, bool] | None]):
         width: auto;
         padding: 0 2;
         background: transparent;
-        color: #7a8391;
+        color: ansi_bright_black;
     }
     .provider-tab.-active {
         background: #4a9eff;
@@ -188,7 +188,7 @@ class ModelSelectModal(ModalScreen[tuple[str, bool] | None]):
         padding: 0;
         scrollbar-size-vertical: 1;
         scrollbar-color: #3a3f4a;
-        scrollbar-color-hover: #7a8391;
+        scrollbar-color-hover: ansi_bright_black;
         scrollbar-background: transparent;
     }
     #model-list .option-list--option-highlighted {
@@ -246,12 +246,12 @@ class ModelSelectModal(ModalScreen[tuple[str, bool] | None]):
             if model_id == self._current_model:
                 options.append(Option(Text.assemble(
                     (f"> {display_name:<24}", f"bold {ACCENT}"),
-                    (provider, "#7a8391"),
+                    (provider, "bright_black"),
                 )))
             else:
                 options.append(Option(Text.assemble(
                     f"  {display_name:<24}",
-                    (provider, "#7a8391"),
+                    (provider, "bright_black"),
                 )))
         return options
 
@@ -345,7 +345,7 @@ class SessionSelectModal(ModalScreen[int | None]):
         text-style: bold;
     }
     #session-help {
-        color: #7a8391;
+        color: ansi_bright_black;
         margin-bottom: 1;
     }
     #session-list {
@@ -356,7 +356,7 @@ class SessionSelectModal(ModalScreen[int | None]):
         padding: 0;
         scrollbar-size-vertical: 1;
         scrollbar-color: #3a3f4a;
-        scrollbar-color-hover: #7a8391;
+        scrollbar-color-hover: ansi_bright_black;
         scrollbar-background: #0b0d10;  /* 跟随面板底色 */
     }
     #session-list .option-list--option-highlighted {
