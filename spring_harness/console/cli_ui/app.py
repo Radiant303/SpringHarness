@@ -66,7 +66,6 @@ class AssistantHandle:
         self._thinking_start: float | None = None
         self._answer_stream = None
         self._finished = False
-        self._thinking_pacer = LinePacer(self._flush_thinking)
         self._answer_pacer = LinePacer(self._flush_answer)
     def _check_cancelled(self) -> bool:
         try:
@@ -75,8 +74,9 @@ class AssistantHandle:
             return False
         return worker is not None and worker.is_cancelled
 
-    async def _flush_thinking(self, _batch: str) -> None:
-        """pacer 只管节奏；thinking 渲染用的是全文 self._thinking。
+    async def _flush_thinking(self) -> None:
+        """thinking 渲染用的是全文 self._thinking（Static 更新便宜，
+        不像 Markdown 流要重解析，所以不走 LinePacer 逐行节奏）。
         首次 flush 才揭示整行：● 出现后必然跟着内容。"""
         self._message.query_one(".thinking-row").remove_class("stream-pending")
         self._message.query_one("#thinking-content", Static).update(
@@ -97,9 +97,9 @@ class AssistantHandle:
         if not self._thinking:
             self._thinking_start = time.monotonic()
         self._thinking += text
-        # 包成 Text：思考文本里的 […] 会被 Static 按 Rich markup 解析而抛 MarkupError
-        # 去除首行换行
-        self._thinking_pacer.write(text)
+        # 包成 Text：思考文本里的 […] 会被 Static 按 Rich markup 解析而抛 MarkupError；
+        # 去除首行换行。delta 一到就整段刷新，跟网络分块节奏走（成块感而非逐行）。
+        await self._flush_thinking()
 
     async def write_answer(self, text: str) -> None:
         """累加 Markdown 回答（可多次调用）。首个 chunk 到达前整行隐藏。"""
@@ -116,7 +116,6 @@ class AssistantHandle:
         if self._finished:
             return
         self._finished = True
-        await self._thinking_pacer.drain()
         await self._answer_pacer.drain()
 
         if self._thinking and self._thinking_start is not None:

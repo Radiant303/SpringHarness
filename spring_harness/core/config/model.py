@@ -20,24 +20,24 @@ class Setting:
         }
 
     def get_model(self, model_name: str | None = None) -> Model:
-        model_name = model_name or self.config._default_model
+        model_name = model_name or self.config.default_model
         model_config = self.config.get_model(model_name)
 
         if not model_config:
             raise ValueError(f"模型 '{model_name}' 不存在")
 
-        provider_config = self.config.get_provider(model_config._provider)
+        provider_config = self.config.get_provider(model_config.provider)
         if not provider_config:
-            raise ValueError(f"Provider '{model_config._provider}' 不存在")
+            raise ValueError(f"Provider '{model_config.provider}' 不存在")
 
-        provider_type = provider_config._type
+        provider_type = provider_config.type
         creator = self._providers.get(provider_type)
 
         if not creator:
             raise ValueError(f"不支持的 Provider 类型: {provider_type}")
 
         return creator(
-            model_name=model_config._model,
+            model_name=model_config.model,
             provider_config=provider_config,
             model_config=model_config,
         )
@@ -46,8 +46,8 @@ class Setting:
         return OpenAIChatModel(
             model_name,
             provider=OpenAIProvider(
-                base_url=provider_config._base_url,
-                api_key=provider_config._api_key,
+                base_url=provider_config.base_url,
+                api_key=provider_config.api_key,
             ),
             profile=self._profile(),
         )
@@ -56,8 +56,8 @@ class Setting:
         return OpenAIChatModel(
             model_name,
             provider=AlibabaProvider(
-                base_url=provider_config._base_url,
-                api_key=provider_config._api_key,
+                base_url=provider_config.base_url,
+                api_key=provider_config.api_key,
             ),
             profile=self._profile(native=True),
         )
@@ -66,7 +66,7 @@ class Setting:
         return OpenAIChatModel(
             model_name,
             provider=DeepSeekProvider(
-                api_key=provider_config._api_key,
+                api_key=provider_config.api_key,
             ),
             profile=self._profile(),
         )
@@ -82,11 +82,11 @@ class Setting:
 
     def list_models(self) -> list[str]:
         """列出所有可用模型"""
-        return list(self.config._models.keys())
+        return list(self.config.models.keys())
 
     def list_providers(self) -> list[str]:
         """列出所有可用 Provider"""
-        return list(self.config._providers.keys())
+        return list(self.config.providers.keys())
 
 
 # 全局实例

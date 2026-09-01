@@ -11,7 +11,7 @@ class MODEL:
 
     def resolve_model(self, model_id: str) -> Model:
         """将模型 ID解析为 Pydantic AI Model。"""
-        if model_id not in self.config._models:
+        if model_id not in self.config.models:
             raise ValueError(f"未知的 ACP 模型: {model_id}")
 
         return self.get_model(model_id)
