@@ -39,7 +39,6 @@ class MyBot(CliApp):
         self._session_deps = CodingAgentDeps.create_default(Path.cwd())
         self._agent = None
         self._executor = ThreadPoolExecutor(max_workers=1)
-        self._executor_future = self._executor.submit(create_agent, Path.cwd())
         self._model_id = config.default_model
 
         sessions = SessionStore.list_sessions(Path.cwd())
@@ -49,11 +48,21 @@ class MyBot(CliApp):
         else:
             self._store = SessionStore.create(Path.cwd())
         self._sync_session_id()
+        self._rebuild_agent()
 
     def _sync_session_id(self) -> None:
         """会话 id 取 rollout 文件名末尾的完整 uuid，显示在欢迎框。"""
         stem = self._store.path.stem
         self.session_id = f"session_{stem[-36:]}"
+
+    def _rebuild_agent(self, model_name: str | None = None) -> None:
+        """后台重建 agent：模型或会话切换后调用；session_id 决定 plan 归属。"""
+        self._agent = None
+        self._executor_future = self._executor.submit(
+            create_agent, Path.cwd(),
+            model_name=model_name or self._model_id,
+            session_id=self._store.path.stem,
+        )
 
     async def on_mount(self) -> None:
         super().on_mount()
@@ -105,6 +114,7 @@ class MyBot(CliApp):
         if name == "new":
             self._store = SessionStore.create(Path.cwd())
             self._sync_session_id()
+            self._rebuild_agent()
             self._message_history = []
             await self._rebuild_chat([])
             await self.show_system("已开始新会话")
@@ -135,6 +145,7 @@ class MyBot(CliApp):
     async def _switch_to(self, store: SessionStore) -> None:
         self._store = store
         self._sync_session_id()
+        self._rebuild_agent()
         self._message_history = store.load_messages()
         await self._rebuild_chat(self._message_history)
         await self.show_system("已切换会话")
@@ -170,8 +181,7 @@ class MyBot(CliApp):
                 return
 
         self._model_id = picked
-        self._agent = None
-        self._executor_future = self._executor.submit(create_agent, Path.cwd(), model_name=picked)
+        self._rebuild_agent(picked)
 
         model_cfg = config.get_model(picked)
         if model_cfg is None:

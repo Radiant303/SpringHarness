@@ -20,6 +20,7 @@ from spring_harness.toolsets.repo_knowledge import approval_required_knowledge_t
 def create_agent(
     root_dir: str | PathLike[str] | Path = ".",
     model_name: str | None = None,
+    session_id: str = "default",
 ) -> Agent[CodingAgentDeps, DeferredToolRequests | str]:
     """
     创建 Spring Harness Agent
@@ -40,7 +41,7 @@ def create_agent(
         capabilities=[
             hooks,
             skills(),
-            planning(),
+            planning(session_id),
             repo_context(root),
             code_mode(root),
             Shell()
