@@ -248,6 +248,8 @@ class CliApp(App[None]):
         self.model = model
         self.version = version
         self.max_context = max_context
+        # 会话短 id（如 session_f2ec8ac5），由子类在创建/切换会话后更新
+        self.session_id = ""
         self._last_tokens = 0
         self._commands = list(commands or [])
         if not any(name == "model" for name, _ in self._commands):
@@ -264,7 +266,10 @@ class CliApp(App[None]):
 
     def compose(self) -> ComposeResult:
         with ChatScroll(id="chat-scroll"):
-            yield WelcomeBox(title=self.title_text, model=self.model, version=self.version)
+            yield WelcomeBox(
+                title=self.title_text, model=self.model,
+                version=self.version, session=self.session_id,
+            )
         with Vertical(id="input-area"):
             yield CommandDropdown(self._commands, id="command-dropdown")
             yield WorkingLine(id="working-line")

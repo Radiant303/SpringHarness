@@ -6,6 +6,7 @@ from pydantic_ai.tools import DeferredToolRequests
 from pydantic_ai_harness import Shell
 
 from spring_harness.capabilities.code_mode import code_mode
+from spring_harness.capabilities.planning import planning
 from spring_harness.capabilities.repo_context import repo_context
 from spring_harness.capabilities.skills import skills
 from spring_harness.core.agent.deps import CodingAgentDeps
@@ -39,6 +40,7 @@ def create_agent(
         capabilities=[
             hooks,
             skills(),
+            planning(),
             repo_context(root),
             code_mode(root),
             Shell()

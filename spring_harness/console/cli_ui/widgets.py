@@ -48,27 +48,30 @@ class WelcomeBox(Vertical):
         title: str = "Kimi Code",
         model: str = "",
         version: str = "",
+        session: str = "",
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
         self._title = title
         self._model = model
         self._version = version
+        self._session = session
 
     def compose(self) -> ComposeResult:
         cwd = Path.cwd()
         with Vertical(classes="welcome-text"):
             yield Static(Text(f"Welcome to {self._title}!", style=f"bold {ACCENT}"))
             yield Static(Text("Send /help for help information.", style=GRAY))
-        yield Static(
-            Text.assemble(
-                ("Directory: ", GRAY), (f"{cwd}\n", "#9aa3b0"),
-                ("Session:   ", GRAY), ("session_xxx\n", "#9aa3b0"),
-                ("Model:     ", GRAY), (f"{self._model}\n", "#9aa3b0"),
-                ("Version:   ", GRAY), (self._version, "#9aa3b0"),
-            ),
-            classes="info",
-        )
+        lines: list[tuple[str, str]] = [
+            ("Directory: ", GRAY), (f"{cwd}\n", "#9aa3b0"),
+        ]
+        if self._session:
+            lines += [("Session:   ", GRAY), (f"{self._session}\n", "#9aa3b0")]
+        lines += [
+            ("Model:     ", GRAY), (f"{self._model}\n", "#9aa3b0"),
+            ("Version:   ", GRAY), (self._version, "#9aa3b0"),
+        ]
+        yield Static(Text.assemble(*lines), classes="info")
 
 
 class UserMessage(CJKStatic):
