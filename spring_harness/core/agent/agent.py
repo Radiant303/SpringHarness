@@ -47,6 +47,7 @@ def create_agent(
             code_mode(root),
             Shell()
         ],
+        retries=20
     )
 
     register_default_instructions(agent)
