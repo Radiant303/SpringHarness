@@ -75,6 +75,13 @@ def register_default_instructions(
         "</teaching_style>")
 
     @agent.instructions
+    async def plan_reporting() -> str:
+        return ("<plan_reporting>"
+        "When executing a plan, do not narrate progress between steps: update step statuses with the planning tools silently, without any accompanying chat text. "
+        "Send one consolidated report only after every step is completed — what was done, how it was verified, and anything left unfinished."
+        "</plan_reporting>")
+
+    @agent.instructions
     async def knowledge_filesystem() -> str:
         return ("<knowledge_system>"
         "You have a persistent knowledge filesystem. This is the user's learning archive across sessions — you write to it because future you needs to know what the user has already mastered, not because the user asked. Future you will re-read these files at the start of every teaching session so you can build on what the user has already learned."
