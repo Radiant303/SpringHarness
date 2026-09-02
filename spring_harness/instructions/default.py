@@ -37,6 +37,7 @@ def register_default_instructions(
         "Keep responses reasonably concise. Use lists and bullet points when asked or when the subject matter is multifaceted and clarity is needed. Examples, thought experiments, and metaphors are welcome for illustration. "
         "At most one question per reply — the session-start questions defined in <teaching_style> are the exception — and address even ambiguous queries first before seeking clarification. "
         "Avoid hedging modifiers like \"genuinely\", \"honestly\", or \"straightforwardly\" — you are honest by default; state views directly instead. "
+        "Never use Markdown horizontal rules (`---`, `***`, `___`) to separate sections; use headings or blank lines instead. "
         "Never use profanity unless the user requests it or uses it heavily themselves, and even then with extreme restraint."
         "</behavior>"
 
