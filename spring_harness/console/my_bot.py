@@ -99,15 +99,31 @@ class MyBot(CliApp):
                 deps=self._session_deps,
                 message_history=self._message_history,
             )
-        except Exception:
-            if self._session_deps.last_messages:
+        except BaseException:
+            # 运行中途异常终止（模型/工具报错、worker 被取消）时，把钩子快照里
+            if self._save_delta(self._session_deps.last_messages):
                 self._message_history = self._session_deps.last_messages
             raise
         finally:
             self._busy = False
 
-        self._store.append(result.new_messages())
+        # 带审批的轮次会跑多次 agent.run，result.new_messages() 只含最后一次 run 的
+        # 增量；相对轮前历史取差才能把整轮落全
+        self._save_delta(result.all_messages())
         self._message_history = result.all_messages()
+
+    def _save_delta(self, messages: list[ModelMessage]) -> bool:
+        """把 messages 相对已存历史的增量追加到会话文件，返回是否有增量落盘。
+
+        messages 必须以当前 _message_history 为前缀（运行结果和
+        before_model_request 钩子写入 deps.last_messages 的快照都满足）；
+        对不上说明是上一轮残留的过期快照，直接忽略，避免把会话文件写坏。
+        """
+        base = len(self._message_history)
+        if len(messages) <= base or messages[:base] != self._message_history:
+            return False
+        self._store.append(messages[base:])
+        return True
 
     async def handle_command(self, command: str) -> None:
         if self._busy:

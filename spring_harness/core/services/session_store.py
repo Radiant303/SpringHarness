@@ -33,7 +33,7 @@ class SessionStore:
         return cls(path, pending_meta=meta)
 
     def append(self, messages: list[ModelMessage]) -> None:
-        """每轮结束后调用，追加增量。append 单行天然原子，不需要 tmp+rename。"""
+        """每轮结束（含异常终止）后调用，追加增量。"""
         if self._pending_meta is not None:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             self.path.write_text(
