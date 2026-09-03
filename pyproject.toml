@@ -3,7 +3,7 @@ name = "spring-harness"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 dependencies = [
     "agent-client-protocol>=0.11,<0.12",
     "cjkwrap>=2.2",
@@ -17,6 +17,7 @@ dependencies = [
     "python-dotenv>=1.2.2",
     "rich>=15.0.0",
     "textual>=8.2.8",
+    "tqdm>=4.70.0",
     "uvicorn[standard]>=0.52.3",
     "watchdog>=6.0.0",
 ]
@@ -28,7 +29,7 @@ dev = [
 
 [tool.basedpyright]
 typeCheckingMode = "basic"
-pythonVersion = "3.12"
+pythonVersion = "3.14"
 
 [build-system]
 requires = ["hatchling"]

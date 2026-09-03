@@ -3,3 +3,5 @@
 test*
 config.toml
 logs/app.log
+codex/
+plan.db
