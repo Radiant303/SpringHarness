@@ -1,19 +1,3 @@
-"""SDT/TDT 教学能力：规范驱动教学（Spec-Driven Teaching）+ 测试驱动教学（Test-Driven Teaching）。
-
-方法论要点（目标函数与 SDD/TDD 完全反转——主角是人，不是 Agent）：
-- spec 由 Agent 经极简访谈后自写，学习者只确认边界；落库于 teaching.db，
-  并在工作区 teaching/<slug>/ 渲染人可读的 spec.yaml / record.yaml 镜像（规范即档案）。
-- 人类必做区（human zone）承载学习目标，Agent 禁止实现——纪律由动态指令注入，
-  与库中状态实时同步，不做文件层硬拦截（纯提示纪律）。
-- 提示有价：teach_record_hint 在工具层强制逐级解锁（首个提示必须是 L1，不得跳级），
-  且每次升级必须带当前级尝试证据，全部留痕。
-- D1 认证的硬规则「未使用 L3 及以上提示」在工具层强制执行。
-- 测试在 spec 版本内冻结：改测试必须先 teach_bump_version 留 changelog（审计轨迹）。
-
-仿 planning 的 SqlitePlanStore：sqlite3 同步调用 + 线程锁 + anyio.to_thread。
-store 按工作区注册（teaching_store_for），单元跨会话存活，CLI 面板经 on_change 同步。
-"""
-
 from __future__ import annotations
 
 import inspect
