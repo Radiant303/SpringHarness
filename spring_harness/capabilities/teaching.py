@@ -58,7 +58,11 @@ class Zone(BaseModel):
     kind: ZoneKind = Field(description="区域类型")
     scope: str = Field(description="范围：路径/glob 或领域描述，如 src/borrowing/*.rs")
     note: str = Field(default="", description="该区域覆盖什么工作")
-    serves: list[str] = Field(default_factory=list, description="该区域服务的 objective id 列表")
+    serves: list[str] = Field(
+        default_factory=list,
+        description='该区域服务的 objective id 列表，扁平字符串数组。'
+        '正确：["OBJ-1", "OBJ-2"]；错误：[["OBJ-1"]] 或 {"item": [...]}（不要嵌套、不要包装）',
+    )
 
 
 class HintEvent(BaseModel):
