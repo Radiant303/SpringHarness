@@ -244,6 +244,113 @@ class PlanMessage(Vertical):
         return getattr(status, "value", str(status))
 
 
+class TeachingMessage(Vertical):
+    """教学单元面板：● Teach <title> vN (m/n) 标题行 + 每个 objective 一行掌握度。
+
+    样式与 PlanMessage 同构：已达要求 ✓ 暗色删除线、已认证但未达要求 □ 青色加粗、
+    未认证 □ 暗色；行尾灰字标注掌握度 [D1/D2] 与提示用量 hints L1×2。
+    unit 鸭子类型：需有 .title/.version/.status/.objectives/.hints；
+    objective 需有 .id/.text/.mastery_required/.mastery_achieved（str 枚举）。
+    """
+
+    DEFAULT_CSS = """
+    TeachingMessage {
+        width: 1fr;
+        height: auto;
+        margin: 0 1 1 1;
+    }
+    TeachingMessage .teach-head {
+        width: 1fr;
+        height: auto;
+    }
+    TeachingMessage .teach-rows {
+        width: 1fr;
+        height: auto;
+        padding-left: 2;
+    }
+    TeachingMessage .teach-icon {
+        width: 2;
+        height: auto;
+    }
+    TeachingMessage .teach-label {
+        width: 1fr;
+        height: auto;
+    }
+    """
+
+    _ORDER: ClassVar[dict[str, int]] = {"D1": 1, "D2": 2, "D3": 3}
+
+    def __init__(self, unit: Any, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self._unit = unit
+
+    def compose(self) -> ComposeResult:
+        yield Static(self._render_head(), classes="teach-head")
+        yield Vertical(classes="teach-rows")
+
+    async def on_mount(self) -> None:
+        await self._rebuild_rows()
+
+    async def update_unit(self, unit: Any) -> None:
+        """原地刷新面板（组件未挂载时静默丢弃，下次事件会重建）。"""
+        self._unit = unit
+        if self.is_attached:
+            self.query_one(".teach-head", Static).update(self._render_head())
+            await self._rebuild_rows()
+
+    async def _rebuild_rows(self) -> None:
+        rows = self.query_one(".teach-rows")
+        await rows.remove_children()
+        await rows.mount_all(self._render_row(o) for o in self._unit.objectives)
+
+    def _render_head(self) -> Text:
+        objectives = self._unit.objectives
+        done = sum(1 for o in objectives if self._met(o))
+        text = Text()
+        text.append("● ", style=ACCENT)
+        text.append("Teach ", style="bold")
+        text.append(f"{self._unit.title} ", style="bold")
+        text.append(f"v{self._unit.version} · {done}/{len(objectives)}", style=GRAY)
+        status = getattr(self._unit.status, "value", str(self._unit.status))
+        if status == "closed":
+            text.append(" · closed", style=GRAY)
+        return text
+
+    def _render_row(self, objective: Any) -> HorizontalGroup:
+        met = self._met(objective)
+        achieved = self._level(objective.mastery_achieved)
+        if met:
+            icon, style = "✓", "dim strike"
+        elif achieved is not None:
+            icon, style = "□", "bold cyan"
+        else:
+            icon, style = "□", "dim"
+        label = Text()
+        label.append(f"{objective.id} {objective.text}", style=style)
+        tail = f"  [{achieved or '-'}/{self._level(objective.mastery_required)}]"
+        used = [h.level for h in self._unit.hints if h.objective_id == objective.id]
+        if used:
+            tail += " · hints " + " ".join(f"L{level}×{used.count(level)}" for level in sorted(set(used)))
+        label.append(tail, style=GRAY)
+        return HorizontalGroup(
+            Static(Text(f"{icon} ", style=style), classes="teach-icon"),
+            CJKStatic(label, classes="teach-label"),
+        )
+
+    def _met(self, objective: Any) -> bool:
+        achieved = self._level(objective.mastery_achieved)
+        required = self._level(objective.mastery_required)
+        if achieved is None or required is None:
+            return False
+        return self._ORDER[achieved] >= self._ORDER[required]
+
+    @staticmethod
+    def _level(mastery: Any) -> str | None:
+        if mastery is None:
+            return None
+        return getattr(mastery, "value", str(mastery))
+
+
 class ToolCallMessage(Vertical):
     """工具调用消息：一行图标 + ToolName(参数摘要)，结果灰字缩进、超长截断。
 

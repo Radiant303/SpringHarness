@@ -9,6 +9,7 @@ from spring_harness.capabilities.code_mode import code_mode
 from spring_harness.capabilities.planning import OnPlanChange, planning
 from spring_harness.capabilities.repo_context import repo_context
 from spring_harness.capabilities.skills import skills
+from spring_harness.capabilities.teaching import OnTeachingChange, teaching_store_for, teaching_toolset
 from spring_harness.core.agent.deps import CodingAgentDeps
 from spring_harness.core.config.model import get_model
 from spring_harness.core.hooks.model import hooks
@@ -22,6 +23,7 @@ def create_agent(
     model_name: str | None = None,
     session_id: str = "default",
     plan_on_change: OnPlanChange | None = None,
+    teach_on_change: OnTeachingChange | None = None,
 ) -> Agent[CodingAgentDeps, DeferredToolRequests | str]:
     """
     创建 Spring Harness Agent
@@ -32,7 +34,8 @@ def create_agent(
         model=get_model(model_name),
         toolsets=[
             filesystem(str(root)),
-            approval_required_knowledge_toolsets
+            approval_required_knowledge_toolsets,
+            teaching_toolset(teaching_store_for(root, on_change=teach_on_change)),
         ],
         output_type=[
             str,

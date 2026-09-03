@@ -35,6 +35,7 @@ from .widgets import (
     PlanMessage,
     StatusBar,
     SystemMessage,
+    TeachingMessage,
     ToolCallMessage,
     UserMessage,
     WelcomeBox,
@@ -258,6 +259,7 @@ class CliApp(App[None]):
         self._message_counter = 0
         self._active_handles: list[AssistantHandle] = []
         self._plan_widget: PlanMessage | None = None
+        self._teach_widget: TeachingMessage | None = None
         if theme is not None:
             self.register_theme(theme)
             self.theme = theme.name
@@ -343,6 +345,21 @@ class CliApp(App[None]):
     async def show_system(self, text: str) -> None:
         """显示一行灰色系统提示（错误 / 通知）。"""
         await self._scroll.mount(SystemMessage(text))
+        self._scroll.anchor()
+
+    async def show_teaching(self, unit) -> None:
+        """显示教学单元面板。语义同 show_plan：组件还在队尾就原地更新，
+        否则在末尾挂一份最新快照。unit 见 TeachingMessage。
+        """
+        if unit is None:
+            return
+        widget = self._teach_widget
+        children = self._scroll.children
+        if widget is not None and widget.is_attached and children and children[-1] is widget:
+            await widget.update_unit(unit)
+        else:
+            self._teach_widget = TeachingMessage(unit)
+            await self._scroll.mount(self._teach_widget)
         self._scroll.anchor()
 
     def set_working(self, state: str | None) -> None:

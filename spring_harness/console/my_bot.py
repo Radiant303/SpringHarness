@@ -16,6 +16,7 @@ from pydantic_ai import (
 )
 
 from spring_harness.capabilities.planning import load_plan_items
+from spring_harness.capabilities.teaching import teaching_store_for
 from spring_harness.console.approval import run_with_approval
 from spring_harness.console.cli_sink import CliSink
 from spring_harness.console.cli_ui import ModelSelectModal
@@ -38,6 +39,8 @@ class MyBot(CliApp):
         self._busy = False
         self._message_history: list[ModelMessage] = []
         self._session_deps = CodingAgentDeps.create_default(Path.cwd())
+        # 预建教学 store（主线程），避免与 executor 里的 create_agent 竞态创建
+        teaching_store_for(Path.cwd())
         self._agent = None
         self._executor = ThreadPoolExecutor(max_workers=1)
         self._model_id = config.default_model
@@ -64,11 +67,16 @@ class MyBot(CliApp):
             model_name=model_name or self._model_id,
             session_id=self._store.path.stem,
             plan_on_change=self._on_plan_change,
+            teach_on_change=self._on_teach_change,
         )
 
     async def _on_plan_change(self, items: list) -> None:
         """计划变更回调：在 agent 运行的事件循环里被 store 包装层 await。"""
         await self.show_plan(items)
+
+    async def _on_teach_change(self, unit) -> None:
+        """教学单元变更回调：与计划同路，在 agent 运行的事件循环里被 await。"""
+        await self.show_teaching(unit)
 
     async def on_mount(self) -> None:
         super().on_mount()
@@ -216,6 +224,7 @@ class MyBot(CliApp):
     async def _rebuild_chat(self, messages: list[ModelMessage]) -> None:
         await self._scroll.remove_children()
         self._plan_widget = None  # remove_children 已把旧 PlanMessage 摘掉
+        self._teach_widget = None  # 同理，旧 TeachingMessage 一并摘掉
         await self._scroll.mount(
             WelcomeBox(
                 title=self.title_text, model=self.model,
@@ -256,5 +265,10 @@ class MyBot(CliApp):
         items = await load_plan_items(self._store.path.stem)
         if items:
             await self.show_plan(items)
+
+        # 工作区里活跃的教学单元（跨会话存活）同样重建到末尾
+        unit = await teaching_store_for(Path.cwd()).get_active()
+        if unit:
+            await self.show_teaching(unit)
 
         self._scroll.anchor()

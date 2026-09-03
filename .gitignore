@@ -5,3 +5,5 @@ config.toml
 logs/app.log
 codex/
 plan.db
+teaching.db
+teaching/

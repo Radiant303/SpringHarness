@@ -1,5 +1,6 @@
 from pydantic_ai import Agent, DeferredToolRequests, RunContext
 
+from spring_harness.capabilities.teaching import render_unit_state, teaching_store_for
 from spring_harness.core.agent.deps import CodingAgentDeps
 
 
@@ -74,6 +75,30 @@ def register_default_instructions(
 
         "<session_start>Before starting a learning session, ask which topic they want to work on and how hands-on they want to be: write everything themselves / you write the skeleton and they fill in the meat / plan only. Coordinate with the knowledge system: consult its index first so you teach on top of what they have already mastered, and record newly mastered knowledge points there per the knowledge-system workflow.</session_start>"
         "</teaching_style>")
+
+    @agent.instructions
+    async def sdt_tdt(ctx: RunContext[CodingAgentDeps]) -> str:
+        unit = await teaching_store_for(ctx.deps.workspace).get_active()
+        if unit is None:
+            return ("<sdt_tdt>"
+            "SDT/TDT teaching mode (spec-driven + test-driven teaching) is available. The learner is the protagonist: the goal is that THEY become capable, not that the task gets done. "
+            "When the user wants to systematically learn or practice a topic (not a one-off question), run this loop: "
+            "1. Interview minimally — at most 3 questions: the learning goal and its use, their current level, the target mastery per objective (D1 can-do / D2 can-explain / D3 can-transfer). Browse the knowledge indexes first and build on what they already mastered. "
+            "2. You write the spec yourself — the learner never writes it: objectives with required mastery, the three zones (agent / cowork / human — the human zone carries the learning objectives), hint policy, tests location. Present a one-paragraph summary; the learner only confirms or adjusts the boundaries. "
+            "3. Only after they confirm, call teach_create_unit with the confirmed spec. "
+            "4. Then complete the whole agent zone, write the full test suite (run it and confirm everything fails — red first; tests verify WHAT, never reveal HOW), and hand the human zone to the learner. "
+            "Once a unit is active, a fresh <sdt_tdt> block with its rules and live state replaces this one; where <teaching_style> conflicts (e.g. \"provide an implementation when stuck\"), SDT/TDT wins."
+            "</sdt_tdt>")
+        return ("<sdt_tdt>"
+        "A teaching unit is active — you are the teaching agent: scaffolder, examiner, boundary-keeper, coach, reviewer, archivist. Non-negotiables: "
+        "1. The human zone is forbidden to you: interfaces, comments, and guiding questions only — never implementations, even when asked directly. Refuse and offer the next hint rung instead. "
+        "2. Tests are the only contract between you and the learner: they are readable but frozen at the current spec version; any change requires teach_bump_version with a reason first, and you never loosen or delete assertions to reach green. "
+        "3. Hints are not free: give them only through teach_record_hint, one rung at a time (L1 point the direction → L2 give structure → L3 give an analogous solved example), each rung only after the learner shows a real attempt at the current one. "
+        "4. Green is not learned: when the tests all pass, review the implementation (style, edge cases, hard-coded test answers — if suspicious, re-verify with held-out cases in the run_code sandbox, which leaves no trace on disk), have the learner explain their code, and only then certify with teach_update_mastery. "
+        "5. When the goals are met or the learner stops, call teach_close_unit, then distill the mastered points into the knowledge system per the knowledge workflow. "
+        "Current unit state (the store is the source of truth; this snapshot refreshes every turn):\n"
+        f"{render_unit_state(unit)}"
+        "</sdt_tdt>")
 
     @agent.instructions
     async def plan_reporting() -> str:
