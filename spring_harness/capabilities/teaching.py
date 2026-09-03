@@ -8,7 +8,7 @@
 - 提示有价：teach_record_hint 在工具层强制逐级解锁（首个提示必须是 L1，不得跳级），
   且每次升级必须带当前级尝试证据，全部留痕。
 - D1 认证的硬规则「未使用 L3 及以上提示」在工具层强制执行。
-- 测试在 spec 版本内冻结：改测试必须先 teach_bump_version 留changelog（审计轨迹）。
+- 测试在 spec 版本内冻结：改测试必须先 teach_bump_version 留 changelog（审计轨迹）。
 
 仿 planning 的 SqlitePlanStore：sqlite3 同步调用 + 线程锁 + anyio.to_thread。
 store 按工作区注册（teaching_store_for），单元跨会话存活，CLI 面板经 on_change 同步。
@@ -17,7 +17,6 @@ store 按工作区注册（teaching_store_for），单元跨会话存活，CLI �
 from __future__ import annotations
 
 import inspect
-import re
 import sqlite3
 import threading
 from collections.abc import Awaitable, Callable
@@ -43,6 +42,7 @@ class Mastery(str, Enum):
     D3 = "D3"
 
 
+# 给等级配数字，方便比大小（"只升不降"规则要用）
 _MASTERY_ORDER = {Mastery.D1: 1, Mastery.D2: 2, Mastery.D3: 3}
 
 
@@ -86,10 +86,15 @@ class HintEvent(BaseModel):
     at: datetime = Field(default_factory=datetime.now)
 
 
+def _new_id() -> str:
+    """生成单元的随机 id（8 位十六进制）。"""
+    return uuid4().hex[:8]
+
+
 class TeachingUnit(BaseModel):
     """一个教学单元：spec 的结构化形态，跨会话存活。"""
 
-    id: str = Field(default_factory=lambda: uuid4().hex[:8])
+    id: str = Field(default_factory=_new_id)
     slug: str = Field(description="文件系统安全标识，如 rust-ownership")
     title: str
     status: UnitStatus = UnitStatus.active
@@ -104,13 +109,78 @@ class TeachingUnit(BaseModel):
     updated_at: datetime = Field(default_factory=datetime.now)
 
 
+# 单元变更回调的形状：吃一个 TeachingUnit、返回 None 或可等待的 None 的函数
 OnTeachingChange = Callable[[TeachingUnit], "None | Awaitable[None]"]
-
-_SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,49}$")
 
 
 def _now() -> datetime:
     return datetime.now()
+
+
+def _is_slug_char(ch: str, allow_dash: bool) -> bool:
+    """判断单个字符是不是 slug 的合法字符（小写字母/数字，可选连字符）。"""
+    if "a" <= ch and ch <= "z":
+        return True
+    if "0" <= ch and ch <= "9":
+        return True
+    if allow_dash and ch == "-":
+        return True
+    return False
+
+
+def _is_valid_slug(slug: str) -> bool:
+    """slug 规则：小写字母或数字开头，其余是小写字母/数字/连字符，总长 1-50。"""
+    if len(slug) == 0 or len(slug) > 50:
+        return False
+    if not _is_slug_char(slug[0], allow_dash=False):
+        return False
+    for ch in slug[1:]:
+        if not _is_slug_char(ch, allow_dash=True):
+            return False
+    return True
+
+
+def _mastery_value(mastery: Mastery | None) -> str | None:
+    """枚举取字符串值，None 原样返回。"""
+    if mastery is None:
+        return None
+    return mastery.value
+
+
+def _yaml_dump(obj: dict) -> str:
+    """字典转 YAML 文本。传入的数据只含 JSON 安全的值（枚举已取 .value、时间已 isoformat）。
+
+    allow_unicode=True：中文不转义；sort_keys=False：保持我们写字段的顺序。
+    """
+    return yaml.safe_dump(obj, allow_unicode=True, sort_keys=False)
+
+
+def _find_objective(unit: TeachingUnit, objective_id: str) -> Objective | None:
+    """按 id 找目标，找不到返回 None。"""
+    for o in unit.objectives:
+        if o.id == objective_id:
+            return o
+    return None
+
+
+def _used_hint_levels(unit: TeachingUnit, objective_id: str) -> list[int]:
+    """某目标已使用过的提示级别列表，如 [1, 1, 2]。"""
+    levels = []
+    for h in unit.hints:
+        if h.objective_id == objective_id:
+            levels.append(h.level)
+    return levels
+
+
+def _format_hint_levels(levels: list[int]) -> str:
+    """把 [1, 1, 2] 格式化成 "L1×2, L2×1"。"""
+    counts = {}
+    for level in levels:
+        counts[level] = counts.get(level, 0) + 1
+    parts = []
+    for level in sorted(counts):
+        parts.append(f"L{level}×{counts[level]}")
+    return ", ".join(parts)
 
 
 class TeachingStore:
@@ -160,7 +230,7 @@ class TeachingStore:
                 connection.close()
         self._write_mirrors(unit)
 
-    def _row_to_unit(self, row: tuple[object, ...]) -> TeachingUnit:
+    def _row_to_unit(self, row: tuple) -> TeachingUnit:
         return TeachingUnit.model_validate_json(str(row[0]))
 
     def _get_active_sync(self) -> TeachingUnit | None:
@@ -173,7 +243,9 @@ class TeachingStore:
                 ).fetchone()
             finally:
                 connection.close()
-        return None if row is None else self._row_to_unit(row)
+        if row is None:
+            return None
+        return self._row_to_unit(row)
 
     def _get_unit_sync(self, unit_id: str) -> TeachingUnit | None:
         with self._lock:
@@ -184,7 +256,9 @@ class TeachingStore:
                 ).fetchone()
             finally:
                 connection.close()
-        return None if row is None else self._row_to_unit(row)
+        if row is None:
+            return None
+        return self._row_to_unit(row)
 
     def _list_units_sync(self) -> list[TeachingUnit]:
         with self._lock:
@@ -195,7 +269,10 @@ class TeachingStore:
                 ).fetchall()
             finally:
                 connection.close()
-        return [self._row_to_unit(row) for row in rows]
+        units = []
+        for row in rows:
+            units.append(self._row_to_unit(row))
+        return units
 
     # ---- 镜像：teaching/<slug>/spec.yaml + record.yaml ----
 
@@ -203,46 +280,67 @@ class TeachingStore:
         unit_dir = self._workspace / TEACHING_DIR / unit.slug
         unit_dir.mkdir(parents=True, exist_ok=True)
 
-        def dump(obj: dict) -> str:
-            # spec/record 里只含 JSON 安全的值（枚举已取 .value、时间已 isoformat）
-            return yaml.safe_dump(obj, allow_unicode=True, sort_keys=False)
+        objectives = []
+        for o in unit.objectives:
+            objectives.append({
+                "id": o.id,
+                "text": o.text,
+                "mastery_required": o.mastery_required.value,
+                "mastery_achieved": _mastery_value(o.mastery_achieved),
+            })
+
+        # 一锅 zones 按 kind 分成三组（kind 本身已体现在分组名里，导出时扔掉）
+        agent_zone = []
+        cowork_zone = []
+        human_zone = []
+        for z in unit.zones:
+            z_data = z.model_dump(mode="json", exclude={"kind"})
+            if z.kind is ZoneKind.agent:
+                agent_zone.append(z_data)
+            elif z.kind is ZoneKind.cowork:
+                cowork_zone.append(z_data)
+            else:
+                human_zone.append(z_data)
+
         spec = {
             "spec": {
                 "title": unit.title,
                 "version": unit.version,
                 "status": unit.status.value,
-                "objectives": [
-                    {
-                        "id": o.id,
-                        "text": o.text,
-                        "mastery_required": o.mastery_required.value,
-                        "mastery_achieved": None if o.mastery_achieved is None else o.mastery_achieved.value,
-                    }
-                    for o in unit.objectives
-                ],
+                "objectives": objectives,
                 "zones": {
-                    "agent_zone": [z.model_dump(mode="json", exclude={"kind"}) for z in unit.zones if z.kind is ZoneKind.agent],
-                    "cowork_zone": [z.model_dump(mode="json", exclude={"kind"}) for z in unit.zones if z.kind is ZoneKind.cowork],
-                    "human_zone": [z.model_dump(mode="json", exclude={"kind"}) for z in unit.zones if z.kind is ZoneKind.human],
+                    "agent_zone": agent_zone,
+                    "cowork_zone": cowork_zone,
+                    "human_zone": human_zone,
                 },
                 "hint_policy": {"max_level": unit.hint_max_level, "escalation_rule": "逐级解锁，每级升级前须展示当前级尝试"},
                 "tests": {"location": unit.tests_root, "authority": "测试集为唯一验收契约；版本内冻结，改动须先升 spec 版本"},
                 "changelog": unit.changelog,
             }
         }
+
+        hints = []
+        for h in unit.hints:
+            hints.append(h.model_dump(mode="json"))
+
+        mastery = {}
+        for o in unit.objectives:
+            mastery[o.id] = _mastery_value(o.mastery_achieved)
+
         record = {
             "learning_record": {
                 "unit": unit.slug,
-                "hints": [h.model_dump(mode="json") for h in unit.hints],
-                "mastery": {o.id: (None if o.mastery_achieved is None else o.mastery_achieved.value) for o in unit.objectives},
+                "hints": hints,
+                "mastery": mastery,
                 "created_at": unit.created_at.isoformat(),
                 "updated_at": unit.updated_at.isoformat(),
             }
         }
-        (unit_dir / "spec.yaml").write_text(dump(spec), encoding="utf-8")
-        (unit_dir / "record.yaml").write_text(dump(record), encoding="utf-8")
 
-    # ---- 异步公开 API ----
+        (unit_dir / "spec.yaml").write_text(_yaml_dump(spec), encoding="utf-8")
+        (unit_dir / "record.yaml").write_text(_yaml_dump(record), encoding="utf-8")
+
+    # ---- 异步公开 API（同步函数扔到后台线程跑，避免卡住事件循环）----
 
     async def save_unit(self, unit: TeachingUnit) -> TeachingUnit:
         """新建或更新单元（upsert），随后重写镜像并触发 on_change。"""
@@ -290,37 +388,51 @@ def teaching_store_for(workspace: Path | str, on_change: OnTeachingChange | None
 
 def render_unit_state(unit: TeachingUnit) -> str:
     """把单元状态渲染成紧凑文本（动态指令与 teach_state 共用）。"""
-    lines = [f'Unit: {unit.title} (id={unit.id}, slug={unit.slug}, v{unit.version}, {unit.status.value})']
+    lines = [f"Unit: {unit.title} (id={unit.id}, slug={unit.slug}, v{unit.version}, {unit.status.value})"]
+
     lines.append("Objectives:")
     for o in unit.objectives:
-        achieved = o.mastery_achieved.value if o.mastery_achieved else "-"
-        used = [h.level for h in unit.hints if h.objective_id == o.id]
-        hint_text = f", hints used: {_format_hint_levels(used)}" if used else ", no hints used"
+        if o.mastery_achieved is None:
+            achieved = "-"
+        else:
+            achieved = o.mastery_achieved.value
+        used = _used_hint_levels(unit, o.id)
+        if used:
+            hint_text = ", hints used: " + _format_hint_levels(used)
+        else:
+            hint_text = ", no hints used"
         lines.append(f"  - {o.id} [required {o.mastery_required.value}, achieved {achieved}{hint_text}] {o.text}")
+
     lines.append("Zones:")
     for z in unit.zones:
-        serves = f" (serves {', '.join(z.serves)})" if z.serves else ""
-        note = f" — {z.note}" if z.note else ""
-        lines.append(f"  - [{z.kind.value}] {z.scope}{serves}{note}")
+        line = f"  - [{z.kind.value}] {z.scope}"
+        if z.serves:
+            line += " (serves " + ", ".join(z.serves) + ")"
+        if z.note:
+            line += " — " + z.note
+        lines.append(line)
+
     if unit.tests_root:
         lines.append(f"Tests: {unit.tests_root} (frozen at v{unit.version}; changes require teach_bump_version first)")
     if unit.changelog:
-        lines.append(f"Changelog: {'; '.join(unit.changelog)}")
+        lines.append("Changelog: " + "; ".join(unit.changelog))
     return "\n".join(lines)
-
-
-def _format_hint_levels(levels: list[int]) -> str:
-    return ", ".join(f"L{level}×{levels.count(level)}" for level in sorted(set(levels)))
 
 
 def render_closed_summary(units: list[TeachingUnit]) -> str:
     """最近关闭单元的一行式列表（teach_state 在无活跃单元时展示）。"""
-    closed = [u for u in units if u.status is UnitStatus.closed]
+    closed = []
+    for u in units:
+        if u.status is UnitStatus.closed:
+            closed.append(u)
     if not closed:
         return ""
     lines = ["Recently closed units:"]
     for u in closed[-5:]:
-        done = sum(1 for o in u.objectives if o.mastery_achieved is not None)
+        done = 0
+        for o in u.objectives:
+            if o.mastery_achieved is not None:
+                done += 1
         lines.append(f"  - {u.title} (slug={u.slug}, v{u.version}): {done}/{len(u.objectives)} objectives mastered")
     return "\n".join(lines)
 
@@ -330,7 +442,9 @@ def render_closed_summary(units: list[TeachingUnit]) -> str:
 def teaching_toolset(store: TeachingStore) -> FunctionToolset:
     """SDT/TDT 教学工具集：spec 生命周期 + 提示台账 + 掌握度认证。
 
-    校验失败返回错误字符串（仿 planning 工具风格），由模型自行修正后重试。
+    里面的 6 个函数都是闭包：它们抓住了这里的 store 参数，
+    所以 Agent 调用工具时不用（也不应）知道 store 的存在。
+    校验失败返回中文错误串（仿 planning 工具风格），由模型自行修正后重试。
     """
 
     async def teach_create_unit(
@@ -353,23 +467,37 @@ def teaching_toolset(store: TeachingStore) -> FunctionToolset:
         """
         if await store.get_active() is not None:
             return "创建失败：已有一个活跃单元。先 teach_close_unit 关闭它，或继续当前单元。"
-        if not _SLUG_RE.fullmatch(slug):
+        if not _is_valid_slug(slug):
             return f"创建失败：slug {slug!r} 不合法（小写字母开头，仅小写字母/数字/单连字符，≤50 字符）。"
-        if not 1 <= hint_max_level <= 3:
+        if hint_max_level < 1 or hint_max_level > 3:
             return "创建失败：hint_max_level 必须在 1-3 之间。"
-        ids = [o.id for o in objectives]
-        duplicates = sorted({i for i in ids if ids.count(i) > 1})
-        if duplicates:
-            return f"创建失败：objective id 重复：{', '.join(duplicates)}。"
         if not objectives:
             return "创建失败：至少需要一个学习目标。"
-        if not any(z.kind is ZoneKind.human for z in zones):
-            return "创建失败：zones 中必须至少有一个 human 区（承载学习目标的区域）。"
-        known = set(ids)
+
+        seen_ids = []
+        duplicate_ids = []
+        for o in objectives:
+            if o.id in seen_ids and o.id not in duplicate_ids:
+                duplicate_ids.append(o.id)
+            seen_ids.append(o.id)
+        if duplicate_ids:
+            return "创建失败：objective id 重复：" + ", ".join(duplicate_ids) + "。"
+
+        has_human_zone = False
         for z in zones:
-            unknown = [s for s in z.serves if s not in known]
+            if z.kind is ZoneKind.human:
+                has_human_zone = True
+        if not has_human_zone:
+            return "创建失败：zones 中必须至少有一个 human 区（承载学习目标的区域）。"
+
+        for z in zones:
+            unknown = []
+            for s in z.serves:
+                if s not in seen_ids and s not in unknown:
+                    unknown.append(s)
             if unknown:
-                return f"创建失败：{z.kind.value} 区 {z.scope!r} 的 serves 引用了不存在的 objective：{', '.join(unknown)}。"
+                return f"创建失败：{z.kind.value} 区 {z.scope!r} 的 serves 引用了不存在的 objective：" + ", ".join(unknown) + "。"
+
         unit = TeachingUnit(
             slug=slug, title=title, objectives=objectives, zones=zones,
             tests_root=tests_root, hint_max_level=hint_max_level,
@@ -386,7 +514,10 @@ def teaching_toolset(store: TeachingStore) -> FunctionToolset:
         unit = await store.get_active()
         if unit is None:
             summary = render_closed_summary(await store.list_units())
-            return "当前没有活跃的教学单元。" + (f"\n\n{summary}" if summary else "")
+            text = "当前没有活跃的教学单元。"
+            if summary:
+                text += "\n\n" + summary
+            return text
         return render_unit_state(unit)
 
     async def teach_record_hint(objective_id: str, level: int, attempt: str) -> str:
@@ -401,30 +532,41 @@ def teaching_toolset(store: TeachingStore) -> FunctionToolset:
         unit = await store.get_active()
         if unit is None:
             return "记录失败：当前没有活跃单元。"
-        objective = next((o for o in unit.objectives if o.id == objective_id), None)
+        objective = _find_objective(unit, objective_id)
         if objective is None:
-            return f"记录失败：objective {objective_id!r} 不存在（现有：{', '.join(o.id for o in unit.objectives)}）。"
+            ids = []
+            for o in unit.objectives:
+                ids.append(o.id)
+            return f"记录失败：objective {objective_id!r} 不存在（现有：" + ", ".join(ids) + "）。"
         if not attempt.strip():
             return "记录失败：attempt 为空。提示有价——升级前学习者必须展示当前级的真实尝试。"
-        if not 1 <= level <= unit.hint_max_level:
+        if level < 1 or level > unit.hint_max_level:
             return f"记录失败：level 须在 1-{unit.hint_max_level} 之间（本单元最高 L{unit.hint_max_level}）。"
-        used = [h.level for h in unit.hints if h.objective_id == objective_id]
-        highest = max(used, default=0)
+
+        used = _used_hint_levels(unit, objective_id)
+        highest = 0
+        for lv in used:
+            if lv > highest:
+                highest = lv
         if level > highest + 1:
             return (
                 f"记录失败：禁止跳级。{objective_id} 目前最高用到 L{highest}，"
                 f"下一级只能是 L{highest + 1}。请先用 L{highest + 1} 级别的提示。"
             )
+
         unit.hints.append(HintEvent(objective_id=objective_id, level=level, attempt=attempt.strip()))
         await store.save_unit(unit)
-        allowance = {
-            1: "L1 指方向：相关概念、文档章节、应思考的问题——不含任何代码。",
-            2: "L2 给结构：伪代码或步骤分解——不含可运行实现。",
-            3: "L3 给对照：同类但不同的已解决示例，要求学习者迁移。",
-        }[level]
+
+        if level == 1:
+            allowance = "L1 指方向：相关概念、文档章节、应思考的问题——不含任何代码。"
+        elif level == 2:
+            allowance = "L2 给结构：伪代码或步骤分解——不含可运行实现。"
+        else:
+            allowance = "L3 给对照：同类但不同的已解决示例，要求学习者迁移。"
+        all_used = used + [level]
         return (
-            f"已记录：{objective_id} 升到 L{level}（该目标累计提示 {_format_hint_levels([*used, level])}）。\n"
-            f"本级别允许的帮助：{allowance}"
+            f"已记录：{objective_id} 升到 L{level}（该目标累计提示 {_format_hint_levels(all_used)}）。\n"
+            "本级别允许的帮助：" + allowance
         )
 
     async def teach_update_mastery(objective_id: str, achieved: Mastery, evidence: str) -> str:
@@ -439,19 +581,30 @@ def teaching_toolset(store: TeachingStore) -> FunctionToolset:
         unit = await store.get_active()
         if unit is None:
             return "认证失败：当前没有活跃单元。"
-        objective = next((o for o in unit.objectives if o.id == objective_id), None)
+        objective = _find_objective(unit, objective_id)
         if objective is None:
-            return f"认证失败：objective {objective_id!r} 不存在（现有：{', '.join(o.id for o in unit.objectives)}）。"
+            ids = []
+            for o in unit.objectives:
+                ids.append(o.id)
+            return f"认证失败：objective {objective_id!r} 不存在（现有：" + ", ".join(ids) + "）。"
         if not evidence.strip():
             return "认证失败：evidence 为空。记录认证依据（测试结果、讲解要点或变体任务表现）。"
-        if objective.mastery_achieved is not None and _MASTERY_ORDER[achieved] < _MASTERY_ORDER[objective.mastery_achieved]:
-            return f"认证失败：{objective_id} 已达成 {objective.mastery_achieved.value}，等级只升不降。"
-        used = [h.level for h in unit.hints if h.objective_id == objective_id]
-        if achieved is Mastery.D1 and any(level >= 3 for level in used):
+
+        if objective.mastery_achieved is not None:
+            if _MASTERY_ORDER[achieved] < _MASTERY_ORDER[objective.mastery_achieved]:
+                return f"认证失败：{objective_id} 已达成 {objective.mastery_achieved.value}，等级只升不降。"
+
+        used = _used_hint_levels(unit, objective_id)
+        used_l3 = False
+        for lv in used:
+            if lv >= 3:
+                used_l3 = True
+        if achieved is Mastery.D1 and used_l3:
             return (
                 f"认证失败：{objective_id} 使用过 L3 提示，按规范不得认证 D1"
                 "（D1 = 测试全绿且未使用 L3 及以上提示）。可在讲解后认证 D2。"
             )
+
         objective.mastery_achieved = achieved
         await store.save_unit(unit)
         return f"已认证：{objective_id} 达成 {achieved.value}（要求 {objective.mastery_required.value}）。依据：{evidence.strip()}"
@@ -467,9 +620,11 @@ def teaching_toolset(store: TeachingStore) -> FunctionToolset:
             return "升版失败：当前没有活跃单元。"
         if not reason.strip():
             return "升版失败：reason 为空。记录变更理由（审计轨迹的一部分）。"
+
         old = unit.version
         unit.version += 1
-        unit.changelog.append(f"v{old}→v{unit.version} ({_now().isoformat(timespec='seconds')}): {reason.strip()}")
+        now_text = _now().isoformat(timespec="seconds")
+        unit.changelog.append(f"v{old}→v{unit.version} ({now_text}): {reason.strip()}")
         await store.save_unit(unit)
         return f"spec 已升到 v{unit.version}。现在可以修改测试或调整边界；旧版断言已归档于 changelog。"
 
@@ -485,11 +640,16 @@ def teaching_toolset(store: TeachingStore) -> FunctionToolset:
             return "关闭失败：当前没有活跃单元。"
         if not summary.strip():
             return "关闭失败：summary 为空。写清掌握了什么、遗留什么。"
+
         unit.status = UnitStatus.closed
         await store.save_unit(unit)
-        mastered = [o.id for o in unit.objectives if o.mastery_achieved is not None]
+
+        mastered_count = 0
+        for o in unit.objectives:
+            if o.mastery_achieved is not None:
+                mastered_count += 1
         return (
-            f"单元已关闭：{unit.title}（v{unit.version}，掌握 {len(mastered)}/{len(unit.objectives)}）。\n"
+            f"单元已关闭：{unit.title}（v{unit.version}，掌握 {mastered_count}/{len(unit.objectives)}）。\n"
             f"档案：teaching/{unit.slug}/（spec.yaml + record.yaml）。\n"
             "收尾职责：把已掌握的知识点蒸馏进知识系统（read_index_knowledge → read_knowledge → edit_knowledge），"
             "并向学习者总结本单元与下一步建议。"

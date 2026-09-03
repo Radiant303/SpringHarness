@@ -301,11 +301,17 @@ class TeachingMessage(Vertical):
     async def _rebuild_rows(self) -> None:
         rows = self.query_one(".teach-rows")
         await rows.remove_children()
-        await rows.mount_all(self._render_row(o) for o in self._unit.objectives)
+        row_widgets = []
+        for o in self._unit.objectives:
+            row_widgets.append(self._render_row(o))
+        await rows.mount_all(row_widgets)
 
     def _render_head(self) -> Text:
         objectives = self._unit.objectives
-        done = sum(1 for o in objectives if self._met(o))
+        done = 0
+        for o in objectives:
+            if self._met(o):
+                done += 1
         text = Text()
         text.append("● ", style=ACCENT)
         text.append("Teach ", style="bold")
@@ -327,10 +333,23 @@ class TeachingMessage(Vertical):
             icon, style = "□", "dim"
         label = Text()
         label.append(f"{objective.id} {objective.text}", style=style)
-        tail = f"  [{achieved or '-'}/{self._level(objective.mastery_required)}]"
-        used = [h.level for h in self._unit.hints if h.objective_id == objective.id]
+        if achieved is None:
+            achieved_text = "-"
+        else:
+            achieved_text = achieved
+        tail = f"  [{achieved_text}/{self._level(objective.mastery_required)}]"
+        used = []
+        for h in self._unit.hints:
+            if h.objective_id == objective.id:
+                used.append(h.level)
         if used:
-            tail += " · hints " + " ".join(f"L{level}×{used.count(level)}" for level in sorted(set(used)))
+            counts = {}
+            for level in used:
+                counts[level] = counts.get(level, 0) + 1
+            parts = []
+            for level in sorted(counts):
+                parts.append(f"L{level}×{counts[level]}")
+            tail += " · hints " + " ".join(parts)
         label.append(tail, style=GRAY)
         return HorizontalGroup(
             Static(Text(f"{icon} ", style=style), classes="teach-icon"),
