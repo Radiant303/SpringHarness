@@ -132,7 +132,11 @@ class KnowledgeStore:
         }[type]
 
     def read_index_knowledge(self, type: KnowledgeType) -> str:
-        """读取指定类型的知识索引内容。这里返回拿到的只是对于知识类型的索引内容，如果想拿到具体内容请使用read_knowledge工具。
+        """读取指定类型知识文件的索引（目录）和当前哈希值。
+
+        返回第一行内容为 `文件名 哈希值: <hash>`，这个哈希值就是
+        edit_knowledge 必填参数 expected_hash 的来源。索引中每个标题都
+        带行号，可用于定位后再用 read_knowledge 读取具体内容。
 
         Args:
             type: 知识类型
@@ -153,7 +157,11 @@ class KnowledgeStore:
 
     @_recoverable
     def read_knowledge(self, type: KnowledgeType, *, offset: int = 1, limit: int | None = None) -> str:
-        """读取指定类型的知识内容。
+        """按行号范围读取指定类型的知识内容，并返回当前文件的哈希值。
+
+        返回内容第一行为 `文件名 哈希值: <hash>`；每行内容都带行号前缀。
+        编辑时把读到的哈希值作为 edit_knowledge 必填参数 expected_hash
+        传入，行号则用于编写 diff 的 @@ 定位。
 
         Args:
             type: 知识类型
@@ -175,8 +183,14 @@ class KnowledgeStore:
         )
 
     @_recoverable
-    def edit_knowledge(self, type: KnowledgeType, diff: str, *, expected_hash: str | None = None) -> str:
+    def edit_knowledge(self, type: KnowledgeType, diff: str, *, expected_hash: str) -> str:
         """使用 unified diff 补丁编辑知识文件。
+
+        对同一文件的所有修改必须合并到一次调用中提交：一个 diff 可以包含
+        多个 hunk，所有 hunk 都直接使用同一次读取时看到的行号即可（前面
+        hunk 造成的行号偏移会自动修正）。禁止把对同一文件的修改拆成多次
+        调用本工具——前一次写入会使后一次调用的 expected_hash 过期，导致
+        后续调用必然失败。
 
         Args:
             type: 知识类型
@@ -189,15 +203,17 @@ class KnowledgeStore:
                 -要删除的旧行
                 +新增的第一行
                 +新增的第二行
-            expected_hash: 可选。提供时若与文件当前哈希值不匹配则拒绝编辑
-                （乐观并发控制），此时应重新读取文件后再生成补丁。
+            expected_hash: 必填。本次生成补丁所依据的文件哈希值，即刚刚通过
+                read_knowledge 或 read_index_knowledge 读到的哈希值。若与文件
+                当前哈希值不匹配则拒绝编辑（乐观并发控制），此时应重新读取
+                文件后再生成补丁。
 
         Returns:
             应用结果摘要和文件的新哈希值。
         """
         path = self._file(type)
         content = path.read_text(encoding="utf-8")
-        if expected_hash is not None and _hash_content(content) != expected_hash:
+        if _hash_content(content) != expected_hash:
             raise ValueError(
                 "文件哈希值与 expected_hash 不匹配，说明文件在上次读取后已被修改，"
                 "请重新读取文件后再生成补丁"

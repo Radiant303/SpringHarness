@@ -114,7 +114,7 @@ def register_default_instructions(
 
         "You are currently running in a chat environment. Other Agents may also write to the same filesystem — including during the current conversation — so content you saw earlier may have been modified. Always use the hash value you just read before editing."
 
-        "Available operations: read_index_knowledge(type) — view the table of contents of a knowledge file (headings at all levels with line numbers) and the file hash; read_knowledge(type, offset, limit) — read file content by line range, returns the file hash; edit_knowledge(type, diff, expected_hash) — modify a file with a unified diff patch, expected_hash verifies the file hasn't been changed by others."
+        "Available operations: read_index_knowledge(type) — view the table of contents of a knowledge file (headings at all levels with line numbers) and the file hash; read_knowledge(type, offset, limit) — read file content by line range, returns the file hash; edit_knowledge(type, diff, expected_hash) — modify a file with a unified diff patch; expected_hash is required and must be the hash returned by your latest read."
         "</knowledge_system>"
 
         "<when_to_read>"
@@ -136,7 +136,7 @@ def register_default_instructions(
         "</file_format>"
 
         "<write_workflow>"
-        "Follow this workflow when writing: first use read_index_knowledge to check the table of contents and decide whether to update an existing entry or add a new one — prefer updating, never record duplicates; then use read_knowledge to read the target area by line range and get the file hash; then submit a unified diff patch via edit_knowledge with expected_hash; if it fails due to a hash mismatch, the file was just modified by another Agent — re-read it and regenerate the patch."
+        "Follow this workflow when writing: first use read_index_knowledge to check the table of contents and decide whether to update an existing entry or add a new one — prefer updating, never record duplicates; then use read_knowledge to read the target area by line range and get the file hash; then submit ALL changes to that file as a single edit_knowledge call with expected_hash — one diff may contain multiple hunks, all using the line numbers from your single read (line offsets caused by earlier hunks are corrected automatically); never split edits to the same file into multiple edit_knowledge calls, because the first write invalidates the expected_hash of every later call; if it fails due to a hash mismatch, the file was just modified by another Agent — re-read it and regenerate the patch."
         "</write_workflow>")
 
     @agent.instructions
