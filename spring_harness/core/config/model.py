@@ -2,7 +2,7 @@ from typing import Any
 
 from pydantic_ai import ModelProfile
 from pydantic_ai.models import Model
-from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai.models.openai import OpenAIChatModel, OpenAIResponsesModel
 from pydantic_ai.providers.alibaba import AlibabaProvider
 from pydantic_ai.providers.deepseek import DeepSeekProvider
 from pydantic_ai.providers.openai import OpenAIProvider
@@ -17,6 +17,7 @@ class Setting:
             "openai": self._openai,
             "alibaba": self._alibaba,
             "deepseek": self._deepseek,
+            "responses": self._responses,
         }
 
     def get_model(self, model_name: str | None = None) -> Model:
@@ -66,6 +67,16 @@ class Setting:
         return OpenAIChatModel(
             model_name,
             provider=DeepSeekProvider(
+                api_key=provider_config.api_key,
+            ),
+            profile=self._profile(),
+        )
+
+    def _responses(self, model_name: str, provider_config: Any, model_config: Any) -> Model:
+        return OpenAIResponsesModel(
+            model_name,
+            provider=OpenAIProvider(
+                base_url=provider_config.base_url,
                 api_key=provider_config.api_key,
             ),
             profile=self._profile(),

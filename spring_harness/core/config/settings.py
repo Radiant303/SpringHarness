@@ -57,6 +57,9 @@ class Log(ConfigBase):
     log_level: str = "INFO"
 
 
+class SubAgentConfig(ConfigBase):
+    model: str = ""   # 为空 = 继承主 agent 当前模型
+
 class Config(ConfigBase):
     default_model: str = ""
     loop_control: LoopControl = LoopControl()
@@ -65,6 +68,7 @@ class Config(ConfigBase):
     models: dict[str, Model] = {}
     secondary_model: SecondaryModel = SecondaryModel()
     log: Log = Log()
+    subagents: dict[str, SubAgentConfig] = {}
 
     @classmethod
     def from_toml(cls, config_path: Path | None = None) -> Self:

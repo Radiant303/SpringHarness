@@ -9,7 +9,12 @@ from spring_harness.capabilities.code_mode import code_mode
 from spring_harness.capabilities.planning import OnPlanChange, planning
 from spring_harness.capabilities.repo_context import repo_context
 from spring_harness.capabilities.skills import skills
-from spring_harness.capabilities.teaching import OnTeachingChange, teaching_store_for, teaching_toolset
+from spring_harness.capabilities.subagents import subagents
+from spring_harness.capabilities.teaching import (
+    OnTeachingChange,
+    teaching_store_for,
+    teaching_toolset,
+)
 from spring_harness.core.agent.deps import CodingAgentDeps
 from spring_harness.core.config.model import get_model
 from spring_harness.core.hooks.model import hooks
@@ -48,6 +53,7 @@ def create_agent(
             planning(session_id, on_change=plan_on_change),
             repo_context(root),
             code_mode(root),
+            subagents(),
             Shell()
         ],
         retries=20
