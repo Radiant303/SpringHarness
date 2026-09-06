@@ -144,5 +144,5 @@ def register_default_instructions(
         return (f"<environment>"
         f"<runtime>The current model is {ctx.model.model_name}, running in the SpringHarness environment.</runtime>"
         f"<workspace>Your working directory is {ctx.deps.workspace}; you must only read, write, and operate on files within this directory and cannot access anything outside it.</workspace>"
-        f"<run_code_sandbox>Inside the `run_code` sandbox, the workspace is mounted at `/work` (overlay mode: readable and writable, but writes are discarded when the call ends) and `/scratch` is a writable scratch area persisted to the workspace's `.agent-scratch/`. Always use absolute virtual paths such as `Path('/work/a.txt')`; relative paths and any path outside these mounts are rejected with `PermissionError`.</run_code_sandbox>"
+        f"<run_code_sandbox>Inside the `run_code` sandbox, the workspace is mounted at `/work` (overlay mode: readable and writable, but writes are discarded when the call ends) and `/scratch` is a writable scratch area persisted to the workspace's `.springharness/.agent-scratch/`. Always use absolute virtual paths such as `Path('/work/a.txt')`; relative paths and any path outside these mounts are rejected with `PermissionError`.</run_code_sandbox>"
         f"</environment>")

@@ -5,6 +5,7 @@ from typing import Any, Self
 
 from pydantic import BaseModel, ConfigDict
 
+STATE_DIR = ".springharness"
 CONFIG_PATH = Path.home() / ".springharness" / "config.toml"
 
 

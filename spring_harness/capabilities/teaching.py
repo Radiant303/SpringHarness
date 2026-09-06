@@ -14,6 +14,8 @@ import yaml
 from pydantic import BaseModel, Field
 from pydantic_ai.toolsets import FunctionToolset
 
+from spring_harness.core.config.settings import STATE_DIR
+
 TEACHING_DB = "teaching.db"
 TEACHING_DIR = "teaching"
 
@@ -174,13 +176,14 @@ def _format_hint_levels(levels: list[int]) -> str:
 class TeachingStore:
     """SQLite 教学单元存储，按工作区隔离；单元不随会话消亡（跨会话恢复）。
 
-    每次 save_unit 都会把工作区 teaching/<slug>/ 下的 spec.yaml / record.yaml
+    每次 save_unit 都会把工作区 .springharness/teaching/<slug>/ 下的 spec.yaml / record.yaml
     镜像重写一遍，保证人可读的档案与库中状态始终一致。
     """
 
     def __init__(self, workspace: Path | str, *, on_change: OnTeachingChange | None = None) -> None:
-        self._workspace = Path(workspace)
-        self._database = str(self._workspace / TEACHING_DB)
+        self._data_dir = Path(workspace) / STATE_DIR
+        self._data_dir.mkdir(parents=True, exist_ok=True)
+        self._database = str(self._data_dir / TEACHING_DB)
         self._on_change = on_change
         self._lock = threading.Lock()
         self._ready = False
@@ -265,7 +268,7 @@ class TeachingStore:
     # ---- 镜像：teaching/<slug>/spec.yaml + record.yaml ----
 
     def _write_mirrors(self, unit: TeachingUnit) -> None:
-        unit_dir = self._workspace / TEACHING_DIR / unit.slug
+        unit_dir = self._data_dir / TEACHING_DIR / unit.slug
         unit_dir.mkdir(parents=True, exist_ok=True)
 
         objectives = []

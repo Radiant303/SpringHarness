@@ -1,10 +1,20 @@
 import inspect
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 
 from pydantic_ai_harness import Planning
 from pydantic_ai_harness.planning import PlanItem, PlanStore, SqlitePlanStore
 
+from spring_harness.core.config.settings import STATE_DIR
+
 PLAN_DB = "plan.db"
+
+
+def _db_path() -> str:
+    """plan.db 落在启动目录的 .springharness/ 下（跟随进程 cwd，与工作区一致）。"""
+    directory = Path.cwd() / STATE_DIR
+    directory.mkdir(parents=True, exist_ok=True)
+    return str(directory / PLAN_DB)
 
 OnPlanChange = Callable[[list["PlanItem"]], "None | Awaitable[None]"]
 
@@ -49,7 +59,7 @@ class _ObservableStore:
 
 def planning(session: str, on_change: OnPlanChange | None = None) -> Planning:
     """加载Plan；on_change 在每次计划变更后收到最新全量 items。"""
-    store: PlanStore = SqlitePlanStore(PLAN_DB, session=session)
+    store: PlanStore = SqlitePlanStore(_db_path(), session=session)
     if on_change is not None:
         store = _ObservableStore(store, on_change)
     return Planning(store=store)
@@ -57,4 +67,4 @@ def planning(session: str, on_change: OnPlanChange | None = None) -> Planning:
 
 async def load_plan_items(session: str) -> list[PlanItem]:
     """读某会话已持久化的计划（恢复会话时重建 PlanMessage 用）。"""
-    return await SqlitePlanStore(PLAN_DB, session=session).get_items()
+    return await SqlitePlanStore(_db_path(), session=session).get_items()
