@@ -68,6 +68,7 @@ class MyBot(CliApp):
             session_id=self._store.path.stem,
             plan_on_change=self._on_plan_change,
             teach_on_change=self._on_teach_change,
+            compact_on_change=self._on_compact,
         )
 
     async def _on_plan_change(self, items: list) -> None:
@@ -78,12 +79,18 @@ class MyBot(CliApp):
         """教学单元变更回调：与计划同路，在 agent 运行的事件循环里被 await。"""
         await self.show_teaching(unit)
 
+    async def _on_compact(self, dropped: int, before: int, after: int) -> None:
+        """压缩完成回调：对话流里插一行信息"""
+        await self.show_system(
+            f"上下文已压缩：折叠 {dropped} 条旧消息（约 {before // 1000}k → {after // 1000}k tokens）\n"
+        )
+
     async def on_mount(self) -> None:
         super().on_mount()
         # --continue 恢复时，把上次会话的内容重放到聊天区，不然屏幕是空的；
-        # 展示用全量历史（压缩前的内容也显示），发给模型的仍是 _message_history 基线
+        # 展示用全量分段历史 发给模型的仍是 _message_history 基线
         if self._message_history:
-            await self._rebuild_chat(self._store.load_full())
+            await self._rebuild_chat(self._store.load_display_segments())
 
     async def _get_agent(self) -> Agent[Any, Any]:
         if self._agent is None:
@@ -187,7 +194,7 @@ class MyBot(CliApp):
         self._sync_session_id()
         self._rebuild_agent()
         self._message_history = store.load_messages()
-        await self._rebuild_chat(store.load_full())  # 展示全量，模型用基线
+        await self._rebuild_chat(store.load_display_segments())
         await self.show_system("已切换会话")
 
     async def _resume_via_modal(self, sessions: list[tuple[SessionStore, dict]]) -> None:
@@ -231,7 +238,7 @@ class MyBot(CliApp):
         await self.show_system(f"已切换到 {model_cfg.display_name}" + ("" if persist else "（仅本次会话）"))
 
 
-    async def _rebuild_chat(self, messages: list[ModelMessage]) -> None:
+    async def _rebuild_chat(self, segments: list[list[ModelMessage]]) -> None:
         await self._scroll.remove_children()
         self._plan_widget = None  # remove_children 已把旧 PlanMessage 摘掉
         self._teach_widget = None  # 同理，旧 TeachingMessage 一并摘掉
@@ -244,29 +251,32 @@ class MyBot(CliApp):
 
         pending: dict[str, ToolCallPart] = {}
 
-        for msg in messages:
-            if isinstance(msg, ModelRequest):
-                for part in msg.parts:
-                    if isinstance(part, UserPromptPart) and isinstance(part.content, str):
-                        await self.show_user(part.content)
-                    elif isinstance(part, ToolReturnPart | RetryPromptPart) and part.tool_call_id:
-                        call = pending.pop(part.tool_call_id, None)
-                        if call is not None:
-                            await self.show_tool_call(
-                                call.tool_name,
-                                args=str(call.args),
-                                result=str(part.content)[:500],
-                            )
-            elif isinstance(msg, ModelResponse):
-                texts = [p for p in msg.parts if isinstance(p, TextPart)]
-                if texts:
-                    handle = await self.start_assistant()
-                    for t in texts:
-                        await handle.write_answer(t.content)
-                    await handle.finish()
-                for p in msg.parts:
-                    if isinstance(p, ToolCallPart):
-                        pending[p.tool_call_id] = p
+        for index, messages in enumerate(segments):
+            if index > 0:
+                await self.show_system("── 上下文已压缩，以上内容已压缩为摘要 ──")
+            for msg in messages:
+                if isinstance(msg, ModelRequest):
+                    for part in msg.parts:
+                        if isinstance(part, UserPromptPart) and isinstance(part.content, str):
+                            await self.show_user(part.content)
+                        elif isinstance(part, ToolReturnPart | RetryPromptPart) and part.tool_call_id:
+                            call = pending.pop(part.tool_call_id, None)
+                            if call is not None:
+                                await self.show_tool_call(
+                                    call.tool_name,
+                                    args=str(call.args),
+                                    result=str(part.content)[:500],
+                                )
+                elif isinstance(msg, ModelResponse):
+                    texts = [p for p in msg.parts if isinstance(p, TextPart)]
+                    if texts:
+                        handle = await self.start_assistant()
+                        for t in texts:
+                            await handle.write_answer(t.content)
+                        await handle.finish()
+                    for p in msg.parts:
+                        if isinstance(p, ToolCallPart):
+                            pending[p.tool_call_id] = p
 
         for call in pending.values():
             await self.show_tool_call(call.tool_name, args=str(call.args))

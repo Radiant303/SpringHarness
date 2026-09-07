@@ -94,22 +94,25 @@ class SessionStore:
         """发给模型的当前历史：最后一段（history_rewrite 标记之后的新基线）。"""
         return self._load_segments()[-1]
 
-    def load_full(self) -> list[ModelMessage]:
-        """CLI 展示用全量历史：标记前的原始内容也在；新基线开头与上文末尾
-        重复的保留尾（压缩时原样保留的那几条）跳过，避免重复显示。"""
-        segments = self._load_segments()
-        out = segments[0]
-        for seg in segments[1:]:
-            # 基线开头 = 新消息（摘要/回执/合并消息）+ 与 out 末尾重复的保留尾
+    def load_display_segments(self) -> list[list[ModelMessage]]:
+        result: list[list[ModelMessage]] = []
+        acc: list[ModelMessage] = []
+        for seg in self._load_segments():
             strip_lo = strip_hi = 0
             for s in range(min(3, len(seg)) + 1):
-                for k in range(min(len(out), len(seg) - s), 0, -1):
-                    if out[-k:] == seg[s:s + k]:
+                for k in range(min(len(acc), len(seg) - s), 0, -1):
+                    if acc[-k:] == seg[s:s + k]:
                         if s + k > strip_hi:
                             strip_lo, strip_hi = s, s + k
                         break
-            out = [*out, *seg[:strip_lo], *seg[strip_hi:]]
-        return out
+            deduped = [*seg[:strip_lo], *seg[strip_hi:]]
+            result.append(deduped)
+            acc.extend(deduped)
+        return result
+
+    def load_full(self) -> list[ModelMessage]:
+        """CLI 展示用全量历史：load_display_segments 拍平。"""
+        return [m for seg in self.load_display_segments() for m in seg]
 
     @classmethod
     def list_sessions(cls, workspace: Path) -> list[tuple[SessionStore, dict]]:
