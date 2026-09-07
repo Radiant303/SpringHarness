@@ -7,6 +7,7 @@ from pydantic_ai.providers.alibaba import AlibabaProvider
 from pydantic_ai.providers.deepseek import DeepSeekProvider
 from pydantic_ai.providers.openai import OpenAIProvider
 
+from spring_harness.core.config.settings import Model as ModelConfig
 from spring_harness.core.config.settings import config
 
 
@@ -99,7 +100,14 @@ class Setting:
         """列出所有可用 Provider"""
         return list(self.config.providers.keys())
 
+    def get_model_config(self, model_name: str | None = None) -> ModelConfig:
+        model_name = model_name or self.config.default_model
+        model_config = self.config.get_model(model_name)
+        if not model_config:
+            raise ValueError(f"模型 '{model_name}' 不存在")
+        return model_config
 
 # 全局实例
 setting = Setting()
 get_model = setting.get_model
+get_model_config = setting.get_model_config

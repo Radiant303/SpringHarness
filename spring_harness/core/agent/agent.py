@@ -3,7 +3,7 @@ from pathlib import Path
 
 from pydantic_ai import Agent
 from pydantic_ai.tools import DeferredToolRequests
-from pydantic_ai_harness import Shell
+from pydantic_ai_harness import Shell, SummarizingCompaction
 
 from spring_harness.capabilities.code_mode import code_mode
 from spring_harness.capabilities.planning import OnPlanChange, planning
@@ -16,7 +16,7 @@ from spring_harness.capabilities.teaching import (
     teaching_toolset,
 )
 from spring_harness.core.agent.deps import CodingAgentDeps
-from spring_harness.core.config.model import get_model
+from spring_harness.core.config.model import get_model, get_model_config
 from spring_harness.core.hooks.model import hooks
 from spring_harness.instructions.default import register_default_instructions
 from spring_harness.toolsets.filesystem import filesystem
@@ -34,9 +34,10 @@ def create_agent(
     创建 Spring Harness Agent
     """
     root = Path(root_dir).expanduser().resolve()
-
+    model = get_model(model_name)
+    model_config = get_model_config(model_name)
     agent = Agent(
-        model=get_model(model_name),
+        model=model,
         toolsets=[
             filesystem(str(root)),
             approval_required_knowledge_toolsets,
@@ -54,7 +55,8 @@ def create_agent(
             repo_context(root),
             code_mode(root),
             subagents(),
-            Shell()
+            Shell(),
+            SummarizingCompaction(max_fraction=0.9, fallback_context_window=model_config.max_context_size)
         ],
         retries=20
     )
