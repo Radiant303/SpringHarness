@@ -80,9 +80,10 @@ class MyBot(CliApp):
 
     async def on_mount(self) -> None:
         super().on_mount()
-        # --continue 恢复时，把上次会话的内容重放到聊天区，不然屏幕是空的
+        # --continue 恢复时，把上次会话的内容重放到聊天区，不然屏幕是空的；
+        # 展示用全量历史（压缩前的内容也显示），发给模型的仍是 _message_history 基线
         if self._message_history:
-            await self._rebuild_chat(self._message_history)
+            await self._rebuild_chat(self._store.load_full())
 
     async def _get_agent(self) -> Agent[Any, Any]:
         if self._agent is None:
@@ -117,21 +118,30 @@ class MyBot(CliApp):
 
         # 带审批的轮次会跑多次 agent.run，result.new_messages() 只含最后一次 run 的
         # 增量；相对轮前历史取差才能把整轮落全
-        self._save_delta(result.all_messages())
+        self._save_delta(result.all_messages(), allow_rewrite=True)
         self._message_history = result.all_messages()
 
-    def _save_delta(self, messages: list[ModelMessage]) -> bool:
-        """把 messages 相对已存历史的增量追加到会话文件，返回是否有增量落盘。
+    def _save_delta(self, messages: list[ModelMessage], *, allow_rewrite: bool = False) -> bool:
+        """把 messages 相对已存历史的增量追加到会话文件，返回是否有内容落盘。
 
-        messages 必须以当前 _message_history 为前缀（运行结果和
-        before_model_request 钩子写入 deps.last_messages 的快照都满足）；
-        对不上说明是上一轮残留的过期快照，直接忽略，避免把会话文件写坏。
+        messages 通常以当前 _message_history 为前缀（运行结果和
+        before_model_request 钩子写入 deps.last_messages 的快照都满足），
+        此时只追加增量；对不上说明是上一轮残留的过期快照，直接忽略，
+        避免把会话文件写坏。
+
+        allow_rewrite=True 只给正常轮次的运行结果用：前缀对不上意味着历史被
+        压缩/消息合并合法改写（摘要、回执都只在改写后的历史里），追加
+        history_rewrite 标记和新基线；异常路径的钩子快照可能是过期的，
+        不传，防止写回去缩。
         """
         base = len(self._message_history)
-        if len(messages) <= base or messages[:base] != self._message_history:
-            return False
-        self._store.append(messages[base:])
-        return True
+        if len(messages) > base and messages[:base] == self._message_history:
+            self._store.append(messages[base:])
+            return True
+        if allow_rewrite and messages != self._message_history:
+            self._store.append_rewritten(messages)
+            return True
+        return False
 
     async def handle_command(self, command: str) -> None:
         if self._busy:
@@ -177,7 +187,7 @@ class MyBot(CliApp):
         self._sync_session_id()
         self._rebuild_agent()
         self._message_history = store.load_messages()
-        await self._rebuild_chat(self._message_history)
+        await self._rebuild_chat(store.load_full())  # 展示全量，模型用基线
         await self.show_system("已切换会话")
 
     async def _resume_via_modal(self, sessions: list[tuple[SessionStore, dict]]) -> None:

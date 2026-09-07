@@ -12,14 +12,16 @@ INDEX_FILE = SESSIONS_ROOT / "session_index.jsonl"
 
 
 class SessionStore:
-    """一个 session 一个 JSONL 文件：首行 meta，之后每行一条 ModelMessage。"""
+    """一个 session 一个 JSONL 文件：首行 meta，之后每行一条 ModelMessage。
+    历史被改写（压缩/合并）时插入一行 history_rewrite 标记，其后为新基线；
+    文件只追加，永不覆盖。"""
 
     def __init__(self, path: Path, pending_meta: dict | None = None):
         self.path = path
         self._pending_meta = pending_meta
 
     @classmethod
-    def create(cls, workspace: Path) -> "SessionStore":
+    def create(cls, workspace: Path) -> SessionStore:
         now = datetime.datetime.now(datetime.UTC)
         # 日期分片目录 + 文件名带时间戳和 uuid，字典序即时间序
         stamp = now.strftime("%Y-%m-%dT%H-%M-%S")
@@ -32,38 +34,85 @@ class SessionStore:
         }
         return cls(path, pending_meta=meta)
 
-    def append(self, messages: list[ModelMessage]) -> None:
-        """每轮结束（含异常终止）后调用，追加增量。"""
+    @staticmethod
+    def _dump_line(msg: ModelMessage) -> str:
+        # ModelMessagesTypeAdapter 是 list 的适配器，包一层单元素列表
+        return ModelMessagesTypeAdapter.dump_json([msg]).decode()
+
+    def _ensure_file(self) -> None:
+        """首次写入时创建文件并落 meta 行。"""
         if self._pending_meta is not None:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             self.path.write_text(
                 json.dumps(self._pending_meta, ensure_ascii=False) + "\n", encoding="utf-8"
             )
             self._pending_meta = None
+
+    def append(self, messages: list[ModelMessage]) -> None:
+        """每轮结束（含异常终止）后调用，追加增量。"""
+        self._ensure_file()
         with self.path.open("a", encoding="utf-8") as f:
             for msg in messages:
-                # ModelMessagesTypeAdapter 是 list 的适配器，包一层单元素列表
-                line = ModelMessagesTypeAdapter.dump_json([msg]).decode()
-                f.write(line + "\n")
+                f.write(self._dump_line(msg) + "\n")
         self._update_index(messages)
 
-    def load_messages(self) -> list[ModelMessage]:
-        """逐行读、逐条校验；尾部坏行截断，保住前面完好的部分。"""
-        messages: list[ModelMessage] = []
+    def append_rewritten(self, messages: list[ModelMessage]) -> None:
+        """历史被压缩/消息合并改写时调用：先追加一条 history_rewrite 标记，
+        再把新基线整体追加到文件末尾——旧内容留在文件里备查，保住追加原则。"""
+        marker = {
+            "type": "history_rewrite",
+            "at": datetime.datetime.now(datetime.UTC).isoformat(),
+        }
+        self._ensure_file()
+        with self.path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(marker, ensure_ascii=False) + "\n")
+            for msg in messages:
+                f.write(self._dump_line(msg) + "\n")
+        self._update_index(messages)
+
+    def _load_segments(self) -> list[list[ModelMessage]]:
+        """按 history_rewrite 标记把文件切成段：段内是线性追加的消息；
+        尾部坏行截断，保住前面完好的部分。"""
+        segments: list[list[ModelMessage]] = [[]]
         for line in self.path.read_text(encoding="utf-8").splitlines():
             if not line.strip():
                 continue
             try:
                 data = json.loads(line)
-                if isinstance(data, dict) and data.get("type") == "meta":
-                    continue
-                messages.extend(ModelMessagesTypeAdapter.validate_json(line))
+                if isinstance(data, dict):
+                    if data.get("type") == "meta":
+                        continue
+                    if data.get("type") == "history_rewrite":
+                        segments.append([])
+                        continue
+                segments[-1].extend(ModelMessagesTypeAdapter.validate_json(line))
             except Exception:
                 break
-        return messages
+        return segments
+
+    def load_messages(self) -> list[ModelMessage]:
+        """发给模型的当前历史：最后一段（history_rewrite 标记之后的新基线）。"""
+        return self._load_segments()[-1]
+
+    def load_full(self) -> list[ModelMessage]:
+        """CLI 展示用全量历史：标记前的原始内容也在；新基线开头与上文末尾
+        重复的保留尾（压缩时原样保留的那几条）跳过，避免重复显示。"""
+        segments = self._load_segments()
+        out = segments[0]
+        for seg in segments[1:]:
+            # 基线开头 = 新消息（摘要/回执/合并消息）+ 与 out 末尾重复的保留尾
+            strip_lo = strip_hi = 0
+            for s in range(min(3, len(seg)) + 1):
+                for k in range(min(len(out), len(seg) - s), 0, -1):
+                    if out[-k:] == seg[s:s + k]:
+                        if s + k > strip_hi:
+                            strip_lo, strip_hi = s, s + k
+                        break
+            out = [*out, *seg[:strip_lo], *seg[strip_hi:]]
+        return out
 
     @classmethod
-    def list_sessions(cls, workspace: Path) -> list[tuple["SessionStore", dict]]:
+    def list_sessions(cls, workspace: Path) -> list[tuple[SessionStore, dict]]:
         """索引为主：title 取自 session_index.jsonl，免读全量消息；
         索引未收录的文件读 meta 行兜底并现算 title。"""
         index = cls._read_index()

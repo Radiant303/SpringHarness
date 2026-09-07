@@ -56,7 +56,7 @@ def create_agent(
             code_mode(root),
             subagents(),
             Shell(),
-            SummarizingCompaction(max_fraction=0.9, fallback_context_window=model_config.max_context_size)
+            SummarizingCompaction(max_tokens=12000,  keep_messages=4,fallback_context_window=model_config.max_context_size)
         ],
         retries=20
     )
