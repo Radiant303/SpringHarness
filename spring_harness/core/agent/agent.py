@@ -59,7 +59,7 @@ def create_agent(
             subagents(),
             Shell(),
             NotifyingCompaction(
-                max_tokens=12000,
+                max_fraction=0.8,
                 keep_messages=4,
                 fallback_context_window=model_config.max_context_size,
                 on_compaction=compact_on_change,
