@@ -407,9 +407,68 @@ class QuestionModal(ModalScreen[str | None]):
     """ask_user 的提问弹窗：dismiss 字符串 = 回答，dismiss None = Esc 取消。
 
     三种形态：
-    - options=None            → 纯输入框
+    - options 为空                → 纯输入框
     - options, allow_custom=False → 纯选项
-    - options, allow_custom=True  → 选项 + 底部输入框（选不中就自己写）
+    - options, allow_custom=True  → 选项 + 底部输入框（Tab 切换焦点）
+
+    视觉对齐 ApprovalModal：压暗背景 + 近黑面板 + 金色圆角描边 + 金色标题，
+    输入框左侧引导线（聚焦时变金），一眼看出"这轮交互在等你答复"。
+    """
+
+    CSS = """
+    QuestionModal {
+        align: center middle;
+        background: black 60%;  /* 压暗背后的聊天内容，弹窗才是焦点（同 ApprovalModal） */
+    }
+    #question-dialog {
+        width: 90%;          /* 自适应终端宽度，长问题换行后不裁切 */
+        max-width: 140;
+        height: auto;
+        background: #0b0d10;
+        border: round #e5c07b;
+        padding: 1 2;
+    }
+    #question-title {
+        color: #e5c07b;
+        text-style: bold;
+        margin-bottom: 1;
+    }
+    #question-list {
+        height: auto;
+        max-height: 10;  /* 超高滚动 */
+        background: transparent;
+        border: none;    /* OptionList 自带的框是第二层嵌套边框，干掉 */
+        padding: 0;
+        margin-bottom: 1;
+        scrollbar-size-vertical: 1;
+        scrollbar-color: #3a3f4a;
+        scrollbar-color-hover: ansi_bright_black;
+        scrollbar-background: #0b0d10;  /* 跟随面板底色 */
+    }
+    #question-list .option-list--option-highlighted {
+        /* 默认高亮是刺眼的亮紫底，换成克制的深灰 */
+        background: #2a2f3a;
+        color: ansi_default;
+    }
+    #question-list .option-list--option-hover {
+        /* 鼠标悬停默认也是紫底，一并收编 */
+        background: #23272f;
+    }
+    #question-input {
+        height: 1;
+        background: transparent;
+        border: none;
+        /* 左侧引导线：同 ApprovalModal 的 diff 预览区；聚焦时变金提示输入目标 */
+        border-left: solid #3a3f4a;
+        padding: 0 0 0 2;
+        margin-bottom: 1;
+    }
+    #question-input:focus {
+        border-left: solid #e5c07b;
+    }
+    #question-help {
+        color: ansi_bright_black;
+    }
     """
 
     BINDINGS: ClassVar[list] = [("escape", "cancel", "Cancel")]
@@ -425,10 +484,24 @@ class QuestionModal(ModalScreen[str | None]):
         with Vertical(id="question-dialog"):
             yield Static(self._question, id="question-title")
             if self._options:
-                yield OptionList(*[Option(o) for o in self._options], id="question-list")
+                yield OptionList(*[Option(f"  {o}") for o in self._options], id="question-list")
             if not self._options or self._allow_custom:
                 yield Input(placeholder="输入回答…", id="question-input")
-            yield Static("Enter 确认 · Esc 取消", id="question-help")
+            yield Static(self._help_text(), id="question-help")
+
+    def _help_text(self) -> Text:
+        """底部快捷键提示，键名金色加粗（同 ApprovalModal 的 [y]/[n]/[Esc]）。"""
+        if self._options and self._allow_custom:
+            keys = [("↑↓", " 选择"), ("Tab", " 切换输入框"), ("Enter", " 确认"), ("Esc", " 取消")]
+        elif self._options:
+            keys = [("↑↓", " 选择"), ("Enter", " 确认"), ("Esc", " 取消")]
+        else:
+            keys = [("Enter", " 提交"), ("Esc", " 取消")]
+        parts: list[tuple[str, str]] = []
+        for i, (key, desc) in enumerate(keys):
+            parts.append((f"[{key}]", "bold #e5c07b"))
+            parts.append((desc + ("   " if i < len(keys) - 1 else ""), "default"))
+        return Text.assemble(*parts)
 
     def on_mount(self) -> None:
         if self._options:
