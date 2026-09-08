@@ -26,7 +26,7 @@ from textual.worker import (
 )
 
 from .inputs import CommandDropdown, HistoryInput
-from .modal import ApprovalModal
+from .modal import ApprovalModal, QuestionModal
 from .theme import KIMI_THEME
 from .utils import LinePacer, format_num
 from .widgets import (
@@ -369,6 +369,16 @@ class CliApp(App[None]):
             line.hide()
         else:
             line.show_state(state)
+
+    async def ask_question(
+        self,
+        question: str,
+        options: list[str] | None = None,
+        allow_custom: bool = True,
+    ) -> str | None:
+        """ask_user 提问弹窗：返回用户回答；None 表示 Esc 取消。"""
+        return await self.push_screen_wait(QuestionModal(question, options, allow_custom))
+
 
     async def ask_approval(self, call: ToolCallPart, diff: str | None = None) -> bool:
         """弹窗询问是否批准这一条工具调用：True 批准 / False 拒绝。多条挂起逐条问。

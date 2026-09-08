@@ -12,7 +12,7 @@ from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.content import Content
 from textual.highlight import highlight
 from textual.screen import ModalScreen
-from textual.widgets import OptionList, Static
+from textual.widgets import Input, OptionList, Static
 from textual.widgets.option_list import Option
 
 from .cjk_wrap import DiffHighlightTheme
@@ -399,6 +399,51 @@ class SessionSelectModal(ModalScreen[int | None]):
     @on(OptionList.OptionSelected)
     def _select(self, event: OptionList.OptionSelected) -> None:
         self.dismiss(event.option_index)
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+class QuestionModal(ModalScreen[str | None]):
+    """ask_user 的提问弹窗：dismiss 字符串 = 回答，dismiss None = Esc 取消。
+
+    三种形态：
+    - options=None            → 纯输入框
+    - options, allow_custom=False → 纯选项
+    - options, allow_custom=True  → 选项 + 底部输入框（选不中就自己写）
+    """
+
+    BINDINGS: ClassVar[list] = [("escape", "cancel", "Cancel")]
+
+    def __init__(self, question: str, options: list[str] | None,
+                 allow_custom: bool, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self._question = question
+        self._options: list[str] = options or []
+        self._allow_custom = allow_custom
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="question-dialog"):
+            yield Static(self._question, id="question-title")
+            if self._options:
+                yield OptionList(*[Option(o) for o in self._options], id="question-list")
+            if not self._options or self._allow_custom:
+                yield Input(placeholder="输入回答…", id="question-input")
+            yield Static("Enter 确认 · Esc 取消", id="question-help")
+
+    def on_mount(self) -> None:
+        if self._options:
+            self.query_one("#question-list", OptionList).focus()
+        else:
+            self.query_one("#question-input", Input).focus()
+
+    @on(OptionList.OptionSelected)
+    def _select(self, event: OptionList.OptionSelected) -> None:
+        self.dismiss(self._options[event.option_index])
+
+    @on(Input.Submitted)
+    def _submit(self, event: Input.Submitted) -> None:
+        if text := event.value.strip():
+            self.dismiss(text)
 
     def action_cancel(self) -> None:
         self.dismiss(None)

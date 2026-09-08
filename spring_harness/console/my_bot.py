@@ -105,6 +105,14 @@ class MyBot(CliApp):
             # 编辑类工具把改动 diff 带进审批弹窗
             return await self.ask_approval(call, diff=make_diff(call.tool_name, call.args))
 
+        async def ask_question_ui(args: dict[str, Any]) -> str | None:
+            return await self.ask_question(
+                question=args["question"],
+                options=args.get("options"),
+                allow_custom=args.get("allow_custom", True),
+            )
+
+
         self._busy = True
         try:
             result = await run_with_approval(
@@ -112,6 +120,7 @@ class MyBot(CliApp):
                 text,
                 renderer,
                 ask_with_preview,
+                ask_question_ui,
                 deps=self._session_deps,
                 message_history=self._message_history,
             )
