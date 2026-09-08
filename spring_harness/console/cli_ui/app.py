@@ -164,11 +164,11 @@ class ToolCallHandle:
             return
         await self._message.set_diff(diff)
 
-    async def show_pending(self) -> None:
-        """标记该调用处于"等待批准/外部执行"状态（deferred 工具）。"""
+    async def show_pending(self, label: str = "等待批准") -> None:
+        """标记该调用处于暂停状态（deferred 工具）：批准类"等待批准"，提问类"等待回答"。"""
         if self._check_cancelled():
             return
-        await self._message.set_pending()
+        await self._message.set_pending(label)
 
 
 class CliApp(App[None]):

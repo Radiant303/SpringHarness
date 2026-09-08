@@ -485,11 +485,11 @@ class ToolCallMessage(Vertical):
         else:
             await self.mount(CJKStatic(rendered, classes="tool-result"))
 
-    async def set_pending(self) -> None:
-        """标记为"等待批准/外部执行"（deferred 工具调用暂停）；重复调用幂等。"""
+    async def set_pending(self, label: str = "等待批准") -> None:
+        """标记 deferred 暂停状态（等待批准 / 等待回答）；重复调用幂等。"""
         if not self.query(".tool-pending"):
             # ⏸ 在 Windows Terminal 会被渲染成彩色 emoji 方块，用文字安全字符 ◆
-            await self.mount(CJKStatic("◆ 等待批准", classes="tool-pending"))
+            await self.mount(CJKStatic(f"◆ {label}", classes="tool-pending"))
 
     def collapse(self) -> None:
         """把结果收成一行摘要：run 结束、最终答案出现后由 CliSink.finish() 统一调用。

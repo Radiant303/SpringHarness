@@ -147,7 +147,8 @@ class EventStreamRenderer:
         for call_part in calls:
             tool = self._tool_by_id.get(call_part.tool_call_id)
             if tool is not None:
-                await tool.show_pending()
+                # CallDeferred 外部执行（ask_user 提问）：等的是"回答"，不是"批准"
+                await tool.show_pending("等待回答")
 
         for approvals_part in approvals:
             tool = self._tool_by_id.get(approvals_part.tool_call_id)
