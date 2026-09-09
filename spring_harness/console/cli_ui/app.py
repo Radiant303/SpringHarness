@@ -13,6 +13,7 @@ from typing import ClassVar, cast
 from pydantic_ai import ToolCallPart
 from rich.text import Text
 from textual import on
+from textual._cells import cell_len
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.theme import Theme
@@ -56,6 +57,19 @@ def _context_text(tokens: int, max_tokens: int = MAX_CONTEXT_TOKENS) -> str:
     return f"context: {pct}% ({format_num(tokens)}/{format_num(max_tokens)})"
 
 
+def _tail_cells(text: str, budget: int) -> str:
+    """按显示宽度从尾部截取 text，保证不超 budget 格（CJK 宽字符算两格）。"""
+    cells = 0
+    out: list[str] = []
+    for ch in reversed(text):
+        w = cell_len(ch)
+        if cells + w > budget:
+            break
+        out.append(ch)
+        cells += w
+    return "".join(reversed(out))
+
+
 class AssistantHandle:
     """一条 AI 消息的写入句柄：thinking 和回答分开流式累加。
 
@@ -64,6 +78,7 @@ class AssistantHandle:
     """
 
     _FLUSH_INTERVAL: ClassVar[float] = 0.08  # thinking 上屏节流间隔（秒）
+    _THINKING_FALLBACK_WIDTH: ClassVar[int] = 60  # 布局未完成时单行尾窗的兜底宽度（格）
 
     def __init__(self, message: AssistantMessage) -> None:
         self._message = message
@@ -82,13 +97,21 @@ class AssistantHandle:
         return worker is not None and worker.is_cancelled
 
     async def _flush_thinking(self) -> None:
-        """把全文 self._thinking 刷上屏。首次 flush 才揭示整行：● 出现后必然跟着内容。
+        """把思维链刷成单行尾窗。首次 flush 才揭示整行：● 出现后必然跟着内容。
 
-        全文刷新会触发 CJK 重排版 + 布局重排，单次 O(n)，调用方必须走节流。"""
+        换行折叠成空格，只按显示宽度保留尾部一段（格为单位，CJK 一字符
+        两格），新内容把旧内容向左顶出（同 ToolCallMessage 参数的运行中
+        尾窗思路）：单帧成本 O(行宽)、与全文长度无关，长思维链持续刷新
+        也不会拖累事件循环（WorkingLine 动画不卡）；被截掉时前缀 … 示意。
+        """
+        content = self._message.query_one("#thinking-content", Static)
+        full = " ".join(self._thinking.split())
+        budget = content.size.width or self._THINKING_FALLBACK_WIDTH
+        window = _tail_cells(full, budget)
+        if len(window) < len(full):
+            window = "…" + _tail_cells(full, budget - 1)
         self._message.query_one(".thinking-row").remove_class("stream-pending")
-        self._message.query_one("#thinking-content", Static).update(
-            Text(self._thinking.lstrip("\n"))
-        )
+        content.update(Text(window))
 
     async def _flush_answer(self, batch: str) -> None:
         if self._answer_stream is not None:
@@ -100,9 +123,9 @@ class AssistantHandle:
     async def write_thinking(self, text: str) -> None:
         """累加思考内容（可多次调用）。首个字符到达前整行隐藏。
 
-        上屏节流：每个 delta 都全文刷新会把事件循环占满（WorkingLine 动画跟着卡），
-        改为至多每 _FLUSH_INTERVAL 秒刷一次；间隔内到达的 delta 由兜底定时器补刷，
-        finish() 会取消兜底并把 thinking 折叠成摘要。
+        上屏节流：单帧渲染已是 O(行宽)（_flush_thinking 只刷单行尾窗），节流的
+        作用从保命退居为合并突发 delta、让窗口匀速流动；间隔内到达的 delta 由
+        兜底定时器补刷，finish() 会取消兜底并把 thinking 折叠成摘要。
         """
         if self._finished or self._check_cancelled():
             return
