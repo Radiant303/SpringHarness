@@ -359,7 +359,28 @@ class CliApp(App[None]):
     async def show_user(self, text: str) -> None:
         """手动补显示一条用户消息（提交时框架已自动显示，一般不需要调）。"""
         await self._scroll.mount(UserMessage(text))
+        await self._prune_history()
         self._scroll.anchor()
+
+    MAX_RENDERED_ROUNDS: ClassVar[int] = 10  # 聊天区最多保留渲染的交互轮数（人问 → 模型答完）
+
+    async def _prune_history(self) -> None:
+        """只保留最近 MAX_RENDERED_ROUNDS 轮交互，更早的整块从渲染树移除。
+
+        一轮 = 一条 UserMessage 起到下一条 UserMessage 之前（中间的工具调用、
+        计划、系统消息随轮一起裁掉）；WelcomeBox 不属于任何一轮，始终保留。
+        Textual 没有终端 scrollback，历史 widget 会永远挂在渲染树里——
+        裁剪让布局遍历和内存与会话长度解耦。已被裁掉的计划/教学面板靠
+        show_plan/show_teaching 的 is_attached 检查自然失效，无需特判。
+        """
+        children = list(self._scroll.children)
+        rounds = [i for i, c in enumerate(children) if isinstance(c, UserMessage)]
+        if len(rounds) <= self.MAX_RENDERED_ROUNDS:
+            return
+        boundary = rounds[-self.MAX_RENDERED_ROUNDS]
+        stale = [c for c in children[:boundary] if not isinstance(c, WelcomeBox)]
+        for widget in stale:
+            await widget.remove()
 
     async def start_assistant(self) -> AssistantHandle:
         """开一条新的 AI 消息，返回写入句柄。"""
@@ -500,6 +521,7 @@ class CliApp(App[None]):
             return
 
         await self._scroll.mount(UserMessage(full_text))
+        await self._prune_history()
         self._scroll.anchor()
         self.run_worker(self._run_handle_input(full_text))
 
