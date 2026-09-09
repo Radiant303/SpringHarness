@@ -166,6 +166,17 @@ class AssistantHandle:
             )
         self._answer_pacer.write(text)
 
+    async def set_answer_full(self, text: str) -> None:
+        """一次性写入完整回答（重放历史用）。
+
+        重放不是流：走 LinePacer/MarkdownStream 的流式节奏只会逐行拖慢。
+        Markdown.update 的解析在线程池里跑，不占事件循环。
+        """
+        if self._finished or self._check_cancelled():
+            return
+        self._message.query_one(".answer-row").remove_class("stream-pending")
+        await self._message.query_one("#answer-md", Markdown).update(text)
+
     async def finish(self) -> None:
         """收尾：thinking 折叠成一行摘要（全文占屏），关掉 Markdown 流。重复调用安全。"""
         if self._finished:
@@ -253,7 +264,7 @@ class CliApp(App[None]):
         layout: vertical;
         background: transparent;
     }
-    #chat-scroll {
+    ChatScroll {
         width: 1fr;
         height: 1fr;
         padding: 0;
@@ -318,6 +329,9 @@ class CliApp(App[None]):
         self._active_tool_calls: list[ToolCallMessage] = []  # 运行中的工具调用，中断时收尾用
         self._plan_widget: PlanMessage | None = None
         self._teach_widget: TeachingMessage | None = None
+        # 聊天滚动区实例引用（compose 里挂上）。用实例属性而不是 #id 查询，
+        # 是为了 _rebuild_chat 的双缓冲：旧容器摘除前新容器必须已生效
+        self._chat_scroll: ChatScroll | None = None
         if theme is not None:
             self.register_theme(theme)
             self.theme = theme.name
@@ -327,7 +341,9 @@ class CliApp(App[None]):
         self.query_one("#user-input", HistoryInput).focus()
 
     def compose(self) -> ComposeResult:
-        with ChatScroll(id="chat-scroll"):
+        scroll = ChatScroll()
+        self._chat_scroll = scroll
+        with scroll:
             yield WelcomeBox(
                 title=self.title_text, model=self.model,
                 version=self.version, session=self.session_id,
@@ -354,7 +370,8 @@ class CliApp(App[None]):
 
     @property
     def _scroll(self) -> ChatScroll:
-        return self.query_one("#chat-scroll", ChatScroll)
+        assert self._chat_scroll is not None  # compose 先跑，必然已挂上
+        return self._chat_scroll
 
     async def show_user(self, text: str) -> None:
         """手动补显示一条用户消息（提交时框架已自动显示，一般不需要调）。"""

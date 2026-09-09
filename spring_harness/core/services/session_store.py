@@ -94,10 +94,12 @@ class SessionStore:
         """发给模型的当前历史：最后一段（history_rewrite 标记之后的新基线）。"""
         return self._load_segments()[-1]
 
-    def load_display_segments(self) -> list[list[ModelMessage]]:
+    @staticmethod
+    def _dedup_segments(segments: list[list[ModelMessage]]) -> list[list[ModelMessage]]:
+        """跨段去重：压缩改写后的新基线与旧段尾部有重叠前缀时，剥掉重叠部分。"""
         result: list[list[ModelMessage]] = []
         acc: list[ModelMessage] = []
-        for seg in self._load_segments():
+        for seg in segments:
             strip_lo = strip_hi = 0
             for s in range(min(3, len(seg)) + 1):
                 for k in range(min(len(acc), len(seg) - s), 0, -1):
@@ -109,6 +111,18 @@ class SessionStore:
             result.append(deduped)
             acc.extend(deduped)
         return result
+
+    def load_display_segments(self) -> list[list[ModelMessage]]:
+        return self._dedup_segments(self._load_segments())
+
+    def load_for_resume(self) -> tuple[list[ModelMessage], list[list[ModelMessage]]]:
+        """一次性解析会话文件，返回 (模型历史, 展示分段)。
+
+        resume / 切换会话路径用：load_messages + load_display_segments 会把
+        整个 JSONL 各解析一遍（pydantic 逐行校验，长会话秒级），合并成一次。
+        """
+        segments = self._load_segments()
+        return segments[-1], self._dedup_segments(segments)
 
     def load_full(self) -> list[ModelMessage]:
         """CLI 展示用全量历史：load_display_segments 拍平。"""
