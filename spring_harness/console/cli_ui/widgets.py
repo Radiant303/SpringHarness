@@ -381,6 +381,8 @@ class ToolCallMessage(Vertical):
     - 流式：构造时只给 name，之后用 append_args() 逐段累加参数、
       set_result() 后补结果（start_tool_call 返回的句柄走这条路）。
 
+    参数超长（MAX_ARGS_LEN）时：运行中显示尾部窗口，新参数把旧内容向左顶出
+    （横向滚动，新内容始终可见）；完成后回到保留开头的静态摘要。
     完成态图标：运行中 ⚡（蓝）→ set_result() 后 ✓（绿）/ ✗（红，is_error=True）。
     """
 
@@ -445,7 +447,12 @@ class ToolCallMessage(Vertical):
     def _render_head(self) -> Text:
         args = self._args
         if len(args) > self.MAX_ARGS_LEN:
-            args = args[: self.MAX_ARGS_LEN - 1] + "…"
+            if self._status == "running":
+                # 流式进行中：显示尾部窗口，新参数到达即把旧内容向左顶出（横向滚动）
+                args = "…" + args[-(self.MAX_ARGS_LEN - 1) :]
+            else:
+                # 完成态：保留开头做摘要
+                args = args[: self.MAX_ARGS_LEN - 1] + "…"
         icon, icon_style = self._HEAD_ICONS[self._status]
         return Text.assemble(
             (icon, icon_style),
@@ -470,7 +477,7 @@ class ToolCallMessage(Vertical):
         return Text("\n".join(lines))
 
     def append_args(self, chunk: str) -> None:
-        """流式累加参数文本并刷新标题行（超长部分显示为 …）。"""
+        """流式累加参数文本并刷新标题行（超长后窗口跟随尾部，新内容把旧内容向左顶出）。"""
         self._args += chunk
         self.query_one(".tool-head", CJKStatic).update(self._render_head())
 

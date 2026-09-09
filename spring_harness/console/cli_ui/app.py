@@ -6,8 +6,9 @@ start_tool_call() / show_tool_call() / show_system() 输出内容；界面、
 """
 
 
+import asyncio
 import time
-from typing import cast
+from typing import ClassVar, cast
 
 from pydantic_ai import ToolCallPart
 from rich.text import Text
@@ -62,10 +63,14 @@ class AssistantHandle:
     （框架在 worker 结束时会兜底，但请显式调用）。
     """
 
+    _FLUSH_INTERVAL: ClassVar[float] = 0.08  # thinking 上屏节流间隔（秒）
+
     def __init__(self, message: AssistantMessage) -> None:
         self._message = message
         self._thinking = ""
         self._thinking_start: float | None = None
+        self._thinking_flush_at = 0.0  # 上次 thinking 上屏的时刻（0 = 从未刷过）
+        self._thinking_flush_timer: asyncio.Task[None] | None = None  # 节流兜底补刷任务
         self._answer_stream = None
         self._finished = False
         self._answer_pacer = LinePacer(self._flush_answer)
@@ -77,9 +82,9 @@ class AssistantHandle:
         return worker is not None and worker.is_cancelled
 
     async def _flush_thinking(self) -> None:
-        """thinking 渲染用的是全文 self._thinking（Static 更新便宜，
-        不像 Markdown 流要重解析，所以不走 LinePacer 逐行节奏）。
-        首次 flush 才揭示整行：● 出现后必然跟着内容。"""
+        """把全文 self._thinking 刷上屏。首次 flush 才揭示整行：● 出现后必然跟着内容。
+
+        全文刷新会触发 CJK 重排版 + 布局重排，单次 O(n)，调用方必须走节流。"""
         self._message.query_one(".thinking-row").remove_class("stream-pending")
         self._message.query_one("#thinking-content", Static).update(
             Text(self._thinking.lstrip("\n"))
@@ -93,14 +98,39 @@ class AssistantHandle:
 
 
     async def write_thinking(self, text: str) -> None:
-        """累加思考内容（可多次调用）。首个字符到达前整行隐藏。"""
+        """累加思考内容（可多次调用）。首个字符到达前整行隐藏。
+
+        上屏节流：每个 delta 都全文刷新会把事件循环占满（WorkingLine 动画跟着卡），
+        改为至多每 _FLUSH_INTERVAL 秒刷一次；间隔内到达的 delta 由兜底定时器补刷，
+        finish() 会取消兜底并把 thinking 折叠成摘要。
+        """
         if self._finished or self._check_cancelled():
             return
         if not self._thinking:
             self._thinking_start = time.monotonic()
         self._thinking += text
-        # 包成 Text：思考文本里的 […] 会被 Static 按 Rich markup 解析而抛 MarkupError；
-        # 去除首行换行。delta 一到就整段刷新，跟网络分块节奏走（成块感而非逐行）。
+        now = time.monotonic()
+        if now - self._thinking_flush_at >= self._FLUSH_INTERVAL:
+            self._thinking_flush_at = now
+            # 直刷已覆盖兜底任务的内容，取消它，避免到点再刷一次
+            if self._thinking_flush_timer is not None:
+                self._thinking_flush_timer.cancel()
+                self._thinking_flush_timer = None
+            # 包成 Text：思考文本里的 […] 会被 Static 按 Rich markup 解析而抛 MarkupError
+            await self._flush_thinking()
+        elif self._thinking_flush_timer is None:
+            self._thinking_flush_timer = asyncio.ensure_future(self._flush_thinking_later())
+
+    async def _flush_thinking_later(self) -> None:
+        """节流间隔到点后的兜底补刷：保证间隔内到达的 delta 最终上屏。"""
+        try:
+            await asyncio.sleep(self._FLUSH_INTERVAL)
+        except asyncio.CancelledError:
+            return  # finish() 取消兜底：摘要已接管显示
+        self._thinking_flush_timer = None
+        if self._finished:
+            return
+        self._thinking_flush_at = time.monotonic()
         await self._flush_thinking()
 
     async def write_answer(self, text: str) -> None:
@@ -118,6 +148,10 @@ class AssistantHandle:
         if self._finished:
             return
         self._finished = True
+        # 取消兜底补刷：否则它会在摘要显示后把全文刷回来，覆盖掉 "Thought for Xs"
+        if self._thinking_flush_timer is not None:
+            self._thinking_flush_timer.cancel()
+            self._thinking_flush_timer = None
         await self._answer_pacer.drain()
 
         if self._thinking and self._thinking_start is not None:
