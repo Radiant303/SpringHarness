@@ -9,7 +9,6 @@ def filesystem(root_dir: str):
         fs,
         approval_required_func=lambda ctx, tool, args:
             tool.name in {
-                "edit_file",
-                "write_file",
+
             },
     )

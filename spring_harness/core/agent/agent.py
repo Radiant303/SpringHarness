@@ -16,6 +16,7 @@ from spring_harness.capabilities.teaching import (
     teaching_store_for,
     teaching_toolset,
 )
+from spring_harness.core.agent import shell_patch as _shell_patch  # noqa: F401  # Windows 杀进程补丁，导入即生效
 from spring_harness.core.agent.deps import CodingAgentDeps
 from spring_harness.core.config.model import get_model, get_model_config
 from spring_harness.core.hooks.model import hooks

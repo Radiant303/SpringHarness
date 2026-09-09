@@ -501,6 +501,16 @@ class ToolCallMessage(Vertical):
             # ⏸ 在 Windows Terminal 会被渲染成彩色 emoji 方块，用文字安全字符 ◆
             await self.mount(CJKStatic(f"◆ {label}", classes="tool-pending"))
 
+    async def mark_interrupted(self) -> None:
+        """本轮运行中断（异常 / 取消）时收尾仍在运行的调用：⚡ → ✗ + 中断说明。
+
+        运行被异常打断时工具不会再返回结果，不标记的话标题行会一直停在 ⚡ 运行态。
+        已完成（ok / error）的调用不受影响，可对整个活动列表无差别调用。
+        """
+        if self._status != "running":
+            return
+        await self.set_result("（本轮运行已中断，工具未返回结果）", is_error=True)
+
     def collapse(self) -> None:
         """把结果收成一行摘要：run 结束、最终答案出现后由 CliSink.finish() 统一调用。
 

@@ -292,6 +292,7 @@ class CliApp(App[None]):
             self._commands.extend(BUILTIN_COMMANDS)
         self._message_counter = 0
         self._active_handles: list[AssistantHandle] = []
+        self._active_tool_calls: list[ToolCallMessage] = []  # 运行中的工具调用，中断时收尾用
         self._plan_widget: PlanMessage | None = None
         self._teach_widget: TeachingMessage | None = None
         if theme is not None:
@@ -352,6 +353,7 @@ class CliApp(App[None]):
         message = ToolCallMessage(name)
         await self._scroll.mount(message)
         self._scroll.anchor()
+        self._active_tool_calls.append(message)
         return ToolCallHandle(message)
 
     async def show_tool_call(self, name: str, args: str = "", result: str | None = None) -> None:
@@ -490,4 +492,8 @@ class CliApp(App[None]):
             for handle in self._active_handles:
                 await handle.finish()
             self._active_handles.clear()
+            # 运行中断（异常/取消）时，把还停在 ⚡ 的工具调用标记为中断，不会永远转圈
+            for tool_call in self._active_tool_calls:
+                await tool_call.mark_interrupted()
+            self._active_tool_calls.clear()
             self.set_working(None)  # 兜底：worker 结束（含取消）时一定收掉状态行
