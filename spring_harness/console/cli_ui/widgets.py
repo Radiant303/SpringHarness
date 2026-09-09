@@ -4,6 +4,9 @@
 演示数据换成了构造参数，ToolCallMessage 是新增组件。
 """
 
+import asyncio
+import math
+import time
 from pathlib import Path
 from typing import Any, ClassVar, cast
 
@@ -519,19 +522,29 @@ class ToolCallMessage(Vertical):
         时序上 diff 在工具结果之前到达（参数完整时即生成），直接追加挂载即可。
         """
         self._diff = diff_text
-        content = highlight(diff_text, language="diff", theme=DiffHighlightTheme)
+        # pygments 高亮是同步纯计算，大 diff 会堵住事件循环（状态行动画跟着卡），挪到线程
+        content = await asyncio.to_thread(
+            highlight, diff_text, language="diff", theme=DiffHighlightTheme
+        )
         if self.query(".tool-diff"):
             self.query_one(".tool-diff", CJKStatic).update(content)
         else:
             await self.mount(CJKStatic(content, classes="tool-diff"))
 
 
+def _lerp(c1: tuple[int, ...], c2: tuple[int, ...], f: float) -> tuple[int, int, int]:
+    """两色线性插值：f=0 取 c1，f=1 取 c2。"""
+    r, g, b = (int(a + (b - a) * f) for a, b in zip(c1, c2))
+    return (r, g, b)
+
+
 class WorkingLine(Static):
-    """输入框上方左侧的运行状态行：spinner 动画 + 状态标签 + 一句话。
+    """输入框上方左侧的运行状态行：spinner 动画 + 状态标签 + 彩虹扫描点亮的一句话。
 
     由 CliApp.set_working(state) 驱动：state 是 STATES 的键，None 时内容隐藏但保留占位。
-    spinner 用 rich 的 Spinner（moon/dots/line），它按时间取帧，
-    所以定时器里反复 update 同一个 Spinner 对象就能形成动画。
+    spinner 用 rich 的 Spinner（moon/dots/line）按真实时间取帧；"·" 后的名言套用
+    rainbow_scan 的 shimmer 效果：暗色行波底 + 浅春绿彗尾循环扫描 + 头部白核，
+    每帧逐字符上色；位置完全由真实时间推导，定时器抖动不影响每轮时长。
     """
 
     STATES: ClassVar[dict[str, tuple[str, str, str]]] = {
@@ -540,6 +553,14 @@ class WorkingLine(Static):
         "tool": ("line", "Using Tool...", "Give me a place to stand, and I will move Earth."),
         "working": ("dots", "Working...", "It always seems impossible until it is done by us."),
     }
+
+    # ── shimmer 可调参数（移植自 rainbow_scan.py：循环扫 + 行波常时动感）──
+    SPRING_COLOR: ClassVar[tuple[int, int, int]] = (0x90, 0xEE, 0x90)  # 浅春绿：扫描亮部单色
+    SCAN_SPEED: ClassVar[float] = 0.9   # 扫描速度
+    FPS: ClassVar[int] = 30             # 扫描是连续运动，帧率低了会跳
+    WAVE_LEN: ClassVar[float] = 0.55    # 波长（越大波峰越稀）
+    WAVE_SPEED: ClassVar[float] = 0.10  # 波行进速度（越大流得越快）
+    WAVE_DEPTH: ClassVar[float] = 0.5   # 明暗幅度 0~1（越大亮暗反差越强）
 
     DEFAULT_CSS = """
     WorkingLine {
@@ -556,21 +577,21 @@ class WorkingLine(Static):
         super().__init__("", **kwargs)
         self.state: str | None = None
         self._spinner: Spinner | None = None
+        self._label = ""
+        self._quote = ""
+        self._start = 0.0  # on_mount 时记录的动画起始时间
 
     def on_mount(self) -> None:
-        self.set_interval(1 / 12, self._advance)
+        self._start = time.monotonic()
+        self.set_interval(1 / self.FPS, self._advance)
 
     def show_state(self, state: str) -> None:
         if state == self.state:
             return  # 同状态高频重复调用（每个 delta 一次），重建 spinner 会卡住动画
-        spinner, label, text = self.STATES[state]
+        spinner, self._label, self._quote = self.STATES[state]
         self.state = state
-        parts: list[tuple[str, str]] = []
-        if label:
-            parts.append((f"{label} ", f"bold {ACCENT}"))
-        parts.append(("· ", GRAY))
-        parts.append((text, f"italic {GRAY}"))
-        self._spinner = Spinner(spinner, text=Text.assemble(*parts))
+        # text 由 _advance 每帧重新组装（要逐字符上色），Spinner 只提供帧动画
+        self._spinner = Spinner(spinner)
         self.styles.visibility = "visible"
         self._advance()
 
@@ -583,8 +604,50 @@ class WorkingLine(Static):
         self.styles.visibility = "hidden"
 
     def _advance(self) -> None:
-        if self._spinner is not None:
-            self.update(self._spinner)
+        if self._spinner is None:
+            return
+        now = time.monotonic()
+        t = (now - self._start) * self.FPS  # 帧单位，效果参数含义与 rainbow_scan 一致
+        line = Text()
+        line.append_text(cast(Text, self._spinner.render(now)))  # 无 text 时 render 只返回帧
+        line.append(" ")
+        if self._label:
+            line.append(f"{self._label} ", style=f"bold {ACCENT}")
+        line.append("· ", style=GRAY)
+        n = len(self._quote)
+        tail = max(6, int(n * 0.35))  # 彗尾与句子等比例，换句子不用重调
+        # 行进范围 [0, n + tail)：头到右缘外 tail 处时彗尾尖恰好退出，
+        # 光离开右缘的同一瞬间在左缘重现，全程无全暗空档
+        scan_pos = (t * self.SCAN_SPEED) % (n + tail)
+        for i, ch in enumerate(self._quote):
+            r, g, b = self._char_color(i, scan_pos, t, tail)
+            line.append(ch, style=f"italic #{r:02x}{g:02x}{b:02x}")
+        self.update(line, layout=False)  # 尺寸由 CSS 固定（height: 1），无需布局重排
+
+    def _char_color(self, i: int, scan_pos: float, t: float, tail: int) -> tuple[int, int, int]:
+        # 明暗行波：亮度峰从左向右流过整行文字（含暗区），常时动感
+        wave_f = 0.5 + 0.5 * math.sin(i * self.WAVE_LEN - t * self.WAVE_SPEED)
+        lo = (0x36, 0x36, 0x48)  # 波谷：更深的暗色
+        hi = (0x84, 0x84, 0xA2)  # 波峰：亮起的暗色
+        base = _lerp(lo, hi, wave_f * self.WAVE_DEPTH + (1 - self.WAVE_DEPTH) * 0.5)
+
+        d = scan_pos - i
+        if d < 0 or d > tail:
+            return base
+        p = d / tail  # 彗尾内的相对位置：0 = 扫描头，1 = 尾巴末端
+
+        # 亮度：头部白亮平台 → 指数衰减到深色；再乘行波因子，尾巴与暗区波纹同频
+        v = 0.10 + 0.90 * math.exp(-p * 2.4)
+        v *= (1 - self.WAVE_DEPTH * 0.5) + self.WAVE_DEPTH * wave_f
+        core = math.exp(-p * 9.0)  # 头部白色核心：最亮处泛白，像光源本体
+        v = min(1.0, v + core * 0.6)
+
+        # 颜色：单一浅春色，深浅完全由上面的亮度曲线 v 承担
+        color = _lerp((0, 0, 0), self.SPRING_COLOR, v)
+        color = _lerp(color, (255, 255, 255), core * 0.8)  # 头部核心向白色收拢
+        if p > 0.85:  # 尾巴末端最后 15% 溶入暗色底，保证切出干净
+            color = _lerp(color, base, (p - 0.85) / 0.15)
+        return color
 
 
 class SystemMessage(CJKStatic):
