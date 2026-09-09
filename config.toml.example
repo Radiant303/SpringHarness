@@ -3,6 +3,7 @@ default_model = "kimi-code/k3-256k"
 [loop_control]
 max_retries_per_step = 3
 reserved_context_size = 50000
+request_limit = 50
 
 [thinking]
 enabled = true
