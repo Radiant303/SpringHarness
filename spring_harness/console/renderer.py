@@ -1,3 +1,4 @@
+import asyncio
 import difflib
 import json
 from collections.abc import AsyncIterable, Awaitable, Callable
@@ -136,7 +137,9 @@ class EventStreamRenderer:
         tool = self._tool_by_index.pop(event.index, None)
         part = event.part
         if tool is not None and isinstance(part, ToolCallPart):
-            diff = make_diff(part.tool_name, part.args)
+            # difflib 是同步纯计算，大文件的 unified_diff 能跑几十~几百 ms，
+            # 在事件循环里跑会卡住 WorkingLine 动画（跳帧），挪到线程
+            diff = await asyncio.to_thread(make_diff, part.tool_name, part.args)
             if diff is not None:
                 await tool.show_diff(diff)
 

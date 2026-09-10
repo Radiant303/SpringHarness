@@ -10,7 +10,10 @@ import time
 from pathlib import Path
 from typing import Any, ClassVar, cast
 
+from rich.color import Color
+from rich.color_triplet import ColorTriplet
 from rich.spinner import Spinner
+from rich.style import Style
 from rich.text import Text
 from textual.app import ComposeResult
 from textual.containers import Horizontal, HorizontalGroup, Vertical, VerticalScroll
@@ -638,9 +641,25 @@ class WorkingLine(Static):
         # 光离开右缘的同一瞬间在左缘重现，全程无全暗空档
         scan_pos = (t * self.SCAN_SPEED) % (n + tail)
         for i, ch in enumerate(self._quote):
-            r, g, b = self._char_color(i, scan_pos, t, tail)
-            line.append(ch, style=f"italic #{r:02x}{g:02x}{b:02x}")
+            line.append(ch, style=self._char_style(*self._char_color(i, scan_pos, t, tail)))
         self.update(line, layout=False)  # 尺寸由 CSS 固定（height: 1），无需布局重排
+
+    # Style 对象缓存：每帧逐字符构造 "italic #rrggbb" 字符串会在渲染期反复解析；
+    # 动画的颜色集合是收敛的（彗尾梯度 + 行波），缓存后很快全部命中。
+    # 封顶防异常增长，超了直接清（动画继续，缓存重新预热）
+    _STYLE_CACHE: ClassVar[dict[tuple[int, int, int], Style]] = {}
+    _STYLE_CACHE_MAX: ClassVar[int] = 4096
+
+    @classmethod
+    def _char_style(cls, r: int, g: int, b: int) -> Style:
+        key = (r, g, b)
+        style = cls._STYLE_CACHE.get(key)
+        if style is None:
+            if len(cls._STYLE_CACHE) >= cls._STYLE_CACHE_MAX:
+                cls._STYLE_CACHE.clear()
+            style = Style(color=Color.from_triplet(ColorTriplet(r, g, b)), italic=True)
+            cls._STYLE_CACHE[key] = style
+        return style
 
     def _char_color(self, i: int, scan_pos: float, t: float, tail: int) -> tuple[int, int, int]:
         # 明暗行波：亮度峰从左向右流过整行文字（含暗区），常时动感

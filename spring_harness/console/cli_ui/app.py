@@ -6,6 +6,7 @@ start_tool_call() / show_tool_call() / show_system() 输出内容；界面、
 """
 
 
+import asyncio
 import time
 from typing import ClassVar, cast
 
@@ -76,12 +77,15 @@ class AssistantHandle:
     （框架在 worker 结束时会兜底，但请显式调用）。
     """
 
+    _FLUSH_INTERVAL: ClassVar[float] = 0.033  # thinking 上屏节流间隔（秒，≈30fps）
     _THINKING_FALLBACK_WIDTH: ClassVar[int] = 60  # 布局未完成时单行尾窗的兜底宽度（格）
 
     def __init__(self, message: AssistantMessage) -> None:
         self._message = message
         self._thinking = ""
         self._thinking_start: float | None = None
+        self._thinking_flush_at = 0.0  # 上次 thinking 上屏的时刻（0 = 从未刷过）
+        self._thinking_flush_timer: asyncio.Task[None] | None = None  # 节流兜底补刷任务
         self._answer_stream = None
         self._finished = False
         self._answer_pacer = LinePacer(self._flush_answer)
@@ -118,18 +122,39 @@ class AssistantHandle:
 
 
     async def write_thinking(self, text: str) -> None:
-        """累加思考内容并即刷（可多次调用）。首个字符到达前整行隐藏。
+        """累加思考内容（可多次调用）。首个字符到达前整行隐藏。
 
-        与工具参数同款：不节流，每个 delta 到达即刷新单行尾窗——单帧渲染
-        O(行宽)，Textual 的重绘合并会把刷新率自然封顶在帧率，不需要人为
-        节流；finish() 会把 thinking 折叠成摘要。
+        上屏节流：单帧渲染已是 O(行宽)（_flush_thinking 只刷单行尾窗），节流的
+        作用从保命退居为合并突发 delta、让窗口匀速流动（≈30fps）；间隔内到达的
+        delta 由兜底定时器补刷，finish() 会取消兜底并把 thinking 折叠成摘要。
         """
         if self._finished or self._check_cancelled():
             return
         if not self._thinking:
             self._thinking_start = time.monotonic()
         self._thinking += text
-        # 包成 Text：思考文本里的 […] 会被 Static 按 Rich markup 解析而抛 MarkupError
+        now = time.monotonic()
+        if now - self._thinking_flush_at >= self._FLUSH_INTERVAL:
+            self._thinking_flush_at = now
+            # 直刷已覆盖兜底任务的内容，取消它，避免到点再刷一次
+            if self._thinking_flush_timer is not None:
+                self._thinking_flush_timer.cancel()
+                self._thinking_flush_timer = None
+            # 包成 Text：思考文本里的 […] 会被 Static 按 Rich markup 解析而抛 MarkupError
+            await self._flush_thinking()
+        elif self._thinking_flush_timer is None:
+            self._thinking_flush_timer = asyncio.ensure_future(self._flush_thinking_later())
+
+    async def _flush_thinking_later(self) -> None:
+        """节流间隔到点后的兜底补刷：保证间隔内到达的 delta 最终上屏。"""
+        try:
+            await asyncio.sleep(self._FLUSH_INTERVAL)
+        except asyncio.CancelledError:
+            return  # finish() 取消兜底：摘要已接管显示
+        self._thinking_flush_timer = None
+        if self._finished:
+            return
+        self._thinking_flush_at = time.monotonic()
         await self._flush_thinking()
 
     async def write_answer(self, text: str) -> None:
@@ -158,6 +183,10 @@ class AssistantHandle:
         if self._finished:
             return
         self._finished = True
+        # 取消兜底补刷：否则它会在摘要显示后把全文刷回来，覆盖掉 "Thought for Xs"
+        if self._thinking_flush_timer is not None:
+            self._thinking_flush_timer.cancel()
+            self._thinking_flush_timer = None
         await self._answer_pacer.drain()
 
         if self._thinking and self._thinking_start is not None:
