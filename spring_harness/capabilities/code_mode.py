@@ -19,5 +19,5 @@ def code_mode(root: Path) -> CodeMode:
             MountDir(virtual_path="/work", host_path=root, mode="overlay"),
             MountDir(virtual_path="/scratch", host_path=scratch, mode="read-write"),
         ],
-        tools=["read_file", "search_files"],
+        tools=["read_file", "search_files","find_files"],
     )
