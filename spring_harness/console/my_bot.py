@@ -1,19 +1,22 @@
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from pydantic_ai import (
     Agent,
+    CancellationToken,
     ModelMessage,
     ModelRequest,
     ModelResponse,
     RetryPromptPart,
+    RunCancelled,
     TextPart,
     ToolCallPart,
     ToolReturnPart,
     UserPromptPart,
 )
+from textual.binding import Binding
 from textual.worker import Worker
 
 from spring_harness.capabilities.planning import load_plan_items
@@ -57,9 +60,15 @@ def _restore_boundary(
 
 
 class MyBot(CliApp):
+    BINDINGS: ClassVar[list] = [
+        # 非 priority：命令下拉/弹窗的 Esc 先消费（关下拉、拒弹窗），其余情况才中断运行
+        Binding("escape", "interrupt_run", "中断运行", show=False),
+    ]
+
     def __init__(self, *args, resume_last: bool = False, **kwargs):
         super().__init__(*args, **kwargs)
         self._busy = False
+        self._cancel_token: CancellationToken | None = None  # 当前轮的取消令牌，Ctrl+C 触发
         self._message_history: list[ModelMessage] = []
         self._session_deps = CodingAgentDeps.create_default(Path.cwd())
         # 预建教学 store（主线程），避免与 executor 里的 create_agent 竞态创建
@@ -134,6 +143,12 @@ class MyBot(CliApp):
             self._agent = await asyncio.wrap_future(self._executor_future)
         return self._agent
 
+    def action_interrupt_run(self) -> None:
+        """Esc：取消当前 run（token.cancel 线程安全，不阻塞事件循环）；空闲时无操作。"""
+        if self._busy and self._cancel_token is not None:
+            self._cancel_token.cancel()
+            self.set_working("cancelling")
+
     async def handle_input(self, text: str) -> None:
         restore_worker = self._restore_worker
         if restore_worker is not None:
@@ -159,6 +174,7 @@ class MyBot(CliApp):
 
 
         self._busy = True
+        self._cancel_token = CancellationToken()
         try:
             result = await run_with_approval(
                 await self._get_agent(),
@@ -168,13 +184,22 @@ class MyBot(CliApp):
                 ask_question_ui,
                 deps=self._session_deps,
                 message_history=self._message_history,
+                cancellation_token=self._cancel_token,
             )
+        except RunCancelled as e:
+            # Esc 中断：快照含本轮已完成的工具结果，落盘并接管历史，
+            # 下一条输入带着它续跑，断掉的工具调用由 pydantic-ai 自动修补
+            self._save_delta(e.all_messages(), allow_rewrite=True)
+            self._message_history = e.all_messages()
+            await self.show_system("已中断（Esc），可继续输入")
+            return
         except BaseException:
             # 运行中途异常终止（模型/工具报错、worker 被取消）时，把钩子快照里
             if self._save_delta(self._session_deps.last_messages):
                 self._message_history = self._session_deps.last_messages
             raise
         finally:
+            self._cancel_token = None
             self._busy = False
 
         # 带审批的轮次会跑多次 agent.run，result.new_messages() 只含最后一次 run 的

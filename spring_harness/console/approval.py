@@ -4,6 +4,7 @@ from typing import Any
 from pydantic_ai import (
     Agent,
     AgentRunResult,
+    CancellationToken,
     ModelMessage,
     ModelRetry,
     ToolCallPart,
@@ -23,12 +24,14 @@ async def run_with_approval(
     ask_question: Callable[[dict[str, Any]], Awaitable[str | None]],
     deps: CodingAgentDeps,
     message_history: Sequence[ModelMessage] | None = None,
+    cancellation_token: CancellationToken | None = None,
 ) -> AgentRunResult[Any]:
     result = await agent.run(
         prompt,
         deps=deps,
         event_stream_handler=renderer,
         message_history=message_history,
+        cancellation_token=cancellation_token,
     )
     while isinstance(result.output, DeferredToolRequests):
         approvals: dict[str, DeferredToolApprovalResult | bool] = {}
@@ -53,6 +56,7 @@ async def run_with_approval(
             message_history=result.all_messages(),
             deferred_tool_results=results,
             event_stream_handler=renderer,
+            cancellation_token=cancellation_token,
         )
 
     await renderer.finish_with(result)

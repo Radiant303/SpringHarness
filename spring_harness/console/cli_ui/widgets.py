@@ -573,6 +573,7 @@ class WorkingLine(Static):
         "tool": ("line", "Using Tool...", "Give me a place to stand, and I will move Earth."),
         "working": ("dots", "Working...", "It always seems impossible until it is done by us."),
         "restoring": ("dots", "Restoring...", "Every moment is a fresh beginning."),
+        "cancelling": ("line", "Cancelling...", "At the still point of the turning world."),
     }
 
     # ── shimmer 可调参数（移植自 rainbow_scan.py：循环扫 + 行波常时动感）──
