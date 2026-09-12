@@ -80,6 +80,7 @@ class DirectoryMonitor:
 
         # 监控状态
         self._running = False
+        self._closed = False
         self._lock = Lock()
 
         # 验证目录是否存在
@@ -132,55 +133,55 @@ class DirectoryMonitor:
             self._load_gitignore()
 
     def _match_gitignore(self, relative: Path, is_dir: bool = False) -> bool:
-        """检查相对路径是否命中 gitignore 规则"""
-        self._reload_gitignore_if_changed()
         if self._gitignore_spec is None:
             return False
-        # 规则相对 .gitignore 所在目录生效，匹配前需拼上
-        # 监控目录相对该目录的前缀，与 git 的语义一致
-        path = (self.directory.relative_to(self._gitignore_root)
-                / relative).as_posix()
-        if self._gitignore_spec.check_file(path).include:
-            return True
-        # 目录需额外尝试带尾斜杠的形式，以匹配 "dir/" 这类目录规则
+        path = (self.directory.relative_to(self._gitignore_root) / relative).as_posix()
         return bool(
-            is_dir and self._gitignore_spec.check_file(path + "/").include
+            self._gitignore_spec.check_file(path).include
+            or (is_dir and self._gitignore_spec.check_file(path + "/").include)
         )
 
     def _is_excluded(self, filepath):
-        """检查路径是否应被排除（. 开头的目录或 .gitignore 规则）"""
+        self._reload_gitignore_if_changed()
         try:
-            resolved = Path(filepath).resolve()
-            relative = resolved.relative_to(self.directory)
+            relative = Path(filepath).resolve().relative_to(self.directory)
         except (ValueError, OSError, RuntimeError):
-            return True  # 不在监控目录内，视为排除
-
-        # 父目录中的 . 开头目录（不检查文件名本身）
-        if self.exclude_dot_dirs and any(
-            part.startswith(".") for part in relative.parts[:-1]
-        ):
             return True
+        return self._relative_excluded(relative)
 
-        return self._match_gitignore(relative)
+    def _relative_excluded(self, relative: Path) -> bool:
+        return (
+            self.exclude_dot_dirs and any(part.startswith(".") for part in relative.parts[:-1])
+        ) or self._match_gitignore(relative)
 
     def _get_all_files(self):
-        """获取目录下所有匹配的文件（跳过排除目录和 .gitignore 规则）"""
+        self._reload_gitignore_if_changed()
         files = []
-        for dirpath, dirnames, filenames in os.walk(self.directory):
-            keep = []
-            for dirname in dirnames:
-                if self.exclude_dot_dirs and dirname.startswith("."):
-                    continue
-                relative_dir = (Path(dirpath) / dirname).relative_to(self.directory)
-                # 被 gitignore 忽略的目录不再深入遍历
-                if self._match_gitignore(relative_dir, is_dir=True):
-                    continue
-                keep.append(dirname)
-            dirnames[:] = keep
-            for filename in filenames:
-                if fnmatch.fnmatch(filename, self.file_pattern):
-                    files.append(Path(dirpath) / filename)
-        return [f for f in files if not self._is_excluded(f)]
+        pending = [self.directory]
+        while pending:
+            directory = pending.pop()
+            try:
+                relative_parent = directory.resolve().relative_to(self.directory)
+                with os.scandir(directory) as entries:
+                    for entry in entries:
+                        path = directory / entry.name
+                        relative = relative_parent / entry.name
+                        if entry.is_dir():
+                            if self.exclude_dot_dirs and entry.name.startswith("."):
+                                continue
+                            if not entry.is_symlink() and not self._match_gitignore(relative, is_dir=True):
+                                pending.append(path)
+                        elif fnmatch.fnmatch(entry.name, self.file_pattern):
+                            if entry.is_symlink():
+                                try:
+                                    relative = path.resolve().relative_to(self.directory)
+                                except (ValueError, OSError, RuntimeError):
+                                    continue
+                            if not self._relative_excluded(relative):
+                                files.append(path)
+            except (ValueError, OSError, RuntimeError):
+                continue
+        return files
 
     def _read_file(self, filepath):
         """读取文件内容"""
@@ -256,99 +257,84 @@ class DirectoryMonitor:
         ))
 
     def start(self):
-        """开始监控目录"""
-        if self._running:
-            return
+        with self._lock:
+            if self._running or self._closed:
+                return
+            try:
+                self._start()
+            except BaseException:
+                self._stop_observer()
+                self._clear()
+                raise
 
-        # 加载 .gitignore（每次 start 重新读取，允许两次运行之间修改）
+    def _start(self):
         self._load_gitignore()
-
-        # 保存初始快照
         self.old_contents = self._snapshot_directory()
+        self.changed_files.clear()
+        self.created_files.clear()
+        self.deleted_files.clear()
+        monitor = self
 
-        # 重置变化记录
+        class DirectoryHandler(FileSystemEventHandler):
+            def on_modified(self, event):
+                if not event.is_directory:
+                    monitor._on_file_change(Path(os.fsdecode(event.src_path)))
+
+            def on_created(self, event):
+                path = Path(os.fsdecode(event.src_path))
+                if not event.is_directory and monitor._running and monitor._matches_pattern(path):
+                    monitor.created_files.add(path)
+                    monitor.changed_files.add(path)
+
+            def on_deleted(self, event):
+                path = Path(os.fsdecode(event.src_path))
+                if not event.is_directory and monitor._running and monitor._matches_pattern(path):
+                    monitor.deleted_files.add(path)
+
+            def on_moved(self, event):
+                if event.is_directory or not monitor._running:
+                    return
+                src = Path(os.fsdecode(event.src_path))
+                dest = Path(os.fsdecode(event.dest_path))
+                if monitor._matches_pattern(src):
+                    monitor.deleted_files.add(src)
+                if monitor._matches_pattern(dest):
+                    monitor.created_files.add(dest)
+                    monitor.changed_files.add(dest)
+
+        self.observer = Observer()
+        self.observer.schedule(DirectoryHandler(), str(self.directory), recursive=True)
+        self._running = True
+        self.observer.start()
+
+    def _stop_observer(self):
+        self._running = False
+        if self.observer is not None:
+            self.observer.stop()
+            if self.observer.is_alive():
+                self.observer.join()
+            self.observer = None
+
+    def _clear(self):
+        self.old_contents.clear()
         self.changed_files.clear()
         self.created_files.clear()
         self.deleted_files.clear()
 
-        monitor = self
-
-        class DirectoryHandler(FileSystemEventHandler):
-            def _is_in_directory(self, path: str | bytes) -> bool:
-                """检查路径是否在监控目录内"""
-                try:
-                    path_obj = Path(os.fsdecode(path)).resolve()
-                    return str(path_obj).startswith(str(monitor.directory))
-                except (OSError, RuntimeError):
-                    return False
-
-            def on_modified(self, event):
-                if (not event.is_directory
-                        and self._is_in_directory(event.src_path)
-                        and monitor._matches_pattern(os.fsdecode(event.src_path))):
-                    monitor._on_file_change(Path(os.fsdecode(event.src_path)))
-
-            def on_created(self, event):
-                if (not event.is_directory
-                        and self._is_in_directory(event.src_path)
-                        and monitor._matches_pattern(os.fsdecode(event.src_path))):
-                    event_path = Path(os.fsdecode(event.src_path))
-                    monitor.created_files.add(event_path)
-                    monitor._on_file_change(event_path)
-
-            def on_deleted(self, event):
-                if (not event.is_directory
-                        and self._is_in_directory(event.src_path)
-                        and monitor._matches_pattern(os.fsdecode(event.src_path))):
-                    monitor.deleted_files.add(Path(os.fsdecode(event.src_path)))
-
-            def on_moved(self, event):
-                if event.is_directory:
-                    return
-
-                src_path = os.fsdecode(event.src_path)
-                dest_path = os.fsdecode(event.dest_path)
-                src_in_dir = self._is_in_directory(src_path)
-                dest_in_dir = self._is_in_directory(dest_path)
-
-                if src_in_dir and monitor._matches_pattern(src_path):
-                    monitor.deleted_files.add(Path(src_path))
-
-                if dest_in_dir and monitor._matches_pattern(dest_path):
-                    dest_path_obj = Path(dest_path)
-                    monitor.created_files.add(dest_path_obj)
-                    monitor._on_file_change(dest_path_obj)
-
-        # 启动观察者
-        self.observer = Observer()
-        self.observer.schedule(
-            DirectoryHandler(),
-            str(self.directory),
-            recursive=True
-        )
-        self.observer.start()
-
-        self._running = True
+    def close(self):
+        with self._lock:
+            self._closed = True
+            self._stop_observer()
+            self._clear()
 
     def stop(self) -> list[FileChange]:
-        """
-        停止监控并返回所有变化
+        with self._lock:
+            if not self._running:
+                return []
+            self._stop_observer()
+            return self._changes()
 
-        返回：
-            list[FileChange]: 文件变化列表
-        """
-        if not self._running:
-            return []
-
-        self._running = False
-
-        # 停止观察者
-        if self.observer is not None:
-            self.observer.stop()
-            self.observer.join()
-            self.observer = None
-
-        # 获取最终快照（监控期间动过的文件做稳定性重读，其余只读一遍）
+    def _changes(self) -> list[FileChange]:
         current_contents: dict[Path, list[str]] = self._snapshot_directory(stable_check=True)
 
         # 找出所有变化的文件
