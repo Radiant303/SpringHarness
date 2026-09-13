@@ -27,9 +27,13 @@
     yield CJKStatic("中文长文本")
 """
 
+import asyncio
 import unicodedata
+from functools import lru_cache
 from typing import ClassVar
 
+from markdown_it import MarkdownIt
+from markdown_it.token import Token as MarkdownToken
 from pygments.token import Token
 from rich.cells import chop_cells
 from textual._cells import cell_len
@@ -174,6 +178,7 @@ class DiffMarkdownFence(MarkdownFence):
     """diff 语言的代码块换用补全后的主题；其它语言走库默认逻辑。"""
 
     @classmethod
+    @lru_cache(maxsize=32)
     def highlight(cls, code: str, language: str, ansi: bool = False, dark: bool = False) -> Content:
         # 无语言标记的代码块直接纯文本：否则 highlight() 会用 pygments 猜词法器，
         # 树状图（├── └──）这类内容被猜错后，框线/中文字符全被标成 Error token 染红
@@ -191,4 +196,37 @@ class CJKMarkdown(Markdown):
         **Markdown.BLOCKS,
         "paragraph_open": CJKMarkdownParagraph,
         "fence": DiffMarkdownFence,
+        "code_block": DiffMarkdownFence,
     }
+
+    async def update_history(self, markdown: str) -> None:
+        self._theme = self.app.theme
+        parser = MarkdownIt("gfm-like") if self._parser_factory is None else self._parser_factory()
+        async with self.lock:
+            tokens = await asyncio.to_thread(parser.parse, markdown)
+            self._markdown = markdown
+            self._table_of_contents = None
+            await self.query("MarkdownBlock").remove()
+            batch: list[MarkdownBlock] = []
+            group: list[MarkdownToken] = []
+            for token in tokens:
+                if token.type in ("fence", "code_block"):
+                    await asyncio.to_thread(
+                        DiffMarkdownFence.highlight, token.content.rstrip(), token.info,
+                        ansi=self.app.native_ansi_color, dark=self.app.current_theme.dark,
+                    )
+                group.append(token)
+                if token.level == 0 and token.nesting <= 0:
+                    batch.extend(self._parse_markdown(group))
+                    group.clear()
+                if len(batch) >= 32:
+                    await self.mount_all(batch)
+                    batch.clear()
+                    painted = asyncio.Event()
+                    self.call_after_refresh(painted.set)
+                    await painted.wait()
+            if batch:
+                await self.mount_all(batch)
+            lines = markdown.splitlines()
+            self._last_parsed_line = len(lines) - (1 if lines and lines[-1] else 0)
+            self.post_message(Markdown.TableOfContentsUpdated(self, self.table_of_contents).set_sender(self))

@@ -31,8 +31,8 @@ def _args_preview(args: object) -> str:
 class ApprovalModal(ModalScreen[bool]):
     """单条工具调用的批准弹窗：y 批准这一条、n/Esc 拒绝这一条。
 
-    多条挂起调用由调用方逐个弹（Claude Code 风格：每个工具各问一次）。
-    编辑类工具可传 diff 预览（调用方用 renderer.make_diff 生成），
+    多条挂起调用由调用方逐个弹出
+    编辑类工具可传 diff 预览（调用方用 utils.diff.make_diff 生成），
     审批决策最需要看的就是改动内容，而不是被截断的 JSON 参数。
     """
 

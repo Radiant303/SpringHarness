@@ -4,13 +4,13 @@
 
     from cli_ui import CliApp
 
-    class MyBot(CliApp):
+    class MyApp(CliApp):
         async def handle_input(self, text: str) -> None:
             assistant = await self.start_assistant()
             await assistant.write_answer(f"你说的是：{text}")
             await assistant.finish()
 
-    MyBot(title="My Bot", model="K3-256k", version="0.1.0").run()
+    MyApp(title="My Bot", model="K3-256k", version="0.1.0").run()
 """
 
 from .app import AssistantHandle, CliApp, ToolCallHandle
@@ -31,18 +31,18 @@ from .widgets import (
 __all__ = [
     "ACCENT",
     "KIMI_THEME",
-    "CliApp",
     "AssistantHandle",
+    "AssistantMessage",
+    "ChatScroll",
+    "CliApp",
+    "CommandDropdown",
+    "HistoryInput",
+    "ModelSelectModal",
+    "StatusBar",
+    "SystemMessage",
     "ToolCallHandle",
+    "ToolCallMessage",
+    "UserMessage",
     "WelcomeBox",
     "WorkingLine",
-    "UserMessage",
-    "AssistantMessage",
-    "ToolCallMessage",
-    "SystemMessage",
-    "ChatScroll",
-    "StatusBar",
-    "HistoryInput",
-    "CommandDropdown",
-    "ModelSelectModal",
 ]

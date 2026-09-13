@@ -1,11 +1,15 @@
+import base64
 import datetime
 import json
 import uuid
 from datetime import timedelta, timezone
 from pathlib import Path
 
+from pydantic import ValidationError
 from pydantic_ai import ModelMessage, ModelRequest, UserPromptPart
 from pydantic_ai.messages import ModelMessagesTypeAdapter
+
+from spring_harness.core.history import HistoryDirection, HistoryPage
 
 SESSIONS_ROOT = Path.home() / ".springharness" / "sessions"
 INDEX_FILE = SESSIONS_ROOT / "session_index.jsonl"
@@ -19,6 +23,10 @@ class SessionStore:
     def __init__(self, path: Path, pending_meta: dict | None = None):
         self.path = path
         self._pending_meta = pending_meta
+
+    @property
+    def session_id(self) -> str:
+        return self.path.stem
 
     @classmethod
     def create(cls, workspace: Path) -> SessionStore:
@@ -71,23 +79,23 @@ class SessionStore:
         self._update_index(messages)
 
     def _load_segments(self) -> list[list[ModelMessage]]:
-        """按 history_rewrite 标记把文件切成段：段内是线性追加的消息；
-        尾部坏行截断，保住前面完好的部分。"""
         segments: list[list[ModelMessage]] = [[]]
-        for line in self.path.read_text(encoding="utf-8").splitlines():
-            if not line.strip():
-                continue
-            try:
-                data = json.loads(line)
-                if isinstance(data, dict):
-                    if data.get("type") == "meta":
-                        continue
-                    if data.get("type") == "history_rewrite":
-                        segments.append([])
-                        continue
-                segments[-1].extend(ModelMessagesTypeAdapter.validate_json(line))
-            except Exception:
-                break
+        with self.path.open(encoding="utf-8") as stream:
+            for line in stream:
+                line = line.lstrip()
+                if not line:
+                    continue
+                try:
+                    if line.startswith("{"):
+                        data = json.loads(line)
+                        if data.get("type") == "meta":
+                            continue
+                        if data.get("type") == "history_rewrite":
+                            segments.append([])
+                            continue
+                    segments[-1].extend(ModelMessagesTypeAdapter.validate_json(line))
+                except (json.JSONDecodeError, ValidationError):
+                    break
         return segments
 
     def load_messages(self) -> list[ModelMessage]:
@@ -116,17 +124,98 @@ class SessionStore:
         return self._dedup_segments(self._load_segments())
 
     def load_for_resume(self) -> tuple[list[ModelMessage], list[list[ModelMessage]]]:
-        """一次性解析会话文件，返回 (模型历史, 展示分段)。
-
-        resume / 切换会话路径用：load_messages + load_display_segments 会把
-        整个 JSONL 各解析一遍（pydantic 逐行校验，长会话秒级），合并成一次。
-        """
-        segments = self._load_segments()
-        return segments[-1], self._dedup_segments(segments)
+        """一次解析返回完整模型历史与去重分段。"""
+        messages, page = self.query_history()
+        return messages, page.segments
 
     def load_full(self) -> list[ModelMessage]:
-        """CLI 展示用全量历史：load_display_segments 拍平。"""
+        """返回按 rewrite/dedup 规则解析后的完整历史。"""
         return [m for seg in self.load_display_segments() for m in seg]
+
+    def _encode_cursor(self, segment_count: int, message_count: int, offset: int) -> str:
+        payload = json.dumps([1, self.session_id, segment_count, message_count, offset], separators=(",", ":"))
+        return base64.urlsafe_b64encode(payload.encode()).decode().rstrip("=")
+
+    def _decode_cursor(self, cursor: str) -> tuple[int, int, int]:
+        try:
+            payload = base64.b64decode(cursor + "=" * (-len(cursor) % 4), altchars=b"-_", validate=True)
+            data = json.loads(payload)
+        except (ValueError, UnicodeDecodeError) as e:
+            raise ValueError("invalid history cursor") from e
+        if (
+            not isinstance(data, list) or len(data) != 5
+            or type(data[0]) is not int or data[0] != 1 or data[1] != self.session_id
+            or any(type(value) is not int or value < 0 for value in data[2:])
+        ):
+            raise ValueError("invalid history cursor")
+        return data[2], data[3], data[4]
+
+    def query_history(
+        self,
+        cursor: str | None = None,
+        limit: int | None = None,
+        direction: HistoryDirection = "forward",
+    ) -> tuple[list[ModelMessage], HistoryPage]:
+        """一次解析返回当前完整模型历史与按消息数分页的历史快照。
+
+        游标编码版本、会话 ID、存储段数、原始消息数、去重后消息边界。
+        存储前缀固定快照，后续追加和 rewrite 不改变既有分页；新查询用空游标。
+        forward 包含边界后的消息，backward 包含边界前的消息，结果始终正序。
+        limit=None 返回完整当前历史，此时不接受 cursor。
+        """
+        if direction not in {"forward", "backward"}:
+            raise ValueError("invalid history direction")
+        if limit is not None and (type(limit) is not int or limit < 1):
+            raise ValueError("invalid history limit")
+        if cursor is not None and limit is None:
+            raise ValueError("history cursor requires a limit")
+        position = self._decode_cursor(cursor) if cursor is not None else None
+        raw_segments = self._load_segments() if self.path.exists() else []
+        messages = raw_segments[-1] if raw_segments else []
+        segment_count = len(raw_segments)
+        message_count = sum(map(len, raw_segments))
+        snapshot = raw_segments
+        if position is not None:
+            segment_count, message_count, _ = position
+            if segment_count > len(raw_segments):
+                raise ValueError("history cursor snapshot is out of range")
+            snapshot = raw_segments[:segment_count]
+            preceding_count = sum(map(len, snapshot[:-1]))
+            if not preceding_count <= message_count <= sum(map(len, snapshot)):
+                raise ValueError("history cursor snapshot is out of range")
+            if snapshot:
+                snapshot[-1] = snapshot[-1][:message_count - preceding_count]
+        segments = self._dedup_segments(snapshot)
+        total = sum(map(len, segments))
+        if limit is None:
+            return messages, HistoryPage(
+                segments=segments if total else [], first_segment_index=0 if total else None,
+            )
+        boundary = position[2] if position is not None else (total if direction == "backward" else 0)
+        if boundary > total:
+            raise ValueError("history cursor offset is out of range")
+        if direction == "forward":
+            start, end = boundary, min(boundary + limit, total)
+        else:
+            start, end = max(0, boundary - limit), boundary
+        selected: list[list[ModelMessage]] = []
+        first_segment_index = None
+        offset = 0
+        for index, segment in enumerate(segments):
+            segment_start = max(start - offset, 0)
+            segment_end = min(end - offset, len(segment))
+            if segment_start < segment_end or (not segment and start < offset < end):
+                if first_segment_index is None:
+                    first_segment_index = index
+                selected.append(segment[segment_start:segment_end])
+            offset += len(segment)
+        return messages, HistoryPage(
+            segments=selected,
+            first_segment_index=first_segment_index,
+            next_cursor=self._encode_cursor(segment_count, message_count, end) if end < total else None,
+            previous_cursor=self._encode_cursor(segment_count, message_count, start) if start > 0 else None,
+            has_more=end < total if direction == "forward" else start > 0,
+        )
 
     @classmethod
     def list_sessions(cls, workspace: Path) -> list[tuple[SessionStore, dict]]:

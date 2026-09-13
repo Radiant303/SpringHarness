@@ -69,7 +69,7 @@ class ImportProgressBar:
 
 
 with ImportProgressBar(total_steps=1):
-    from spring_harness.console.my_bot import MyBot
+    from spring_harness.console.console_client import ConsoleClient
     from spring_harness.core.config.settings import config
 
 def main() -> None:
@@ -77,7 +77,7 @@ def main() -> None:
     model_config = config.get_default_model_config()
     if model_config is None:
         raise SystemExit("默认模型未配置或不存在，请检查配置文件的 default_model 项")
-    MyBot(
+    ConsoleClient(
         title="Spring Harness", model=model_config.display_name,
         max_context=model_config.max_context_size,
         version="0.1.0",
@@ -89,5 +89,5 @@ def main() -> None:
 if __name__ == "__main__":
     main()
 
-# MyBot(title="Spring Harness", model="K3-256k", version="0.1.0").run(mouse=False)
+# ConsoleClient(title="Spring Harness", model="K3-256k", version="0.1.0").run(mouse=False)
 # 禁用鼠标才能实现复制 或者shift来复制 但是失去滚动功能

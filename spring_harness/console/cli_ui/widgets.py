@@ -64,12 +64,19 @@ class WelcomeBox(Vertical):
         self._session = session
 
     def compose(self) -> ComposeResult:
-        cwd = Path.cwd()
         with Vertical(classes="welcome-text"):
             yield Static(Text(f"Welcome to {self._title}!", style=f"bold {ACCENT}"))
             yield Static(Text("Send /help for help information.", style=GRAY))
+        yield Static(self._render_info(), classes="info")
+
+    def set_session(self, session: str) -> None:
+        self._session = session
+        if self.is_mounted:
+            self.query_one(".info", Static).update(self._render_info())
+
+    def _render_info(self) -> Text:
         lines: list[tuple[str, str]] = [
-            ("Directory: ", GRAY), (f"{cwd}\n", "default"),
+            ("Directory: ", GRAY), (f"{Path.cwd()}\n", "default"),
         ]
         if self._session:
             lines += [("Session:   ", GRAY), (f"{self._session}\n", "default")]
@@ -77,7 +84,7 @@ class WelcomeBox(Vertical):
             ("Model:     ", GRAY), (f"{self._model}\n", "default"),
             ("Version:   ", GRAY), (self._version, "default"),
         ]
-        yield Static(Text.assemble(*lines), classes="info")
+        return Text.assemble(*lines)
 
 
 class UserMessage(CJKStatic):
@@ -572,6 +579,9 @@ class WorkingLine(Static):
         "thinking": ("dots", "Thinking...", "The quiet mind is the calling card of deep thought."),
         "tool": ("line", "Using Tool...", "Give me a place to stand, and I will move Earth."),
         "working": ("dots", "Working...", "It always seems impossible until it is done by us."),
+        "connecting": ("dots", "Connecting to server...", "Every moment is a fresh beginning."),
+        "creating": ("dots", "Creating session...", "Every moment is a fresh beginning."),
+        "loading_sessions": ("dots", "Loading sessions...", "Every moment is a fresh beginning."),
         "restoring": ("dots", "Restoring...", "Every moment is a fresh beginning."),
         "cancelling": ("line", "Cancelling...", "At the still point of the turning world."),
     }

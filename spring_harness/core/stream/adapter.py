@@ -1,5 +1,4 @@
 import asyncio
-import difflib
 import json
 from collections.abc import AsyncIterable, Awaitable, Callable
 from typing import Any
@@ -24,9 +23,9 @@ from pydantic_ai import (
     ToolReturnPart,
 )
 
-from spring_harness.console.sink import RenderSink, ToolCallSink
 from spring_harness.core.agent.deps import CodingAgentDeps
-from spring_harness.core.log import logger
+from spring_harness.core.stream.sink import ToolCallSink, TurnSink
+from spring_harness.utils.diff import make_diff
 
 
 def _args_text(args: object) -> str:
@@ -39,51 +38,15 @@ def _args_text(args: object) -> str:
     return str(args)
 
 
-def make_diff(tool_name: str, args: object) -> str | None:
-    """编辑类工具的调用参数 → unified diff 文本；其它工具或参数不全返回 None。
-
-    diff 展示的是"打算怎么改"（来自调用参数而非执行结果），
-    所以在 args 完整的那一刻（PartEndEvent）生成，不等工具返回。
-    """
-    if isinstance(args, str):
-        try:
-            args = json.loads(args)
-        except json.JSONDecodeError:
-            return None
-    if not isinstance(args, dict):
-        return None
-    path = str(args.get("path", ""))
-    if tool_name == "edit_file":
-        old, new = args.get("old_text"), args.get("new_text")
-        if isinstance(old, str) and isinstance(new, str):
-            return "".join(difflib.unified_diff(
-                old.splitlines(keepends=True),
-                new.splitlines(keepends=True),
-                fromfile=f"a/{path}", tofile=f"b/{path}",
-            ))
-    elif tool_name == "write_file":
-        content = args.get("content")
-        if isinstance(content, str):
-            return "".join(difflib.unified_diff(
-                [], content.splitlines(keepends=True),
-                fromfile="/dev/null", tofile=f"b/{path}",
-            ))
-    elif tool_name == "edit_knowledge":
-        diff = args.get("diff")
-        if isinstance(diff, str):
-            return diff
-    return None
-
-
-class EventStreamRenderer:
-    def __init__(self, sink: RenderSink) -> None:
-        self._sink:RenderSink = sink
+class AgentEventAdapter:
+    def __init__(self, sink: TurnSink) -> None:
+        self._sink: TurnSink = sink
         self._dispatch: dict[type, Callable[[Any], Awaitable[None]]] = {
             PartStartEvent: self._on_part_start,
             PartDeltaEvent: self._on_part_delta,
             PartEndEvent: self._on_part_end,
             FunctionToolResultEvent: self._on_tool_result,
-            DeferredToolRequestsEvent:self._on_deferred_requests,
+            DeferredToolRequestsEvent: self._on_deferred_requests,
             AgentRunResultEvent: self._on_agent_result,
         }
         self._tool_by_index: dict[int, ToolCallSink] = {}
@@ -107,17 +70,16 @@ class EventStreamRenderer:
                     self._last_usage = tokens
                     await self._sink.update_context(tokens)
 
-
     async def _on_part_start(self, event: PartStartEvent) -> None:
         part = event.part
         if isinstance(part, ToolCallPart):
-            tool = await self._sink.start_tool_call(part.tool_name)
+            tool = await self._sink.start_tool_call(part.tool_name, part.tool_call_id)
             self._tool_by_index[event.index] = tool
             self._tool_by_id[part.tool_call_id] = tool
             if part.args:
                 await tool.write_args(_args_text(part.args))
         elif isinstance(part, ThinkingPart) and part.content:
-            # 第一口内容在 start 事件里，不写就吞了首 token
+            # 首口内容在 start 事件里，不写就吞了首 token
             await self._sink.write_thinking(part.content)
         elif isinstance(part, TextPart) and part.content:
             await self._sink.write_answer(part.content)
@@ -137,8 +99,7 @@ class EventStreamRenderer:
         tool = self._tool_by_index.pop(event.index, None)
         part = event.part
         if tool is not None and isinstance(part, ToolCallPart):
-            # difflib 是同步纯计算，大文件的 unified_diff 能跑几十~几百 ms，
-            # 在事件循环里跑会卡住 WorkingLine 动画（跳帧），挪到线程
+            # 大文件的 unified_diff 可能耗时几十到几百毫秒，挪线程避免阻塞事件循环
             diff = await asyncio.to_thread(make_diff, part.tool_name, part.args)
             if diff is not None:
                 await tool.show_diff(diff)
@@ -150,7 +111,6 @@ class EventStreamRenderer:
         for call_part in calls:
             tool = self._tool_by_id.get(call_part.tool_call_id)
             if tool is not None:
-                # CallDeferred 外部执行（ask_user 提问）：等的是"回答"，不是"批准"
                 await tool.show_pending("等待回答")
 
         for approvals_part in approvals:
@@ -158,14 +118,13 @@ class EventStreamRenderer:
             if tool is not None:
                 await tool.show_pending()
 
-
     async def _on_tool_result(self, event: FunctionToolResultEvent) -> None:
         part = event.part
         if not isinstance(part, ToolReturnPart | RetryPromptPart):
             return
         tool = self._tool_by_id.pop(part.tool_call_id, None)
         if tool is not None:
-            # RetryPromptPart = 工具执行/参数校验失败，框架会让模型重试；标红 ✗
+            # RetryPromptPart = 工具执行/参数校验失败，框架会让模型重试
             content = part.content
             await tool.show_result(
                 content if isinstance(content, str) else str(content),
@@ -181,12 +140,12 @@ class EventStreamRenderer:
             self._context = input_token + output_token
             await self._sink.update_context(self._context)
             try:
-                response_text = result.response.text
+                # response_text = result.response.text
+                pass
             except ValueError:
-                response_text = str(result.output)
+                pass
+                # response_text = str(result.output)
         await self._sink.finish()
 
     async def finish_with(self, result: AgentRunResult) -> None:
-        """agent.run 路径的收尾：该路径的 handler 收不到 AgentRunResultEvent，
-        由持有返回值的调用方直接喂给它。"""
         await self._on_agent_result(AgentRunResultEvent(result=result))

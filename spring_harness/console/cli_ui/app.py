@@ -1,11 +1,3 @@
-"""CliApp：开箱即用的 Claude Code 风格聊天界面基类。
-
-子类只需实现 handle_input()，在里边用 await self.start_assistant() /
-start_tool_call() / show_tool_call() / show_system() 输出内容；界面、
-主题、历史、下拉框、/model 弹窗、状态栏全部内置。
-"""
-
-
 import asyncio
 import time
 from typing import ClassVar, cast
@@ -27,6 +19,7 @@ from textual.worker import (
     get_current_worker,
 )
 
+from .cjk_wrap import CJKMarkdown
 from .inputs import CommandDropdown, HistoryInput
 from .modal import ApprovalModal, QuestionModal
 from .theme import KIMI_THEME
@@ -168,15 +161,10 @@ class AssistantHandle:
         self._answer_pacer.write(text)
 
     async def set_answer_full(self, text: str) -> None:
-        """一次性写入完整回答（重放历史用）。
-
-        重放不是流：走 LinePacer/MarkdownStream 的流式节奏只会逐行拖慢。
-        Markdown.update 的解析在线程池里跑，不占事件循环。
-        """
         if self._finished or self._check_cancelled():
             return
         self._message.query_one(".answer-row").remove_class("stream-pending")
-        await self._message.query_one("#answer-md", Markdown).update(text)
+        await self._message.query_one("#answer-md", CJKMarkdown).update_history(text)
 
     async def finish(self) -> None:
         """收尾：thinking 折叠成一行摘要（全文占屏），关掉 Markdown 流。重复调用安全。"""
@@ -241,18 +229,8 @@ class ToolCallHandle:
 
 
 class CliApp(App[None]):
-    """Claude Code / Kimi Code 风格的终端聊天 App 基类。
+    """终端聊天 App 基类。"""
 
-    用法::
-
-        class MyBot(CliApp):
-            async def handle_input(self, text: str) -> None:
-                assistant = await self.start_assistant()
-                await assistant.write_answer(f"你说的是：{text}")
-                await assistant.finish()
-
-        MyBot(title="My Bot", model="K3-256k", version="0.1.0").run()
-    """
 
     CSS = """
     App {
@@ -330,8 +308,6 @@ class CliApp(App[None]):
         self._active_tool_calls: list[ToolCallMessage] = []  # 运行中的工具调用，中断时收尾用
         self._plan_widget: PlanMessage | None = None
         self._teach_widget: TeachingMessage | None = None
-        # 聊天滚动区实例引用（compose 里挂上）。用实例属性而不是 #id 查询，
-        # 是为了 _rebuild_chat 的双缓冲：旧容器摘除前新容器必须已生效
         self._chat_scroll: ChatScroll | None = None
         if theme is not None:
             self.register_theme(theme)
@@ -380,17 +356,9 @@ class CliApp(App[None]):
         await self._prune_history()
         self._scroll.anchor()
 
-    MAX_RENDERED_ROUNDS: ClassVar[int] = 10  # 聊天区最多保留渲染的交互轮数（人问 → 模型答完）
+    MAX_RENDERED_ROUNDS: ClassVar[int] = 10
 
     async def _prune_history(self) -> None:
-        """只保留最近 MAX_RENDERED_ROUNDS 轮交互，更早的整块从渲染树移除。
-
-        一轮 = 一条 UserMessage 起到下一条 UserMessage 之前（中间的工具调用、
-        计划、系统消息随轮一起裁掉）；WelcomeBox 不属于任何一轮，始终保留。
-        Textual 没有终端 scrollback，历史 widget 会永远挂在渲染树里——
-        裁剪让布局遍历和内存与会话长度解耦。已被裁掉的计划/教学面板靠
-        show_plan/show_teaching 的 is_attached 检查自然失效，无需特判。
-        """
         children = list(self._scroll.children)
         rounds = [i for i, c in enumerate(children) if isinstance(c, UserMessage)]
         if len(rounds) <= self.MAX_RENDERED_ROUNDS:
@@ -398,7 +366,11 @@ class CliApp(App[None]):
         boundary = rounds[-self.MAX_RENDERED_ROUNDS]
         stale = [c for c in children[:boundary] if not isinstance(c, WelcomeBox)]
         for widget in stale:
-            await widget.remove()
+            widget.visible = False
+            for descendant in widget.query("*"):
+                descendant.visible = False
+        self._scroll.screen.clear_selection()
+        await self._scroll.remove_children(stale)
 
     async def start_assistant(self) -> AssistantHandle:
         """开一条新的 AI 消息，返回写入句柄。"""
@@ -481,7 +453,7 @@ class CliApp(App[None]):
     async def ask_approval(self, call: ToolCallPart, diff: str | None = None) -> bool:
         """弹窗询问是否批准这一条工具调用：True 批准 / False 拒绝。多条挂起逐条问。
 
-        diff：编辑类工具的改动预览（调用方用 renderer.make_diff 生成），随参数一起展示。
+        diff：编辑类工具的改动预览（调用方用 utils.diff.make_diff 生成），随参数一起展示。
         """
         return await self.push_screen_wait(ApprovalModal(call, diff=diff))
 
@@ -522,6 +494,8 @@ class CliApp(App[None]):
         self.query_one("#command-dropdown", CommandDropdown).filter(input_widget.text)
 
     async def on_history_input_submitted(self, event: HistoryInput.Submitted) -> None:
+        if event.input.disabled:
+            return
         display_text = event.value.strip()
         if not display_text:
             return
@@ -534,8 +508,7 @@ class CliApp(App[None]):
         full_text = input_widget.expand_pastes(display_text)
 
         if display_text.startswith("/"):
-            await self.handle_command(display_text[1:])
-            self._scroll.anchor()
+            self.run_worker(self._run_handle_command(display_text[1:]))
             return
 
         await self._scroll.mount(UserMessage(full_text))
@@ -543,11 +516,20 @@ class CliApp(App[None]):
         self._scroll.anchor()
         self.run_worker(self._run_handle_input(full_text))
 
+    async def _run_handle_command(self, command: str) -> None:
+        try:
+            await self.handle_command(command)
+        except Exception as e:  # noqa: BLE001
+            await self.show_system(f"❌ {type(e).__name__}: {e}")
+        finally:
+            if self.is_running:
+                self._scroll.anchor()
+
     async def _run_handle_input(self, text: str) -> None:
         """在 worker 里跑用户代码；结束时给没收尾的 assistant 兜底 finish。"""
         try:
             await self.handle_input(text)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 一次运行失败不应拖垮整个 TUI
             # 一次运行失败（如工具重试超限 UnexpectedModelBehavior）不应拖垮整个 TUI，
             # 降级为聊天区的一条系统消息
             await self.show_system(f"❌ {type(e).__name__}: {e}")

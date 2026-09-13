@@ -12,14 +12,14 @@ from pydantic_ai import (
 )
 from pydantic_ai.tools import DeferredToolApprovalResult, DeferredToolRequests
 
-from spring_harness.console.renderer import EventStreamRenderer
 from spring_harness.core.agent.deps import CodingAgentDeps
+from spring_harness.core.stream.adapter import AgentEventAdapter
 
 
 async def run_with_approval(
     agent: Agent[Any, Any],
     prompt: str,
-    renderer: EventStreamRenderer,
+    adapter: AgentEventAdapter,
     ask: Callable[[ToolCallPart], Awaitable[bool]],
     ask_question: Callable[[dict[str, Any]], Awaitable[str | None]],
     deps: CodingAgentDeps,
@@ -29,7 +29,7 @@ async def run_with_approval(
     result = await agent.run(
         prompt,
         deps=deps,
-        event_stream_handler=renderer,
+        event_stream_handler=adapter,
         message_history=message_history,
         cancellation_token=cancellation_token,
     )
@@ -55,9 +55,9 @@ async def run_with_approval(
             deps=deps,
             message_history=result.all_messages(),
             deferred_tool_results=results,
-            event_stream_handler=renderer,
+            event_stream_handler=adapter,
             cancellation_token=cancellation_token,
         )
 
-    await renderer.finish_with(result)
+    await adapter.finish_with(result)
     return result

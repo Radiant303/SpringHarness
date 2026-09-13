@@ -41,4 +41,5 @@ packages = ["spring_harness"]
 [project.scripts]
 springacp = "spring_harness.entrypoints.acp:main"
 springcli = "spring_harness.entrypoints.cli:main"
+springserver = "spring_harness.entrypoints.server:main"
 springweb = "spring_harness.entrypoints.web:main"

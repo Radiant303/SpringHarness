@@ -36,9 +36,10 @@ class CliSink:
         handle = await self._ensure_assistant("answer")
         await  handle.write_answer(text)
 
-    async def start_tool_call(self, name: str) -> ToolCallHandle:
+    async def start_tool_call(self, name: str, tool_call_id: str) -> ToolCallHandle:
+        # tool_call_id 这里用不上：translator 自己按 id 维护关联表，本类只负责挂组件
         self._app.set_working("tool")
-        _handle = await self._close_ensure_assistant()
+        await self._close_ensure_assistant()
         return await self._app.start_tool_call(name)
 
     async def finish(self):
