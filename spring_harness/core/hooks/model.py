@@ -7,6 +7,7 @@ from pydantic_ai import (
     ModelRequestContext,
     ModelResponse,
     RunContext,
+    UserPromptPart,
 )
 from pydantic_ai.capabilities import Hooks
 
@@ -24,17 +25,30 @@ async def start_monitor(
     return result
 
 
+FILE_MONITOR_SOURCE = "file_monitor"
+
+
+def is_file_monitor_message(message: object) -> bool:
+    """判断一条消息是否是由 file_monitor 自动注入的文件变动通知。"""
+    metadata = getattr(message, "metadata", None)
+    return isinstance(metadata, dict) and metadata.get("source") == FILE_MONITOR_SOURCE
+
+
 @hooks.on.before_model_request
 async def stop_monitor(
     ctx: RunContext[CodingAgentDeps],
     request_context: ModelRequestContext
 ) -> ModelRequestContext:
-    ctx.deps.last_messages = list(request_context.messages)
-
     changes = await asyncio.to_thread(ctx.deps.monitor.stop)
     changes_text = ctx.deps.monitor.changes_to_string(changes)
     if changes_text is not None:
-        request_context.messages.append(ModelRequest.user_text_prompt(changes_text))
+        request_context.messages.append(
+            ModelRequest(
+                parts=[UserPromptPart(changes_text)],
+                metadata={"source": FILE_MONITOR_SOURCE},
+            )
+        )
+    ctx.deps.last_messages = list(request_context.messages)
     return request_context
 
 @hooks.on.after_model_request

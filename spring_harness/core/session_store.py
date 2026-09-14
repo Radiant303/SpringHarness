@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import base64
 import datetime
 import json
@@ -10,6 +12,8 @@ from pydantic_ai import ModelMessage, ModelRequest, UserPromptPart
 from pydantic_ai.messages import ModelMessagesTypeAdapter
 
 from spring_harness.core.history import HistoryDirection, HistoryPage
+from spring_harness.core.hooks.model import is_file_monitor_message
+from spring_harness.core.log import logger
 
 SESSIONS_ROOT = Path.home() / ".springharness" / "sessions"
 INDEX_FILE = SESSIONS_ROOT / "session_index.jsonl"
@@ -80,22 +84,57 @@ class SessionStore:
 
     def _load_segments(self) -> list[list[ModelMessage]]:
         segments: list[list[ModelMessage]] = [[]]
-        with self.path.open(encoding="utf-8") as stream:
-            for line in stream:
-                line = line.lstrip()
-                if not line:
-                    continue
-                try:
-                    if line.startswith("{"):
-                        data = json.loads(line)
-                        if data.get("type") == "meta":
+        try:
+            with self.path.open(encoding="utf-8-sig", errors="replace") as stream:
+                for line_no, line in enumerate(stream, start=1):
+                    line = line.lstrip("\ufeff \t\r\n")
+                    if not line:
+                        continue
+                    try:
+                        # 明确区分字典行（元数据 / 控制标记）与数组行（ModelMessage 列表）
+                        if line.startswith("{"):
+                            data = json.loads(line)
+                            msg_type = data.get("type")
+                            if msg_type == "meta":
+                                continue
+                            if msg_type == "history_rewrite":
+                                segments.append([])
+                                continue
+                            logger.warning(
+                                "会话文件 [%s:%d] 忽略未知类型的控制行 (type=%r)",
+                                self.path.name,
+                                line_no,
+                                msg_type,
+                            )
                             continue
-                        if data.get("type") == "history_rewrite":
-                            segments.append([])
-                            continue
-                    segments[-1].extend(ModelMessagesTypeAdapter.validate_json(line))
-                except (json.JSONDecodeError, ValidationError):
-                    break
+
+                        if line.startswith("["):
+                            segments[-1].extend(ModelMessagesTypeAdapter.validate_json(line))
+                        else:
+                            logger.warning(
+                                "会话文件 [%s:%d] 非预期格式行（未以 { 或 [ 开头），跳过该行",
+                                self.path.name,
+                                line_no,
+                            )
+                    except (json.JSONDecodeError, ValidationError) as e:
+                        logger.warning(
+                            "会话文件 [%s:%d] 消息解析异常 (%s)，跳过该行: %s",
+                            self.path.name,
+                            line_no,
+                            type(e).__name__,
+                            e,
+                        )
+                        continue
+                    except Exception as e:  # noqa: BLE001
+                        logger.warning(
+                            "会话文件 [%s:%d] 处理行发生未预期错误，跳过该行: %s",
+                            self.path.name,
+                            line_no,
+                            e,
+                        )
+                        continue
+        except OSError as e:
+            logger.warning("会话文件 [%s] 打开/读取失败: %s", self.path.name, e)
         return segments
 
     def load_messages(self) -> list[ModelMessage]:
@@ -274,8 +313,8 @@ class SessionStore:
     def _read_meta(path: Path) -> dict | None:
         """读 session 文件首行 meta；首行不是 meta 对象（残缺/畸形文件）返回 None。"""
         try:
-            with path.open(encoding="utf-8") as f:
-                first = f.readline()
+            with path.open(encoding="utf-8-sig", errors="replace") as f:
+                first = f.readline().lstrip("\ufeff \t\r\n")
             meta = json.loads(first)
         except (json.JSONDecodeError, OSError):
             return None
@@ -287,6 +326,8 @@ class SessionStore:
 def _first_user_text(messages: list[ModelMessage], limit: int = 30) -> str | None:
     """第一条用户消息的截断文本；没有用户消息返回 None。"""
     for msg in messages:
+        if is_file_monitor_message(msg):
+            continue
         if isinstance(msg, ModelRequest):
             for part in msg.parts:
                 if isinstance(part, UserPromptPart) and isinstance(part.content, str):

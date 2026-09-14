@@ -37,6 +37,7 @@ from spring_harness.console.cli_ui.widgets import (
 )
 from spring_harness.core.config.settings import config
 from spring_harness.core.history import HistoryPage
+from spring_harness.core.hooks.model import is_file_monitor_message
 from spring_harness.core.rpc.client import AppClient
 from spring_harness.core.rpc.connection import JsonRpcError
 from spring_harness.core.rpc.schema import (
@@ -188,7 +189,7 @@ class ConsoleClient(CliApp):
                     messages = page.segments[offset]
                     for index in reversed(range(len(messages))):
                         message = messages[index]
-                        if not isinstance(message, ModelRequest):
+                        if not isinstance(message, ModelRequest) or is_file_monitor_message(message):
                             continue
                         for part_index in reversed(range(len(message.parts))):
                             part = message.parts[part_index]
@@ -386,6 +387,7 @@ class ConsoleClient(CliApp):
                 self.set_working("connecting")
                 await self._client.attach(session_id, model=self._model_id)
                 self._sync_session_id(session_id)
+                await self._clear_chat()
                 await self._restore_session()
                 await self.show_system("已切换会话")
             self._initialized = True
@@ -557,15 +559,16 @@ class ConsoleClient(CliApp):
                     if generation != self._history_generation:
                         raise asyncio.CancelledError
                     if isinstance(message, ModelRequest):
+                        is_file_monitor = is_file_monitor_message(message)
                         for part in message.parts:
                             if isinstance(part, UserPromptPart) and isinstance(part.content, str):
-                                await mount(UserMessage(part.content))
+                                await mount(UserMessage(part.content, is_file_monitor=is_file_monitor))
                             elif isinstance(part, ToolReturnPart | RetryPromptPart):
                                 await tool(part)
                     elif isinstance(message, ModelResponse):
                         text = "".join(part.content for part in message.parts if isinstance(part, TextPart))
                         if text:
-                            widget = AssistantMessage()
+                            widget = AssistantMessage(answer=text)
                             await mount(widget)
                             handle = AssistantHandle(widget)
                             await handle.set_answer_full(text)

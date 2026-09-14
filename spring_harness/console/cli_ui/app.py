@@ -154,6 +154,7 @@ class AssistantHandle:
         """累加 Markdown 回答（可多次调用）。首个 chunk 到达前整行隐藏。"""
         if self._finished or self._check_cancelled():
             return
+        self._message._answer += text
         if self._answer_stream is None:
             self._answer_stream = Markdown.get_stream(
                 self._message.query_one("#answer-md", Markdown)
@@ -163,6 +164,7 @@ class AssistantHandle:
     async def set_answer_full(self, text: str) -> None:
         if self._finished or self._check_cancelled():
             return
+        self._message._answer = text
         self._message.query_one(".answer-row").remove_class("stream-pending")
         await self._message.query_one("#answer-md", CJKMarkdown).update_history(text)
 
@@ -179,8 +181,10 @@ class AssistantHandle:
 
         if self._thinking and self._thinking_start is not None:
             elapsed = time.monotonic() - self._thinking_start
+            summary = f"Thought for {elapsed:.1f}s"
+            self._message._thinking = summary
             self._message.query_one("#thinking-content", Static).update(
-                Text(f"Thought for {elapsed:.1f}s")
+                Text(summary)
             )
         if self._answer_stream is not None:
             await self._answer_stream.stop()
@@ -360,7 +364,10 @@ class CliApp(App[None]):
 
     async def _prune_history(self) -> None:
         children = list(self._scroll.children)
-        rounds = [i for i, c in enumerate(children) if isinstance(c, UserMessage)]
+        rounds = [
+            i for i, c in enumerate(children)
+            if isinstance(c, UserMessage) and not c.is_file_monitor
+        ]
         if len(rounds) <= self.MAX_RENDERED_ROUNDS:
             return
         boundary = rounds[-self.MAX_RENDERED_ROUNDS]

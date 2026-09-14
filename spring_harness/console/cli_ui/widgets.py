@@ -98,7 +98,10 @@ class UserMessage(CJKStatic):
     }
     """
 
-    def __init__(self, text: str, **kwargs: Any) -> None:
+    is_file_monitor: bool = False
+
+    def __init__(self, text: str, *, is_file_monitor: bool = False, **kwargs: Any) -> None:
+        self.is_file_monitor = is_file_monitor
         content = Text.assemble(
             ("✨ ", "bold yellow"),
             (text, "bold #FFCB6B"),
@@ -157,13 +160,25 @@ class AssistantMessage(Vertical):
     }
     """
 
+    def __init__(
+        self,
+        answer: str = "",
+        thinking: str = "",
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(**kwargs)
+        self._answer = answer
+        self._thinking = thinking
+
     def compose(self) -> ComposeResult:
-        with HorizontalGroup(classes="thinking-row stream-pending"):
+        thinking_classes = "thinking-row" + ("" if self._thinking else " stream-pending")
+        with HorizontalGroup(classes=thinking_classes):
             yield Static("●", classes="thinking-bullet")
-            yield CJKStatic(id="thinking-content")
-        with HorizontalGroup(classes="answer-row stream-pending"):
+            yield CJKStatic(self._thinking, id="thinking-content")
+        answer_classes = "answer-row" + ("" if self._answer else " stream-pending")
+        with HorizontalGroup(classes=answer_classes):
             yield Static("●", classes="assistant-bullet")
-            yield CJKMarkdown(id="answer-md")
+            yield CJKMarkdown(self._answer or None, id="answer-md")
 
 
 class PlanMessage(Vertical):
