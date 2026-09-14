@@ -1,4 +1,3 @@
-import difflib
 import fnmatch
 import os
 import time
@@ -24,9 +23,6 @@ class FileChange:
     """文件变化的数据结构"""
     filepath: Path
     status: FileStatus
-    old_content: list[str]
-    new_content: list[str]
-    diff: list[str]  # 差异内容
 
     def get_relative_path(self, base_dir: Path) -> Path:
         """获取相对路径"""
@@ -231,7 +227,8 @@ class DirectoryMonitor:
         if not self._matches_pattern(filepath):
             return
 
-        self.changed_files.add(filepath)
+        with self._lock:
+            self.changed_files.add(filepath)
 
     def _matches_pattern(self, filepath):
         """检查文件是否匹配模式且不在排除范围内"""
@@ -240,21 +237,6 @@ class DirectoryMonitor:
         if self.file_pattern == "*":
             return True
         return fnmatch.fnmatch(Path(filepath).name, self.file_pattern)
-
-    def _generate_diff(self, old_content, new_content):
-        """生成文件差异"""
-        if old_content is None:
-            old_content = []
-        if new_content is None:
-            new_content = []
-
-        return list(difflib.unified_diff(
-            old_content,
-            new_content,
-            fromfile="旧",
-            tofile="新",
-            n=3
-        ))
 
     def start(self):
         with self._lock:
@@ -269,7 +251,6 @@ class DirectoryMonitor:
 
     def _start(self):
         self._load_gitignore()
-        self.old_contents = self._snapshot_directory()
         self.changed_files.clear()
         self.created_files.clear()
         self.deleted_files.clear()
@@ -283,24 +264,27 @@ class DirectoryMonitor:
             def on_created(self, event):
                 path = Path(os.fsdecode(event.src_path))
                 if not event.is_directory and monitor._running and monitor._matches_pattern(path):
-                    monitor.created_files.add(path)
-                    monitor.changed_files.add(path)
+                    with monitor._lock:
+                        monitor.created_files.add(path)
+                        monitor.changed_files.add(path)
 
             def on_deleted(self, event):
                 path = Path(os.fsdecode(event.src_path))
                 if not event.is_directory and monitor._running and monitor._matches_pattern(path):
-                    monitor.deleted_files.add(path)
+                    with monitor._lock:
+                        monitor.deleted_files.add(path)
 
             def on_moved(self, event):
                 if event.is_directory or not monitor._running:
                     return
                 src = Path(os.fsdecode(event.src_path))
                 dest = Path(os.fsdecode(event.dest_path))
-                if monitor._matches_pattern(src):
-                    monitor.deleted_files.add(src)
-                if monitor._matches_pattern(dest):
-                    monitor.created_files.add(dest)
-                    monitor.changed_files.add(dest)
+                with monitor._lock:
+                    if monitor._matches_pattern(src):
+                        monitor.deleted_files.add(src)
+                    if monitor._matches_pattern(dest):
+                        monitor.created_files.add(dest)
+                        monitor.changed_files.add(dest)
 
         self.observer = Observer()
         self.observer.schedule(DirectoryHandler(), str(self.directory), recursive=True)
@@ -328,95 +312,48 @@ class DirectoryMonitor:
             self._clear()
 
     def stop(self) -> list[FileChange]:
+        # 允许操作系统内核与 watchdog 线程将缓冲区中的最后事件排空
+        time.sleep(0.05)
         with self._lock:
             if not self._running:
                 return []
             self._stop_observer()
-            return self._changes()
+            changes = self._changes()
+            self._clear()
+            return changes
 
     def _changes(self) -> list[FileChange]:
-        current_contents: dict[Path, list[str]] = self._snapshot_directory(stable_check=True)
-
-        # 找出所有变化的文件
-        all_files = set(self.old_contents.keys()) | set(current_contents.keys())
-        all_files.update(self.created_files)
-        all_files.update(self.deleted_files)
-
-        # 收集所有变化
         changes = []
+        all_candidates = sorted(self.changed_files | self.created_files | self.deleted_files)
 
-        for filepath in sorted(all_files):
-            old_content = self.old_contents.get(filepath)
-            new_content = current_contents.get(filepath)
+        for filepath in all_candidates:
+            exists = filepath.exists()
+            was_created = filepath in self.created_files
+            was_deleted = filepath in self.deleted_files
 
-            if old_content is None and new_content is not None:
-                # 新创建的文件
-                diff = self._generate_diff([], new_content)
-                change = FileChange(
-                    filepath=filepath,
-                    status=FileStatus.CREATED,
-                    old_content=[],
-                    new_content=new_content,
-                    diff=diff
-                )
-                changes.append(change)
-
-            elif old_content is not None and new_content is None:
-                # 被删除的文件
-                diff = self._generate_diff(old_content, [])
-                change = FileChange(
-                    filepath=filepath,
-                    status=FileStatus.DELETED,
-                    old_content=old_content,
-                    new_content=[],
-                    diff=diff
-                )
-                changes.append(change)
-
-            elif (old_content is not None
-                  and new_content is not None
-                  and old_content != new_content):
-                # 修改的文件
-                diff = self._generate_diff(old_content, new_content)
-                change = FileChange(
-                    filepath=filepath,
-                    status=FileStatus.MODIFIED,
-                    old_content=old_content,
-                    new_content=new_content,
-                    diff=diff
-                )
-                changes.append(change)
+            if exists:
+                if was_created and not was_deleted:
+                    changes.append(FileChange(filepath=filepath, status=FileStatus.CREATED))
+                else:
+                    changes.append(FileChange(filepath=filepath, status=FileStatus.MODIFIED))
+            else:
+                if not was_created and was_deleted:
+                    changes.append(FileChange(filepath=filepath, status=FileStatus.DELETED))
 
         return changes
 
     def changes_to_string(self, changes: list[FileChange]) -> str | None:
         """将文件变化格式化为适合发送给大模型的文本。
 
-        输出包含变化摘要、相对路径、状态和 unified diff。相对路径可避免
-        将本机绝对路径传给大模型；没有变化时返回 `None`。
+        输出包含变化摘要、相对路径及变化状态（新建/修改/删除），不再包含具体的 diff 内容。
+        相对路径可避免将本机绝对路径传给大模型；没有变化时返回 `None`。
         """
         if not changes:
             return None
 
-        sections = [f"检测到 {len(changes)} 个文件变化："]
-        for index, change in enumerate(changes, start=1):
+        lines = [f"检测到 {len(changes)} 个文件变化："]
+        for change in changes:
             relative_path = change.get_relative_path(self.directory)
-            diff = "".join(change.diff).rstrip("\n")
-            if not diff:
-                diff = "（无差异内容）"
+            lines.append(f"- [{change.status.value}] {relative_path}")
 
-            sections.append(
-                "\n".join(
-                    [
-                        f"\n文件 {index}",
-                        f"路径: {relative_path}",
-                        f"状态: {change.status.name} ({change.status.value})",
-                        "差异:",
-                        "```diff",
-                        diff,
-                        "```",
-                    ]
-                )
-            )
-
-        return "\n".join(sections)
+        return "\n".join(lines)
