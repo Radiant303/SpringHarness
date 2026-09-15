@@ -24,6 +24,7 @@ from textual.widgets import Static
 
 from .cjk_wrap import CJKMarkdown, CJKStatic, DiffHighlightTheme
 from .theme import ACCENT, GRAY
+from .thin_scrollbar import ThinScrollBarRender
 
 
 class WelcomeBox(Vertical):
@@ -737,14 +738,28 @@ class ChatScroll(VerticalScroll):
     第一次发消息后，上面的内容整体往下挪、顶部空出一片。
     这里把负的滚动值挡回去即可。
 
-    滚动条隐藏（scrollbar-size: 0）：吸底场景不需要它，省两列空间。
+    滚动条换成极细版（ThinScrollBarRender）：库默认竖条是 2 列宽的实心块，
+    这里压成 1 列 + 1/8 块字形，轨道透明、hover 提亮，只留一条线。
     """
 
     DEFAULT_CSS = """
     ChatScroll {
-        scrollbar-size: 0 0;
+        scrollbar-size: 0 1;                 /* 注意顺序是 (横向, 纵向)：横向 0、竖 1 列 */
+        scrollbar-gutter: stable;            /* 常留 1 列，避免内容宽度抖动 */
+        scrollbar-background: ansi_default;  /* 轨道不填色 */
+        scrollbar-color: ansi_bright_black;  /* 细线：深灰 */
+        scrollbar-color-hover: ansi_white;   /* 鼠标移上去提亮 */
+        scrollbar-color-active: ansi_white;
+        scrollbar-background-hover: ansi_default;
+        scrollbar-background-active: ansi_default;
     }
     """
+
+    def on_mount(self) -> None:
+        # 基类（VerticalScroll → ScrollableContainer）没有 on_mount，不用 super()；
+        # 放 mount 而不是 __init__，是为了等 CSS 应用完再取 scrollbar。
+        # renderer 是 ClassVar，实例级赋值只影响这一条滚动条（输入框不受影响）。
+        self.vertical_scrollbar.renderer = ThinScrollBarRender
 
     def set_reactive(self, reactive: Reactive[ReactiveType], value: ReactiveType) -> None:
         if (
