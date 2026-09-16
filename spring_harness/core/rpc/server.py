@@ -201,7 +201,7 @@ class AppServer:
 
     async def _turn_start(self, p: TurnStartParams) -> None:
         session = self._require(p.session_id)
-        if session.busy:
+        if session.busy and not session.wake_turn_active:
             raise JsonRpcError(BUSY, "上一轮还没结束")
         if self._shutting_down:
             raise RuntimeError("服务器正在关闭")

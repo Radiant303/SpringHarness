@@ -12,7 +12,7 @@ from pydantic_ai import ModelMessage, ModelRequest, UserPromptPart
 from pydantic_ai.messages import ModelMessagesTypeAdapter
 
 from spring_harness.core.history import HistoryDirection, HistoryPage
-from spring_harness.core.hooks.model import is_file_monitor_message
+from spring_harness.core.hooks.model import is_auto_injected_message
 from spring_harness.core.log import logger
 
 SESSIONS_ROOT = Path.home() / ".springharness" / "sessions"
@@ -326,7 +326,7 @@ class SessionStore:
 def _first_user_text(messages: list[ModelMessage], limit: int = 30) -> str | None:
     """第一条用户消息的截断文本；没有用户消息返回 None。"""
     for msg in messages:
-        if is_file_monitor_message(msg):
+        if is_auto_injected_message(msg):
             continue
         if isinstance(msg, ModelRequest):
             for part in msg.parts:
