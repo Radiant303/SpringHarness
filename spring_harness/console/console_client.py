@@ -68,6 +68,27 @@ from spring_harness.core.stream.events import (
 )
 from spring_harness.core.stream.sink import ToolCallSink
 
+_THINKING_PREVIEW_LINES: int = 2  # 恢复会话时思考内容展开的行数上限（对齐 kimicode THINKING_PREVIEW_LINES）
+
+
+def _thinking_preview(thinking: str) -> str:
+    """恢复会话用的思考预览：首 2 行 + 剩余行数提示（对齐 kimicode 的 finalized 形态）。
+
+    行数之外再按字符兜底：无换行的超长单行也要截断（同 ToolCallMessage 结果行）。
+    尾部补换行：answer-row 没有上间距，与回答行之间留出空行。
+    """
+    lines = thinking.rstrip().splitlines()
+    hidden = len(lines) - _THINKING_PREVIEW_LINES
+    if hidden > 0:
+        lines = lines[:_THINKING_PREVIEW_LINES] + [f"… (还有 {hidden} 行)"]
+    lines = [
+        line[: ToolCallMessage.MAX_LINE_CHARS] + f" … (省略 {len(line) - ToolCallMessage.MAX_LINE_CHARS} 字符)"
+        if len(line) > ToolCallMessage.MAX_LINE_CHARS
+        else line
+        for line in lines
+    ]
+    return "\n".join(lines) + "\n" if lines else ""
+
 
 class ConsoleClient(CliApp):
     HISTORY_PAGE_SIZE: ClassVar[int] = 20
@@ -631,13 +652,12 @@ class ConsoleClient(CliApp):
                                 await tool(part)
                     elif isinstance(message, ModelResponse):
                         text = "".join(part.content for part in message.parts if isinstance(part, TextPart))
-                        has_thinking = any(isinstance(part, ThinkingPart) for part in message.parts)
-                        if text or has_thinking:
-                            # 思考内容对齐实时轮 finish() 后的收起态：只显示一行摘要；
-                            # 历史里没有计时数据，不模拟 "Thought for Xs"
-                            widget = AssistantMessage(
-                                answer=text, thinking="Thought" if has_thinking else "",
-                            )
+                        thinking = "".join(
+                            part.content for part in message.parts if isinstance(part, ThinkingPart)
+                        )
+                        if text or thinking:
+                            # 思考内容展开为首 2 行预览（对齐 kimicode），控制恢复渲染规模
+                            widget = AssistantMessage(answer=text, thinking=_thinking_preview(thinking))
                             await mount(widget)
                             handle = AssistantHandle(widget)
                             if text:
