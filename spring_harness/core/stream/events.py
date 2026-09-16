@@ -57,21 +57,6 @@ class TurnFinished(BaseModel):
     kind: Literal["turn_finished"] = "turn_finished"
     cancelled: bool = False
     error: str | None = None
-    wake: bool = False  # True = 后台任务催醒轮（前端可据此区分系统轮次）
-
-class BackgroundTaskStarted(BaseModel):
-    kind: Literal["background_task_started"] = "background_task_started"
-    task_id: str
-    tool_name: str
-    args: dict
-
-class BackgroundTaskFinished(BaseModel):
-    kind: Literal["background_task_finished"] = "background_task_finished"
-    task_id: str
-    tool_name: str
-    result: str
-    is_error: bool = False
-    cancelled: bool = False
 
 class ApprovalRequest(BaseModel):
     kind: Literal["approval_request"] = "approval_request"
@@ -89,4 +74,4 @@ class QuestionRequest(BaseModel):
     allow_custom: bool = True
 
 
-ServerEvent = TextDelta | ThinkingDelta | ToolCallStarted | ToolArgsDelta | ToolDiff | ToolPending | ToolFinished | UsageUpdated | PlanUpdated | TeachingUpdated | CompactionNotice | TurnFinished | ApprovalRequest | QuestionRequest | BackgroundTaskStarted | BackgroundTaskFinished
+ServerEvent = TextDelta | ThinkingDelta | ToolCallStarted | ToolArgsDelta | ToolDiff | ToolPending | ToolFinished | UsageUpdated | PlanUpdated | TeachingUpdated | CompactionNotice | TurnFinished | ApprovalRequest | QuestionRequest

@@ -175,7 +175,7 @@ class AssistantMessage(Vertical):
         thinking_classes = "thinking-row" + ("" if self._thinking else " stream-pending")
         with HorizontalGroup(classes=thinking_classes):
             yield Static("●", classes="thinking-bullet")
-            yield CJKStatic(Text(self._thinking), id="thinking-content")
+            yield CJKStatic(self._thinking, id="thinking-content")
         answer_classes = "answer-row" + ("" if self._answer else " stream-pending")
         with HorizontalGroup(classes=answer_classes):
             yield Static("●", classes="assistant-bullet")
@@ -455,14 +455,7 @@ class ToolCallMessage(Vertical):
     }
     """
 
-    def __init__(
-        self,
-        name: str,
-        args: str = "",
-        result: str | None = None,
-        collapsed: bool = False,
-        **kwargs: Any,
-    ) -> None:
+    def __init__(self, name: str, args: str = "", result: str | None = None, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self._name = name
         self._args = args
@@ -470,13 +463,12 @@ class ToolCallMessage(Vertical):
         self._diff: str | None = None
         # 静态用法（构造即带 result）直接是完成态
         self._status = "running" if result is None else "ok"
-        self._collapsed = collapsed
+        self._collapsed = False
 
     def compose(self) -> ComposeResult:
         yield CJKStatic(self._render_head(), classes="tool-head")
         if self._result:
-            rendered = self._render_summary() if self._collapsed else self._render_result()
-            yield CJKStatic(rendered, classes="tool-result")
+            yield CJKStatic(self._render_result(), classes="tool-result")
 
     def _render_head(self) -> Text:
         args = self._args
@@ -554,12 +546,7 @@ class ToolCallMessage(Vertical):
         if not self._result or self._collapsed:
             return
         self._collapsed = True
-        if self.query(".tool-result"):
-            self.query_one(".tool-result", CJKStatic).update(self._render_summary())
-
-    def _render_summary(self) -> Text:
-        """结果的一行摘要：首行 + 行数/字符数注记。"""
-        lines = (self._result or "").splitlines()
+        lines = self._result.splitlines()
         first = lines[0] if lines else ""
         summary = first[: self.MAX_LINE_CHARS]
         notes = []
@@ -569,7 +556,8 @@ class ToolCallMessage(Vertical):
             notes.append(f"共 {len(first)} 字符")
         if notes:
             summary += "  … (" + ", ".join(notes) + ")"
-        return Text(summary)
+        if self.query(".tool-result"):
+            self.query_one(".tool-result", CJKStatic).update(Text(summary))
 
     async def set_diff(self, diff_text: str) -> None:
         """显示编辑工具的 diff（红绿行）；重复调用以最后一次为准。

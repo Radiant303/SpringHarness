@@ -6,7 +6,6 @@ from pydantic_ai import Agent, UsageLimits
 from pydantic_ai.tools import DeferredToolRequests
 from pydantic_ai_harness import Shell
 
-from spring_harness.capabilities.background import background
 from spring_harness.capabilities.code_mode import code_mode
 from spring_harness.capabilities.compaction import NotifyingCompaction, OnCompaction
 from spring_harness.capabilities.planning import OnPlanChange, planning
@@ -28,7 +27,6 @@ from spring_harness.core.hooks.model import hooks
 from spring_harness.instructions.default import register_default_instructions
 from spring_harness.toolsets.ask_user import ask_user_toolset
 from spring_harness.toolsets.filesystem import filesystem
-from spring_harness.toolsets.local_subagents import local_subagents_toolset
 from spring_harness.toolsets.repo_knowledge import approval_required_knowledge_toolsets
 
 
@@ -68,7 +66,6 @@ def create_agent(
             approval_required_knowledge_toolsets,
             ask_user_toolset,
             teaching_toolset(teaching_store_for(root, on_change=teach_on_change)),
-            local_subagents_toolset
         ],
         output_type=[
             str,
@@ -83,7 +80,6 @@ def create_agent(
             code_mode(root),
             subagents(),
             Shell(),
-            background(),
             NotifyingCompaction(
                 max_fraction=0.8,
                 keep_messages=4,
