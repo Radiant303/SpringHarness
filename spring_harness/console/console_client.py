@@ -599,6 +599,8 @@ class ConsoleClient(CliApp):
                 call.tool_name if call is not None else part.tool_name or "tool",
                 args=str(call.args) if call is not None else "",
                 result=str(result.content) if result is not None else None,
+                # 与实时轮对齐：答案出现后工具结果统一收起成一行摘要
+                collapsed=result is not None,
             )
             if isinstance(result, RetryPromptPart):
                 widget._status = "error"
