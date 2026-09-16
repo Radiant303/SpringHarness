@@ -175,7 +175,7 @@ class AssistantMessage(Vertical):
         thinking_classes = "thinking-row" + ("" if self._thinking else " stream-pending")
         with HorizontalGroup(classes=thinking_classes):
             yield Static("●", classes="thinking-bullet")
-            yield CJKStatic(self._thinking, id="thinking-content")
+            yield CJKStatic(Text(self._thinking), id="thinking-content")
         answer_classes = "answer-row" + ("" if self._answer else " stream-pending")
         with HorizontalGroup(classes=answer_classes):
             yield Static("●", classes="assistant-bullet")

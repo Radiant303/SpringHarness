@@ -9,6 +9,7 @@ from pydantic_ai import (
     ModelResponse,
     RetryPromptPart,
     TextPart,
+    ThinkingPart,
     ToolCallPart,
     ToolReturnPart,
     UserPromptPart,
@@ -37,7 +38,10 @@ from spring_harness.console.cli_ui.widgets import (
 )
 from spring_harness.core.config.settings import config
 from spring_harness.core.history import HistoryPage
-from spring_harness.core.hooks.model import is_auto_injected_message
+from spring_harness.core.hooks.model import (
+    is_auto_injected_message,
+    is_background_task_message,
+)
 from spring_harness.core.rpc.client import AppClient
 from spring_harness.core.rpc.connection import JsonRpcError
 from spring_harness.core.rpc.schema import (
@@ -613,18 +617,27 @@ class ConsoleClient(CliApp):
                         raise asyncio.CancelledError
                     if isinstance(message, ModelRequest):
                         is_file_monitor = is_auto_injected_message(message)
+                        is_background = is_background_task_message(message)
                         for part in message.parts:
                             if isinstance(part, UserPromptPart) and isinstance(part.content, str):
-                                await mount(UserMessage(part.content, is_file_monitor=is_file_monitor))
+                                if is_background:
+                                    # 后台结果注入/催醒 prompt 不是用户输入：恢复成系统提示行
+                                    await mount(SystemMessage(part.content))
+                                else:
+                                    await mount(UserMessage(part.content, is_file_monitor=is_file_monitor))
                             elif isinstance(part, ToolReturnPart | RetryPromptPart):
                                 await tool(part)
                     elif isinstance(message, ModelResponse):
                         text = "".join(part.content for part in message.parts if isinstance(part, TextPart))
-                        if text:
-                            widget = AssistantMessage(answer=text)
+                        thinking = "".join(
+                            part.content for part in message.parts if isinstance(part, ThinkingPart)
+                        )
+                        if text or thinking:
+                            widget = AssistantMessage(answer=text, thinking=thinking)
                             await mount(widget)
                             handle = AssistantHandle(widget)
-                            await handle.set_answer_full(text)
+                            if text:
+                                await handle.set_answer_full(text)
                             await handle.finish()
                         for part in message.parts:
                             if isinstance(part, ToolCallPart) and part.tool_call_id not in results:
