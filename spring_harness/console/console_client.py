@@ -333,11 +333,13 @@ class ConsoleClient(CliApp):
                     case BackgroundTaskStarted(task_id=i, tool_name=n):
                         await self.show_system(f"⚙ 后台任务 {i} 已开始（{n}），完成后会自动汇报")
                     case BackgroundTaskFinished(task_id=i, tool_name=n, is_error=is_err, cancelled=cancelled):
-                        # 正常完成不刷屏：催醒轮会把结果带出来；取消/出错值得立刻可见
+                        # 一行简报：完成时刻必定可见（成功时结果内容由催醒轮/当前轮汇报）
                         if cancelled:
                             await self.show_system(f"⚙ 后台任务 {i}（{n}）已取消")
                         elif is_err:
                             await self.show_system(f"⚙ 后台任务 {i}（{n}）出错，详情见后续汇报")
+                        else:
+                            await self.show_system(f"⚙ 后台任务 {i}（{n}）已完成")
                     case TurnFinished(cancelled=cancelled, error=error, wake=wake):
                         if sink is not None:
                             await sink.finish()
