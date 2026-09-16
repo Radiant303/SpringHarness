@@ -34,7 +34,7 @@ from spring_harness.core.stream.events import (
 
 BACKGROUND_WAKE_PROMPT = (
     "（系统催醒：有后台任务刚刚结束，结果已注入下方消息。"
-    "请基于结果继续之前的推理，并向用户汇报关键内容。）"
+    "请基于结果继续之前的推理，并向用户汇报关键内容。）\n"
 )
 
 

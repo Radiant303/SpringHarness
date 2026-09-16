@@ -113,7 +113,8 @@ def _results_text(results: list[BackgroundResult]) -> str:
     for result in results:
         status = "被取消" if result.cancelled else ("出错" if result.is_error else "完成")
         sections.append(f"任务 {result.task_id}（{result.tool_name}）{status}：\n{result.output}")
-    return "以下后台任务已有结果，请基于结果继续：\n\n" + "\n\n".join(sections)
+    # 尾部换行：恢复会话时这段文本渲染成系统提示行，与后续汇报之间留出空行
+    return "以下后台任务已有结果，请基于结果继续：\n\n" + "\n\n".join(sections) + "\n"
 
 
 @dataclass
