@@ -631,11 +631,13 @@ class ConsoleClient(CliApp):
                                 await tool(part)
                     elif isinstance(message, ModelResponse):
                         text = "".join(part.content for part in message.parts if isinstance(part, TextPart))
-                        thinking = "".join(
-                            part.content for part in message.parts if isinstance(part, ThinkingPart)
-                        )
-                        if text or thinking:
-                            widget = AssistantMessage(answer=text, thinking=thinking)
+                        has_thinking = any(isinstance(part, ThinkingPart) for part in message.parts)
+                        if text or has_thinking:
+                            # 思考内容对齐实时轮 finish() 后的收起态：只显示一行摘要；
+                            # 历史里没有计时数据，不模拟 "Thought for Xs"
+                            widget = AssistantMessage(
+                                answer=text, thinking="Thought" if has_thinking else "",
+                            )
                             await mount(widget)
                             handle = AssistantHandle(widget)
                             if text:
