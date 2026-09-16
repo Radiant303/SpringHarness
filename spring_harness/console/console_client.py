@@ -37,7 +37,7 @@ from spring_harness.console.cli_ui.widgets import (
 )
 from spring_harness.core.config.settings import config
 from spring_harness.core.history import HistoryPage
-from spring_harness.core.hooks.model import is_file_monitor_message
+from spring_harness.core.hooks.model import is_auto_injected_message
 from spring_harness.core.rpc.client import AppClient
 from spring_harness.core.rpc.connection import JsonRpcError
 from spring_harness.core.rpc.schema import (
@@ -47,6 +47,8 @@ from spring_harness.core.rpc.schema import (
 )
 from spring_harness.core.session_store import format_local_time
 from spring_harness.core.stream.events import (
+    BackgroundTaskFinished,
+    BackgroundTaskStarted,
     CompactionNotice,
     PlanUpdated,
     TeachingUpdated,
@@ -85,6 +87,10 @@ class ConsoleClient(CliApp):
         self.session_id = ""
         self._session_worker: Worker[None] | None = None
         self._panel_worker: Worker[None] | None = None
+        # 泵走裸 task 而不是 Worker：它常驻整个连接生命周期，进 Worker 登记表会让
+        # workers.wait_for_complete()（/new、/resume 的等待点）永远等不到
+        self._pump_task: asyncio.Task[None] | None = None
+        self._turn_done: asyncio.Event | None = None  # 当前用户轮的收尾信号，由泵在 TurnFinished 时置位
         self._history_generation = 0
 
     def on_mount(self) -> None:
@@ -106,6 +112,8 @@ class ConsoleClient(CliApp):
             if resumed:
                 await self._restore_session()
             self._initialized = True
+            # 事件泵长驻：催醒轮等系统轮次在用户无输入时也会产生事件，按轮起泵会把它们吞到下次输入
+            self._pump_task = asyncio.create_task(self._pump_events())
         except Exception as e:  # noqa: BLE001
             await self.show_system(f"❌ 初始化会话失败：{e}")
         finally:
@@ -124,11 +132,16 @@ class ConsoleClient(CliApp):
     async def on_unmount(self) -> None:
         self._initialized = False
         self._history_generation += 1
+        pump_task = self._pump_task
+        if pump_task is not None:
+            pump_task.cancel()
         try:
             await self._cancel_worker(self._session_worker)
             await self._cancel_worker(self._panel_worker)
+            if pump_task is not None:
+                await asyncio.gather(pump_task, return_exceptions=True)
         finally:
-            self._session_worker = self._panel_worker = None
+            self._session_worker = self._panel_worker = self._pump_task = None
             self._busy = False
             await self._client.close()
 
@@ -189,7 +202,7 @@ class ConsoleClient(CliApp):
                     messages = page.segments[offset]
                     for index in reversed(range(len(messages))):
                         message = messages[index]
-                        if not isinstance(message, ModelRequest) or is_file_monitor_message(message):
+                        if not isinstance(message, ModelRequest) or is_auto_injected_message(message):
                             continue
                         for part_index in reversed(range(len(message.parts))):
                             part = message.parts[part_index]
@@ -261,58 +274,96 @@ class ConsoleClient(CliApp):
             return
 
         self._busy = True
+        turn_done = self._turn_done = asyncio.Event()
         try:
             await self._cancel_worker(self._panel_worker)
             try:
                 await self._client.start_turn(text)
             except JsonRpcError as e:
+                self._busy = False
                 await self.show_system(f"❌ {e}")
                 return
-            await self._pump_events(CliSink(self))
+            self.set_working("idle")  # 消息已发出、内容未到达
+            # 轮次事件由长驻泵渲染；TurnFinished 时泵复位 _busy 并置位 turn_done
+            await turn_done.wait()
         finally:
-            self._busy = False
+            if self._turn_done is turn_done:
+                self._turn_done = None
 
-    async def _pump_events(self, sink: CliSink) -> None:
+    async def _pump_events(self) -> None:
+        """事件泵：一条连接一条长驻（对 rpc 服务器 _pump 的镜像），TurnFinished 只收尾不退出。"""
+        # sink 每轮一个，首个内容事件到达时才建：CliSink 创建即把 WorkingLine 置为
+        # idle（"消息已发出"），启动时就建会让空闲中的状态栏一直显示 idle
+        sink: CliSink | None = None
         tool_sinks: dict[str, ToolCallSink] = {}
-        async for event in self._client.events():
-            match event:
-                case ThinkingDelta(text=t):
-                    await sink.write_thinking(t)
-                case TextDelta(text=t):
-                    await sink.write_answer(t)
-                case ToolCallStarted(tool_call_id=i, tool_name=n):
-                    tool_sinks[i] = await sink.start_tool_call(n, i)
-                case ToolArgsDelta(tool_call_id=i, args_chunk=c):
-                    if (tool := tool_sinks.get(i)) is not None:
-                        await tool.write_args(c)
-                case ToolDiff(tool_call_id=i, diff=d):
-                    if (tool := tool_sinks.get(i)) is not None:
-                        await tool.show_diff(d)
-                case ToolPending(tool_call_id=i, label=label):
-                    if (tool := tool_sinks.get(i)) is not None:
-                        await tool.show_pending(label)
-                case ToolFinished(tool_call_id=i, result=r, is_error=is_err):
-                    if (tool := tool_sinks.get(i)) is not None:
-                        await tool.show_result(r, is_err)
-                case UsageUpdated(context_tokens=tokens):
-                    await sink.update_context(tokens)
-                case PlanUpdated(items=items):
-                    await self.show_plan([PlanItem(**d) for d in items])
-                case TeachingUpdated(unit=u):
-                    await self.show_teaching(TeachingUnit(**u))
-                case CompactionNotice(dropped=d, before=before, after=after):
-                    await self.show_system(
-                        f"上下文已压缩：折叠 {d} 条旧消息（约 {before // 1000}k → {after // 1000}k tokens）\n"
-                    )
-                case TurnFinished(cancelled=cancelled, error=error):
-                    if cancelled:
-                        await self.show_system("已中断（Esc），可继续输入")
-                    elif error is not None:
-                        await self.show_system(f"❌ 运行出错：{error}")
-                    else:
-                        # 取消/异常路径的收尾交给 _run_handle_input 的 finally（关气泡、把还停在 ⚡ 的调用标记为中断）
-                        await sink.finish()
-                    return
+        try:
+            async for event in self._client.events():
+                match event:
+                    case ThinkingDelta(text=t):
+                        sink = sink or CliSink(self)
+                        await sink.write_thinking(t)
+                    case TextDelta(text=t):
+                        sink = sink or CliSink(self)
+                        await sink.write_answer(t)
+                    case ToolCallStarted(tool_call_id=i, tool_name=n):
+                        sink = sink or CliSink(self)
+                        tool_sinks[i] = await sink.start_tool_call(n, i)
+                    case ToolArgsDelta(tool_call_id=i, args_chunk=c):
+                        if (tool := tool_sinks.get(i)) is not None:
+                            await tool.write_args(c)
+                    case ToolDiff(tool_call_id=i, diff=d):
+                        if (tool := tool_sinks.get(i)) is not None:
+                            await tool.show_diff(d)
+                    case ToolPending(tool_call_id=i, label=label):
+                        if (tool := tool_sinks.get(i)) is not None:
+                            await tool.show_pending(label)
+                    case ToolFinished(tool_call_id=i, result=r, is_error=is_err):
+                        if (tool := tool_sinks.get(i)) is not None:
+                            await tool.show_result(r, is_err)
+                    case UsageUpdated(context_tokens=tokens):
+                        self.update_context(tokens)
+                    case PlanUpdated(items=items):
+                        await self.show_plan([PlanItem(**d) for d in items])
+                    case TeachingUpdated(unit=u):
+                        await self.show_teaching(TeachingUnit(**u))
+                    case CompactionNotice(dropped=d, before=before, after=after):
+                        await self.show_system(
+                            f"上下文已压缩：折叠 {d} 条旧消息（约 {before // 1000}k → {after // 1000}k tokens）\n"
+                        )
+                    case BackgroundTaskStarted(task_id=i, tool_name=n):
+                        await self.show_system(f"⚙ 后台任务 {i} 已开始（{n}），完成后会自动汇报")
+                    case BackgroundTaskFinished(task_id=i, tool_name=n, is_error=is_err, cancelled=cancelled):
+                        # 正常完成不刷屏：催醒轮会把结果带出来；取消/出错值得立刻可见
+                        if cancelled:
+                            await self.show_system(f"⚙ 后台任务 {i}（{n}）已取消")
+                        elif is_err:
+                            await self.show_system(f"⚙ 后台任务 {i}（{n}）出错，详情见后续汇报")
+                    case TurnFinished(cancelled=cancelled, error=error, wake=wake):
+                        if sink is not None:
+                            await sink.finish()
+                            sink = None
+                        self.set_working(None)
+                        tool_sinks.clear()
+                        if cancelled and not wake:
+                            # 催醒轮被用户输入抢占是常态，静默收尾；只有用户轮的中断才提示
+                            await self.show_system("已中断（Esc），可继续输入")
+                        elif error is not None:
+                            await self.show_system(f"❌ 运行出错：{error}")
+                        if not wake:
+                            # 只有用户轮占用 _busy、有人等收尾；催醒轮的收尾不动输入状态
+                            self._busy = False
+                            if self._turn_done is not None:
+                                self._turn_done.set()
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:  # noqa: BLE001
+            if self.is_running:
+                await self.show_system(f"❌ 事件流中断：{e}")
+        finally:
+            # 泵退出（连接断开/卸载）：别让 handle_input 永远等不到收尾
+            self._busy = False
+            if self._turn_done is not None:
+                self._turn_done.set()
 
     # ---- 命令 ----
 
@@ -559,7 +610,7 @@ class ConsoleClient(CliApp):
                     if generation != self._history_generation:
                         raise asyncio.CancelledError
                     if isinstance(message, ModelRequest):
-                        is_file_monitor = is_file_monitor_message(message)
+                        is_file_monitor = is_auto_injected_message(message)
                         for part in message.parts:
                             if isinstance(part, UserPromptPart) and isinstance(part.content, str):
                                 await mount(UserMessage(part.content, is_file_monitor=is_file_monitor))
