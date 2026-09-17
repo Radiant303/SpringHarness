@@ -99,10 +99,7 @@ class UserMessage(CJKStatic):
     }
     """
 
-    is_file_monitor: bool = False
-
-    def __init__(self, text: str, *, is_file_monitor: bool = False, **kwargs: Any) -> None:
-        self.is_file_monitor = is_file_monitor
+    def __init__(self, text: str, **kwargs: Any) -> None:
         content = Text.assemble(
             ("✨ ", "bold yellow"),
             (text, "bold #FFCB6B"),

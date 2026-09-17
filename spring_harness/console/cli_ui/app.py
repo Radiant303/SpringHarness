@@ -364,10 +364,7 @@ class CliApp(App[None]):
 
     async def _prune_history(self) -> None:
         children = list(self._scroll.children)
-        rounds = [
-            i for i, c in enumerate(children)
-            if isinstance(c, UserMessage) and not c.is_file_monitor
-        ]
+        rounds = [i for i, c in enumerate(children) if isinstance(c, UserMessage)]
         if len(rounds) <= self.MAX_RENDERED_ROUNDS:
             return
         boundary = rounds[-self.MAX_RENDERED_ROUNDS]

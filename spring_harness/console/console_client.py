@@ -565,7 +565,9 @@ class ConsoleClient(CliApp):
                         is_file_monitor = is_file_monitor_message(message)
                         for part in message.parts:
                             if isinstance(part, UserPromptPart) and isinstance(part.content, str):
-                                await mount(UserMessage(part.content, is_file_monitor=is_file_monitor))
+                                # 文件变动通知是模型侧上下文（file_monitor hook 注入），不进聊天区
+                                if not is_file_monitor:
+                                    await mount(UserMessage(part.content))
                             elif isinstance(part, ToolReturnPart | RetryPromptPart):
                                 await tool(part)
                     elif isinstance(message, ModelResponse):
