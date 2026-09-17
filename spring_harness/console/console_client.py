@@ -9,6 +9,7 @@ from pydantic_ai import (
     ModelResponse,
     RetryPromptPart,
     TextPart,
+    ThinkingPart,
     ToolCallPart,
     ToolReturnPart,
     UserPromptPart,
@@ -542,6 +543,8 @@ class ConsoleClient(CliApp):
                 call.tool_name if call is not None else part.tool_name or "tool",
                 args=str(call.args) if call is not None else "",
                 result=str(result.content) if result is not None else None,
+                # 与实时轮对齐：答案出现后工具结果统一收起成一行摘要
+                collapsed=result is not None,
             )
             if isinstance(result, RetryPromptPart):
                 widget._status = "error"
@@ -567,11 +570,17 @@ class ConsoleClient(CliApp):
                                 await tool(part)
                     elif isinstance(message, ModelResponse):
                         text = "".join(part.content for part in message.parts if isinstance(part, TextPart))
-                        if text:
-                            widget = AssistantMessage(answer=text)
+                        has_thinking = any(isinstance(part, ThinkingPart) for part in message.parts)
+                        if text or has_thinking:
+                            # 思考内容对齐实时轮 finish() 后的收起态：只显示一行摘要；
+                            # 历史里没有计时数据，不模拟 "Thought for Xs"
+                            widget = AssistantMessage(
+                                answer=text, thinking="Thought" if has_thinking else "",
+                            )
                             await mount(widget)
                             handle = AssistantHandle(widget)
-                            await handle.set_answer_full(text)
+                            if text:
+                                await handle.set_answer_full(text)
                             await handle.finish()
                         for part in message.parts:
                             if isinstance(part, ToolCallPart) and part.tool_call_id not in results:
