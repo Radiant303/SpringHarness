@@ -26,12 +26,22 @@ async def start_monitor(
 
 
 FILE_MONITOR_SOURCE = "file_monitor"
+BACKGROUND_TASK_SOURCE = "background_task"
+BACKGROUND_WAKE_SOURCE = "background_wake"
+
+_AUTO_INJECTED_SOURCES = {FILE_MONITOR_SOURCE, BACKGROUND_TASK_SOURCE, BACKGROUND_WAKE_SOURCE}
 
 
 def is_file_monitor_message(message: object) -> bool:
     """判断一条消息是否是由 file_monitor 自动注入的文件变动通知。"""
     metadata = getattr(message, "metadata", None)
     return isinstance(metadata, dict) and metadata.get("source") == FILE_MONITOR_SOURCE
+
+
+def is_auto_injected_message(message: object) -> bool:
+    """判断一条消息是否是系统自动注入的"""
+    metadata = getattr(message, "metadata", None)
+    return isinstance(metadata, dict) and metadata.get("source") in _AUTO_INJECTED_SOURCES
 
 
 @hooks.on.before_model_request

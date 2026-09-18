@@ -89,7 +89,7 @@ class WelcomeBox(Vertical):
 
 
 class UserMessage(CJKStatic):
-    """用户消息：黄色 ✦ 开头。"""
+    """用户消息：黄色 ✨ 开头。"""
 
     DEFAULT_CSS = """
     UserMessage {
@@ -103,6 +103,26 @@ class UserMessage(CJKStatic):
         content = Text.assemble(
             ("✨ ", "bold yellow"),
             (text, "bold #FFCB6B"),
+        )
+        super().__init__(content, **kwargs)
+
+
+class BackgroundMessage(CJKStatic):
+    """后台任务通知：与用户消息同款气泡，正文用工具蓝（ACCENT）区分，✨ 保持用户消息同色。"""
+
+    DEFAULT_CSS = """
+    BackgroundMessage {
+        width: 1fr;
+        height: auto;
+        margin: 1 1 1 1;
+    }
+    """
+
+    def __init__(self, text: str, **kwargs: Any) -> None:
+        # 通知原文末尾的 \n 是给模型注入侧的分隔，气泡里会多渲染一行空白，显示侧去掉
+        content = Text.assemble(
+            ("✨ ", "bold yellow"),
+            (text.rstrip("\n"), f"bold {ACCENT}"),
         )
         super().__init__(content, **kwargs)
 

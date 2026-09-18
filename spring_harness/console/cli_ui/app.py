@@ -26,6 +26,7 @@ from .theme import KIMI_THEME
 from .utils import LinePacer, format_num
 from .widgets import (
     AssistantMessage,
+    BackgroundMessage,
     ChatScroll,
     PlanMessage,
     StatusBar,
@@ -357,6 +358,12 @@ class CliApp(App[None]):
     async def show_user(self, text: str) -> None:
         """手动补显示一条用户消息（提交时框架已自动显示，一般不需要调）。"""
         await self._scroll.mount(UserMessage(text))
+        await self._prune_history()
+        self._scroll.anchor()
+
+    async def show_background(self, text: str) -> None:
+        """显示一条后台任务通知：蓝色用户式气泡（与用户消息区分）。"""
+        await self._scroll.mount(BackgroundMessage(text))
         await self._prune_history()
         self._scroll.anchor()
 

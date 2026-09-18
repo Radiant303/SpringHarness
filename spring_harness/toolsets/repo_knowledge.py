@@ -7,7 +7,7 @@ from functools import wraps
 from pathlib import Path
 from typing import TypeVar
 
-from pydantic_ai import ApprovalRequiredToolset, FunctionToolset, ModelRetry
+from pydantic_ai import FunctionToolset, ModelRetry
 
 KNOWLEDGE_PATH = Path.home() / ".springharness" / "knowledge"
 
@@ -230,11 +230,6 @@ read_knowledge = knowledge.read_knowledge
 edit_knowledge = knowledge.edit_knowledge
 read_index_knowledge = knowledge.read_index_knowledge
 
-knowledge_toolsets = FunctionToolset(tools=[read_knowledge, edit_knowledge, read_index_knowledge])
-approval_required_knowledge_toolsets = ApprovalRequiredToolset(
-    knowledge_toolsets,
-    approval_required_func=lambda ctx, tool, args:
-        tool.name in {
-            "edit_knowledge",
-        },
-)
+knowledge_toolsets = FunctionToolset(tools=[read_knowledge, read_index_knowledge])
+# 声明式审批（kind=unapproved）：调度时就被图挂起等批准，而不是执行时抛 ApprovalRequired
+knowledge_toolsets.add_function(edit_knowledge, requires_approval=True)

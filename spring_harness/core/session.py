@@ -13,16 +13,20 @@ from pydantic_ai import (
     RunCancelled,
     ToolCallPart,
     ToolReturnPart,
+    UserPromptPart,
 )
 from pydantic_ai.messages import INTERRUPTED_TOOL_RETURN_CONTENT
 
 from spring_harness.core.agent.deps import CodingAgentDeps
 from spring_harness.core.approval import run_with_approval
+from spring_harness.core.background import format_notice
 from spring_harness.core.history import HistoryDirection, HistoryPage
+from spring_harness.core.hooks.model import BACKGROUND_WAKE_SOURCE
 from spring_harness.core.session_store import SessionStore
 from spring_harness.core.stream.adapter import AgentEventAdapter
 from spring_harness.core.stream.emit import EventEmitter, PendingRequests
 from spring_harness.core.stream.events import (
+    BackgroundNotification,
     CompactionNotice,
     PlanUpdated,
     ServerEvent,
@@ -30,15 +34,14 @@ from spring_harness.core.stream.events import (
     TurnFinished,
 )
 
+BACKGROUND_WAKE_PROMPT = (
+    "（系统催醒：有后台任务刚刚结束，通知见下方消息。"
+    "请用 job_output 工具获取结果。）\n"
+)
+
 
 def _settle_interrupted_tool_calls(messages: list[ModelMessage]) -> list[ModelMessage]:
-    """给没跑出结果的工具调用补 outcome='interrupted' 的合成返回。
-
-    工具执行中途被取消时，历史末尾的 ModelResponse 里会留下没有 ToolReturnPart 的
-    ToolCallPart；response 本身是完整的（state 不是 interrupted），pydantic-ai 不会
-    自动补，带着它发起下一轮会被 UserError 拒绝（unprocessed tool calls）。这里补上
-    与库自带修复一致的合成返回，历史即可续。
-    """
+    """给没跑出结果的工具调用补 outcome='interrupted' 的合成返回。"""
     answered = {
         part.tool_call_id
         for message in messages
@@ -90,23 +93,31 @@ class HarnessSession:
         self._history_lock = asyncio.Lock()
         self._queue: asyncio.Queue[ServerEvent] = asyncio.Queue()
         self._requests = PendingRequests(self._emit)
+        self._deps.background.on_event = self._on_background_event
         self._cancel_token: CancellationToken | None = None
         self._busy = False
         self._closed = False
         self._turn_task: asyncio.Task | None = None
+        self._wake_task: asyncio.Task | None = None
 
     async def events(self) -> AsyncIterator[ServerEvent]:
         while True:
             yield await self._queue.get()
 
-    async def run_turn(self, text: str) -> None:
+    async def run_turn(
+        self,
+        text: str,
+        *,
+        prompt_source: str | None = None,
+        wake: bool = False,
+    ) -> None:
         if self._closed:
             raise RuntimeError("会话已关闭")
         if self._busy:
             raise RuntimeError("上一轮还没结束")
         self._busy = True
         self._turn_task = asyncio.current_task()
-        finished = TurnFinished()
+        finished = TurnFinished(wake=wake)
         messages: list[ModelMessage] | None = None
         allow_rewrite = False
         try:
@@ -142,6 +153,8 @@ class HarnessSession:
             finished.error = f"{type(e).__name__}: {e}"
         finally:
             try:
+                if messages is not None and prompt_source is not None:
+                    self._mark_prompt_source(messages, text, prompt_source)
                 if self._history_loaded:
                     async with self._history_lock:
                         await self._in_thread(
@@ -161,6 +174,49 @@ class HarnessSession:
                 self._busy = False
                 self._turn_task = None
                 self._queue.put_nowait(finished)
+                # 催醒轮收尾：把自己从 _wake_task 摘掉，否则收尾期间结束的任务通知
+                # 会被 _maybe_wake_background 的"催醒轮还在跑"判断漏掉
+                if wake and self._wake_task is asyncio.current_task():
+                    self._wake_task = None
+                # 任务可能在最后一次模型请求之后才结束（busy 期不催醒），这里补一轮检查
+                self._maybe_wake_background()
+
+    def _on_background_event(self, event: ServerEvent) -> None:
+        """后台任务管理器的同步回调"""
+        self._queue.put_nowait(event)
+        self._maybe_wake_background()
+
+    def _maybe_wake_background(self) -> None:
+        if self._closed or self._busy or not self._deps.background.has_pending:
+            return
+        if self._wake_task is not None and not self._wake_task.done():
+            return
+        self._wake_task = asyncio.create_task(self._wake_for_background())
+
+    async def _wake_for_background(self) -> None:
+        try:
+            # 先把通知正文发给前端渲染（蓝色气泡）；模型侧的正文由 hook 在轮内首次请求前注入
+            pending = self._deps.background.peek_pending()
+            if pending:
+                self._queue.put_nowait(BackgroundNotification(text=format_notice(pending)))
+            await self.run_turn(
+                BACKGROUND_WAKE_PROMPT,
+                prompt_source=BACKGROUND_WAKE_SOURCE,
+                wake=True,
+            )
+        except RuntimeError:
+            pass
+
+    @staticmethod
+    def _mark_prompt_source(messages: list[ModelMessage], text: str, source: str) -> None:
+        """从尾部找到本轮 prompt 对应的 ModelRequest 并打上来源标记"""
+        for message in reversed(messages):
+            if not isinstance(message, ModelRequest):
+                continue
+            for part in message.parts:
+                if isinstance(part, UserPromptPart) and part.content == text:
+                    message.metadata = {**(message.metadata or {}), "source": source}
+                    return
 
     def respond(self, request_id: str, value: Any) -> None:
         self._requests.resolve(request_id, value)
@@ -177,6 +233,8 @@ class HarnessSession:
         if task is not None and task is not asyncio.current_task():
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
+        # 关闭/退出时后台任务一并取消收尸：工具内清理代码（如杀子进程）有机会执行
+        await self._deps.background.shutdown()
         await self._in_thread(self._deps.monitor.close)
 
     @classmethod
