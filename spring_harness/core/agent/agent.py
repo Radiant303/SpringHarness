@@ -79,7 +79,7 @@ def create_agent(
             planning(session_id, on_change=plan_on_change),
             repo_context(root),
             code_mode(root),
-            subagents(),
+            subagents(str(root)),
             Shell(),
             background(extra_tools=("run_command", "edit_knowledge")),
             NotifyingCompaction(
