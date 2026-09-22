@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Spring Harness</title>
+  <link rel="stylesheet" href="/static/index.css">
+</head>
+<body>
+  <div id="app">
+    <aside id="sidebar">
+      <div class="sidebar-top">
+        <button id="new-session-btn" class="new-session-btn">
+          <span class="plus">＋</span> 新建会话 <span class="kbd">Ctrl N</span>
+        </button>
+      </div>
+      <div class="sidebar-section">会话</div>
+      <div id="session-list"></div>
+      <div class="sidebar-footer" id="workspace-footer" title="工作区"></div>
+    </aside>
+
+    <main id="main">
+      <header id="topbar">
+        <button id="toggle-sidebar" class="icon-btn" title="侧栏">☰</button>
+        <span id="breadcrumb"><span id="ws-name"></span><span class="crumb-sep">/</span><span id="session-title"></span></span>
+        <span class="spacer"></span>
+        <span id="conn-status" class="conn-dot disconnected" title="未连接"></span>
+      </header>
+
+      <div id="messages">
+        <div id="welcome" class="welcome">
+          <h2>Spring Harness</h2>
+          <p>输入消息开始对话。</p>
+        </div>
+      </div>
+
+      <div id="plan-panel" class="hidden">
+        <div class="plan-title">计划</div>
+        <ul id="plan-items"></ul>
+      </div>
+
+      <button id="scroll-bottom" class="hidden">↓ 最新消息</button>
+
+      <footer id="input-area">
+        <div id="input-card">
+          <textarea id="input" rows="1" placeholder="输入消息，Enter 发送，Shift+Enter 换行，Esc 中断运行"></textarea>
+          <div id="input-toolbar">
+            <span id="usage" title="上下文用量"></span>
+            <span class="spacer"></span>
+            <div id="model-pill" title="模型">
+              <select id="model-select"></select>
+              <span class="model-caret">▾</span>
+            </div>
+            <button id="send-btn" class="round-btn" title="发送">↑</button>
+            <button id="stop-btn" class="round-btn hidden" title="停止">■</button>
+          </div>
+        </div>
+      </footer>
+    </main>
+  </div>
+
+  <div id="approval-modal" class="modal hidden">
+    <div class="modal-box">
+      <h3>工具审批</h3>
+      <div class="modal-row"><span class="modal-label">工具</span><span id="approval-tool"></span></div>
+      <pre id="approval-args" class="modal-pre"></pre>
+      <pre id="approval-diff" class="modal-pre diff hidden"></pre>
+      <div class="modal-actions">
+        <button id="approval-reject" class="btn-danger">拒绝</button>
+        <button id="approval-approve" class="btn-primary">批准</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="question-modal" class="modal hidden">
+    <div class="modal-box">
+      <h3>Agent 提问</h3>
+      <div id="question-text" class="modal-row"></div>
+      <div id="question-options"></div>
+      <div id="question-custom-row" class="hidden">
+        <input id="question-custom" type="text" placeholder="自定义回答…">
+        <button id="question-submit" class="btn-primary">提交</button>
+      </div>
+      <div class="modal-actions">
+        <button id="question-cancel">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/vendor/marked.min.js"></script>
+  <script src="/static/vendor/purify.min.js"></script>
+  <script src="/static/index.js"></script>
+</body>
+</html>
