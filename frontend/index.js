@@ -26,9 +26,9 @@ class RpcClient {
       this.ws = ws;
       ws.onopen = () => { opened = true; resolve(); };
       ws.onerror = () => { if (!opened) reject(new Error("WebSocket 连接失败")); };
-      ws.onclose = () => {
+      ws.onclose = (e) => {
         this._failAll(new Error("连接已断开"));
-        if (this.onClose) this.onClose();
+        if (this.onClose) this.onClose(e && e.code);
       };
       ws.onmessage = (e) => this._onMessage(e.data);
     });
@@ -155,6 +155,90 @@ const state = {
   historyHasMore: false,
 };
 
+/* ================= 认证 ================= */
+
+const TOKEN_KEY = "sh.token";
+const USER_KEY = "sh.username";
+
+function getToken() { return localStorage.getItem(TOKEN_KEY); }
+function clearToken() { localStorage.removeItem(TOKEN_KEY); }
+
+function showUserChip() {
+  const name = localStorage.getItem(USER_KEY);
+  if (name) {
+    $("user-name").textContent = name;
+    $("user-chip").classList.remove("hidden");
+  }
+}
+
+function showLogin(message) {
+  $("user-chip").classList.add("hidden");
+  $("login-error").textContent = message || "";
+  $("login-overlay").classList.remove("hidden");
+  setTimeout(() => $("login-username").focus(), 0);
+}
+
+function hideLogin() { $("login-overlay").classList.add("hidden"); }
+
+async function doAuth(mode) {
+  const username = $("login-username").value.trim();
+  const password = $("login-password").value;
+  const errBox = $("login-error");
+  if (!username || !password) { errBox.textContent = "请输入用户名和密码"; return; }
+  $("login-submit").disabled = true;
+  $("login-register").disabled = true;
+  try {
+    const r = await fetch(`/api/auth/${mode}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    });
+    if (!r.ok) {
+      errBox.textContent =
+        r.status === 401 ? "用户名或密码错误"
+        : r.status === 409 ? "用户名已被注册"
+        : r.status === 422 ? "用户名需 2~64 个字符，密码至少 6 位"
+        : `请求失败（${r.status}）`;
+      return;
+    }
+    if (mode === "register") { await doAuth("login"); return; }  // 注册成功直接登录
+    const data = await r.json();
+    localStorage.setItem(TOKEN_KEY, data.token);
+    localStorage.setItem(USER_KEY, data.username);
+    localStorage.removeItem("sh.sessionId");  // 换账号不复用旧会话
+    hideLogin();
+    showUserChip();
+    await connectAndSetup();
+  } catch (e) {
+    if (getToken()) {
+      addSystem("❌ 连接失败：" + (e && e.message || e), true);
+      scheduleReconnect();
+    } else {
+      errBox.textContent = "网络错误：" + (e && e.message || e);
+    }
+  } finally {
+    $("login-submit").disabled = false;
+    $("login-register").disabled = false;
+  }
+}
+
+function bindAuth() {
+  $("login-submit").onclick = () => doAuth("login");
+  $("login-register").onclick = () => doAuth("register");
+  $("login-username").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") $("login-password").focus();
+  });
+  $("login-password").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") doAuth("login");
+  });
+  $("logout-btn").onclick = () => {
+    clearToken();
+    localStorage.removeItem(USER_KEY);
+    localStorage.removeItem("sh.sessionId");
+    location.reload();
+  };
+}
+
 /* ================= 连接 / 会话引导 ================= */
 
 let reconnectTimer = null;
@@ -170,14 +254,14 @@ function setConnected(ok) {
 
 async function connectAndSetup() {
   const scheme = location.protocol === "https:" ? "wss" : "ws";
-  await rpc.connect(`${scheme}://${location.host}/ws`);
+  await rpc.connect(`${scheme}://${location.host}/ws?token=${encodeURIComponent(getToken())}`);
   const info = await rpc.request("initialize", {});
   state.workspace = info.workspace;
   state.models = info.models || [];
   if (!state.model) state.model = info.defaultModel || null;
   populateModelSelect();
   const wsName = state.workspace.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || state.workspace;
-  $("ws-name").textContent = wsName;
+  $("ws-name").textContent = localStorage.getItem(USER_KEY) || wsName;
   const footer = $("workspace-footer");
   footer.textContent = state.workspace;
   footer.title = state.workspace;
@@ -186,13 +270,18 @@ async function connectAndSetup() {
   reconnectDelay = 1000;
 }
 
-rpc.onClose = () => {
+rpc.onClose = (code) => {
   setConnected(false);
   state.busy = false;
   state.assistant = null;
   state.tools.clear();
   hideApproval();
   hideQuestion();
+  if (code === 4401) {           // 未认证/令牌过期：回登录页，不重连
+    clearToken();
+    showLogin("登录已过期，请重新登录");
+    return;
+  }
   if (!reconnectTimer) {
     addSystem("连接已断开，正在重连…");
     scheduleReconnect();
@@ -205,6 +294,7 @@ function scheduleReconnect() {
     try {
       await connectAndSetup();
     } catch {
+      if (!getToken()) return;   // 4401 已弹登录框，停止重连
       reconnectDelay = Math.min(reconnectDelay * 2, 15000);
       scheduleReconnect();
     }
@@ -892,9 +982,13 @@ function bind() {
 window.addEventListener("DOMContentLoaded", async () => {
   bind();
   updateInputState();
+  bindAuth();
+  if (!getToken()) { showLogin(); return; }
+  showUserChip();
   try {
     await connectAndSetup();
   } catch (e) {
+    if (!getToken()) return;  // 4401：登录框已弹出，不再重连
     addSystem("❌ 初始化失败：" + (e && e.message || e) + "，将自动重连", true);
     scheduleReconnect();
   }

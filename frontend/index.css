@@ -515,3 +515,25 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   #input-area { padding: 8px 12px 14px; }
   .msg.user { max-width: 96%; }
 }
+
+/* ---- 登录 ---- */
+.login-box { width: min(360px, 92vw); display: flex; flex-direction: column; }
+.login-box input {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 14px;
+  margin: 5px 0;
+  outline: none;
+  color: var(--text);
+}
+.login-box input:focus { border-color: var(--accent); }
+.login-error { color: var(--danger); font-size: 13px; min-height: 18px; margin-top: 4px; }
+.user-chip {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--text-dim);
+  font-size: 13px;
+  margin-right: 6px;
+}

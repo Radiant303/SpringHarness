@@ -63,6 +63,18 @@ class Log(ConfigBase):
 class SubAgentConfig(ConfigBase):
     model: str = ""   # 为空 = 继承主 agent 当前模型
 
+
+class Cloud(ConfigBase):
+    """云端部署（springcloud）配置：MySQL 存储 + JWT 认证 + 监听地址。"""
+
+    database_url: str = "mysql+pymysql://root:root@127.0.0.1:3307/springharness?charset=utf8mb4"
+    data_root: str = str(Path.home() / ".springharness" / "cloud")
+    jwt_secret: str = "dev-secret-change-me"
+    jwt_expire_minutes: int = 10080
+    host: str = "0.0.0.0"
+    port: int = 8001
+
+
 class Config(ConfigBase):
     default_model: str = ""
     loop_control: LoopControl = LoopControl()
@@ -72,6 +84,7 @@ class Config(ConfigBase):
     secondary_model: SecondaryModel = SecondaryModel()
     log: Log = Log()
     subagents: dict[str, SubAgentConfig] = {}
+    cloud: Cloud = Cloud()
 
     @classmethod
     def from_toml(cls, config_path: Path | None = None) -> Self:

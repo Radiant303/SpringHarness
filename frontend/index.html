@@ -24,6 +24,10 @@
         <button id="toggle-sidebar" class="icon-btn" title="侧栏">☰</button>
         <span id="breadcrumb"><span id="ws-name"></span><span class="crumb-sep">/</span><span id="session-title"></span></span>
         <span class="spacer"></span>
+        <span id="user-chip" class="user-chip hidden">
+          <span id="user-name"></span>
+          <button id="logout-btn" class="icon-btn" title="退出登录">⏻</button>
+        </span>
         <span id="conn-status" class="conn-dot disconnected" title="未连接"></span>
       </header>
 
@@ -83,6 +87,19 @@
       </div>
       <div class="modal-actions">
         <button id="question-cancel">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="login-overlay" class="modal hidden">
+    <div class="modal-box login-box">
+      <h3>登录 Spring Harness</h3>
+      <input id="login-username" type="text" placeholder="用户名" autocomplete="username">
+      <input id="login-password" type="password" placeholder="密码" autocomplete="current-password">
+      <div id="login-error" class="login-error"></div>
+      <div class="modal-actions">
+        <button id="login-register">注册新账号</button>
+        <button id="login-submit" class="btn-primary">登录</button>
       </div>
     </div>
   </div>

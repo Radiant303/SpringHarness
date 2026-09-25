@@ -52,3 +52,18 @@ model = "kimi-code/k3-256k"
 
 [log]
 log_level = "INFO"
+
+# ---- 云端部署（springcloud 入口）----
+# 留空整段则使用下列默认值；MySQL 库表由 alembic upgrade head 创建
+[cloud]
+# MySQL 连接串（PyMySQL 驱动）
+database_url = "mysql+pymysql://root:root@127.0.0.1:3307/springharness?charset=utf8mb4"
+# 云端数据根目录：工作区落在 {data_root}/workspaces/{user_id}/{session_id}
+# 支持 ~ 开头（自动展开到家目录）
+data_root = "~/.springharness/cloud"
+# JWT 签名密钥与过期时间（分钟，10080 = 7 天）；生产必须改密钥
+jwt_secret = "dev-secret-change-me"
+jwt_expire_minutes = 10080
+# 监听地址与端口
+host = "0.0.0.0"
+port = 8001

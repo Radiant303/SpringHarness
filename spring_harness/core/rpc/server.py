@@ -33,7 +33,8 @@ from spring_harness.core.rpc.schema import (
     WorkspaceParams,
 )
 from spring_harness.core.session import HarnessSession
-from spring_harness.core.session_store import SessionStore
+from spring_harness.core.store.base import SessionStore
+from spring_harness.core.store.jsonl import JsonlSessionStore
 from spring_harness.core.stream.events import ApprovalRequest, QuestionRequest
 
 PROTOCOL_VERSION = 1
@@ -147,7 +148,7 @@ class AppServer:
         if existing is not None:
             self._apply_model(existing, p.model)
             return SessionResult(session_id=existing.session_id)
-        sessions = await asyncio.to_thread(SessionStore.list_sessions, workspace)
+        sessions = await asyncio.to_thread(JsonlSessionStore.list_sessions, workspace)
         if not sessions:
             return SessionResult(session_id=None)
         session = await self._create_session(workspace, sessions[-1][0], p.model)
@@ -156,7 +157,7 @@ class AppServer:
     async def _session_list(self, p: WorkspaceParams) -> SessionListResult:
         workspace = Path(p.workspace).resolve()
         sessions = []
-        for store, meta in await asyncio.to_thread(SessionStore.list_sessions, workspace):
+        for store, meta in await asyncio.to_thread(JsonlSessionStore.list_sessions, workspace):
             created_at = meta.get("created_at")
             assert isinstance(created_at, str)
             sessions.append(SessionSummary(
@@ -175,7 +176,7 @@ class AppServer:
         if existing is not None:
             self._apply_model(existing, p.model)
             return SessionResult(session_id=existing.session_id)
-        for store, _meta in await asyncio.to_thread(SessionStore.list_sessions, workspace):
+        for store, _meta in await asyncio.to_thread(JsonlSessionStore.list_sessions, workspace):
             if store.session_id == p.session_id:
                 session = await self._create_session(workspace, store, p.model)
                 return SessionResult(session_id=session.session_id)

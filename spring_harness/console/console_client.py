@@ -50,7 +50,7 @@ from spring_harness.core.rpc.schema import (
     QuestionRequestParams,
     SessionSummary,
 )
-from spring_harness.core.session_store import format_local_time
+from spring_harness.core.store.jsonl import format_local_time
 from spring_harness.core.stream.events import (
     BackgroundNotification,
     BackgroundTaskFinished,

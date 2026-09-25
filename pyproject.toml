@@ -6,16 +6,22 @@ readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
     "agent-client-protocol>=0.11,<0.12",
+    "alembic>=1.16",
+    "bcrypt>=4.3",
     "cjkwrap>=2.2",
+    "fastapi>=0.121",
     "loguru>=0.7.3",
     "pathspec>=1.1.1",
     "prompt-toolkit>=3.0.53",
     "pydantic-ai>=2.30.0",
     "pydantic-ai-harness[codemode,skills,temporal]>=0.24.0",
     "pydantic-ai-slim[web]>=2.33.0",
+    "pyjwt>=2.10",
+    "pymysql>=1.1",
     "pytest>=9.1.1",
     "python-dotenv>=1.2.2",
     "rich>=15.0.0",
+    "sqlalchemy>=2.0",
     "textual>=8.2.8",
     "tqdm>=4.70.0",
     "uvicorn[standard]>=0.52.3",
@@ -25,6 +31,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "basedpyright>=1.39.10",
+    "httpx>=0.28",
 ]
 
 [tool.basedpyright]
@@ -41,5 +48,6 @@ packages = ["spring_harness"]
 [project.scripts]
 springacp = "spring_harness.entrypoints.acp:main"
 springcli = "spring_harness.entrypoints.cli:main"
+springcloud = "spring_harness.entrypoints.cloud:main"
 springserver = "spring_harness.entrypoints.server:main"
 springweb = "spring_harness.entrypoints.web:main"

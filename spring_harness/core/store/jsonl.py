@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import base64
 import datetime
 import json
 import uuid
@@ -8,18 +7,25 @@ from datetime import timedelta, timezone
 from pathlib import Path
 
 from pydantic import ValidationError
-from pydantic_ai import ModelMessage, ModelRequest, UserPromptPart
+from pydantic_ai import ModelMessage
 from pydantic_ai.messages import ModelMessagesTypeAdapter
 
 from spring_harness.core.history import HistoryDirection, HistoryPage
-from spring_harness.core.hooks.model import is_auto_injected_message
 from spring_harness.core.log import logger
+from spring_harness.core.store.paging import (
+    dedup_segments,
+    first_user_text,
+    page_history,
+)
+
+# 兼容既有导入路径：_first_user_text 的逻辑已上收到 store/paging.py
+_first_user_text = first_user_text
 
 SESSIONS_ROOT = Path.home() / ".springharness" / "sessions"
 INDEX_FILE = SESSIONS_ROOT / "session_index.jsonl"
 
 
-class SessionStore:
+class JsonlSessionStore:
     """一个 session 一个 JSONL 文件：首行 meta，之后每行一条 ModelMessage。
     历史被改写（压缩/合并）时插入一行 history_rewrite 标记，其后为新基线；
     文件只追加，永不覆盖。"""
@@ -33,7 +39,7 @@ class SessionStore:
         return self.path.stem
 
     @classmethod
-    def create(cls, workspace: Path) -> SessionStore:
+    def create(cls, workspace: Path) -> JsonlSessionStore:
         now = datetime.datetime.now(datetime.UTC)
         # 日期分片目录 + 文件名带时间戳和 uuid，字典序即时间序
         stamp = now.strftime("%Y-%m-%dT%H-%M-%S")
@@ -141,26 +147,8 @@ class SessionStore:
         """发给模型的当前历史：最后一段（history_rewrite 标记之后的新基线）。"""
         return self._load_segments()[-1]
 
-    @staticmethod
-    def _dedup_segments(segments: list[list[ModelMessage]]) -> list[list[ModelMessage]]:
-        """跨段去重：压缩改写后的新基线与旧段尾部有重叠前缀时，剥掉重叠部分。"""
-        result: list[list[ModelMessage]] = []
-        acc: list[ModelMessage] = []
-        for seg in segments:
-            strip_lo = strip_hi = 0
-            for s in range(min(3, len(seg)) + 1):
-                for k in range(min(len(acc), len(seg) - s), 0, -1):
-                    if acc[-k:] == seg[s:s + k]:
-                        if s + k > strip_hi:
-                            strip_lo, strip_hi = s, s + k
-                        break
-            deduped = [*seg[:strip_lo], *seg[strip_hi:]]
-            result.append(deduped)
-            acc.extend(deduped)
-        return result
-
     def load_display_segments(self) -> list[list[ModelMessage]]:
-        return self._dedup_segments(self._load_segments())
+        return dedup_segments(self._load_segments())
 
     def load_for_resume(self) -> tuple[list[ModelMessage], list[list[ModelMessage]]]:
         """一次解析返回完整模型历史与去重分段。"""
@@ -171,24 +159,6 @@ class SessionStore:
         """返回按 rewrite/dedup 规则解析后的完整历史。"""
         return [m for seg in self.load_display_segments() for m in seg]
 
-    def _encode_cursor(self, segment_count: int, message_count: int, offset: int) -> str:
-        payload = json.dumps([1, self.session_id, segment_count, message_count, offset], separators=(",", ":"))
-        return base64.urlsafe_b64encode(payload.encode()).decode().rstrip("=")
-
-    def _decode_cursor(self, cursor: str) -> tuple[int, int, int]:
-        try:
-            payload = base64.b64decode(cursor + "=" * (-len(cursor) % 4), altchars=b"-_", validate=True)
-            data = json.loads(payload)
-        except (ValueError, UnicodeDecodeError) as e:
-            raise ValueError("invalid history cursor") from e
-        if (
-            not isinstance(data, list) or len(data) != 5
-            or type(data[0]) is not int or data[0] != 1 or data[1] != self.session_id
-            or any(type(value) is not int or value < 0 for value in data[2:])
-        ):
-            raise ValueError("invalid history cursor")
-        return data[2], data[3], data[4]
-
     def query_history(
         self,
         cursor: str | None = None,
@@ -197,67 +167,14 @@ class SessionStore:
     ) -> tuple[list[ModelMessage], HistoryPage]:
         """一次解析返回当前完整模型历史与按消息数分页的历史快照。
 
-        游标编码版本、会话 ID、存储段数、原始消息数、去重后消息边界。
-        存储前缀固定快照，后续追加和 rewrite 不改变既有分页；新查询用空游标。
-        forward 包含边界后的消息，backward 包含边界前的消息，结果始终正序。
-        limit=None 返回完整当前历史，此时不接受 cursor。
+        介质读取之后的分页语义（游标快照、去重、切片）在 store/paging.py 统一实现，
+        与云端 MySQL 实现共用，保证游标格式与行为一致。
         """
-        if direction not in {"forward", "backward"}:
-            raise ValueError("invalid history direction")
-        if limit is not None and (type(limit) is not int or limit < 1):
-            raise ValueError("invalid history limit")
-        if cursor is not None and limit is None:
-            raise ValueError("history cursor requires a limit")
-        position = self._decode_cursor(cursor) if cursor is not None else None
         raw_segments = self._load_segments() if self.path.exists() else []
-        messages = raw_segments[-1] if raw_segments else []
-        segment_count = len(raw_segments)
-        message_count = sum(map(len, raw_segments))
-        snapshot = raw_segments
-        if position is not None:
-            segment_count, message_count, _ = position
-            if segment_count > len(raw_segments):
-                raise ValueError("history cursor snapshot is out of range")
-            snapshot = raw_segments[:segment_count]
-            preceding_count = sum(map(len, snapshot[:-1]))
-            if not preceding_count <= message_count <= sum(map(len, snapshot)):
-                raise ValueError("history cursor snapshot is out of range")
-            if snapshot:
-                snapshot[-1] = snapshot[-1][:message_count - preceding_count]
-        segments = self._dedup_segments(snapshot)
-        total = sum(map(len, segments))
-        if limit is None:
-            return messages, HistoryPage(
-                segments=segments if total else [], first_segment_index=0 if total else None,
-            )
-        boundary = position[2] if position is not None else (total if direction == "backward" else 0)
-        if boundary > total:
-            raise ValueError("history cursor offset is out of range")
-        if direction == "forward":
-            start, end = boundary, min(boundary + limit, total)
-        else:
-            start, end = max(0, boundary - limit), boundary
-        selected: list[list[ModelMessage]] = []
-        first_segment_index = None
-        offset = 0
-        for index, segment in enumerate(segments):
-            segment_start = max(start - offset, 0)
-            segment_end = min(end - offset, len(segment))
-            if segment_start < segment_end or (not segment and start < offset < end):
-                if first_segment_index is None:
-                    first_segment_index = index
-                selected.append(segment[segment_start:segment_end])
-            offset += len(segment)
-        return messages, HistoryPage(
-            segments=selected,
-            first_segment_index=first_segment_index,
-            next_cursor=self._encode_cursor(segment_count, message_count, end) if end < total else None,
-            previous_cursor=self._encode_cursor(segment_count, message_count, start) if start > 0 else None,
-            has_more=end < total if direction == "forward" else start > 0,
-        )
+        return page_history(raw_segments, self.session_id, cursor, limit, direction)
 
     @classmethod
-    def list_sessions(cls, workspace: Path) -> list[tuple[SessionStore, dict]]:
+    def list_sessions(cls, workspace: Path) -> list[tuple[JsonlSessionStore, dict]]:
         """索引为主：title 取自 session_index.jsonl，免读全量消息；
         索引未收录的文件读 meta 行兜底并现算 title。"""
         index = cls._read_index()
@@ -275,7 +192,7 @@ class SessionStore:
             messages = store.load_messages()
             if not messages:
                 continue
-            meta["title"] = _first_user_text(messages) or "(空会话)"
+            meta["title"] = first_user_text(messages) or "(空会话)"
             result.append((store, meta))
         return result
 
@@ -288,7 +205,7 @@ class SessionStore:
             "id": self.path.stem,
             "workspace": meta.get("workspace"),
             "created_at": meta.get("created_at"),
-            "title": old.get("title") or _first_user_text(messages),
+            "title": old.get("title") or first_user_text(messages),
             "updated_at": datetime.datetime.now(datetime.UTC).isoformat(),
         }
         with INDEX_FILE.open("a", encoding="utf-8") as f:
@@ -321,19 +238,6 @@ class SessionStore:
         if not isinstance(meta, dict) or meta.get("type") != "meta":
             return None
         return meta
-
-
-def _first_user_text(messages: list[ModelMessage], limit: int = 30) -> str | None:
-    """第一条用户消息的截断文本"""
-    for msg in messages:
-        if is_auto_injected_message(msg):
-            continue
-        if isinstance(msg, ModelRequest):
-            for part in msg.parts:
-                if isinstance(part, UserPromptPart) and isinstance(part.content, str):
-                    text = part.content.replace("\n", " ")
-                    return text[:limit] + ("…" if len(text) > limit else "")
-    return None
 
 
 LOCAL_TZ = timezone(timedelta(hours=8))  # 展示层统一 +8

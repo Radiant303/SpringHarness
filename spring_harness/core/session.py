@@ -22,7 +22,8 @@ from spring_harness.core.approval import run_with_approval
 from spring_harness.core.background import format_notice
 from spring_harness.core.history import HistoryDirection, HistoryPage
 from spring_harness.core.hooks.model import BACKGROUND_WAKE_SOURCE
-from spring_harness.core.session_store import SessionStore
+from spring_harness.core.store.base import SessionStore
+from spring_harness.core.store.jsonl import JsonlSessionStore
 from spring_harness.core.stream.adapter import AgentEventAdapter
 from spring_harness.core.stream.emit import EventEmitter, PendingRequests
 from spring_harness.core.stream.events import (
@@ -83,7 +84,7 @@ class HarnessSession:
         model_name: str | None = None,
     ) -> None:
         self.workspace = Path(workspace).resolve()
-        self._store = store or SessionStore.create(self.workspace)
+        self._store = store or JsonlSessionStore.create(self.workspace)
         self.session_id = self._store.session_id
         self._model_name = model_name
         self._agent = agent
@@ -239,7 +240,7 @@ class HarnessSession:
 
     @classmethod
     def resume_last(cls, workspace: str | Path, **kwargs: Any) -> HarnessSession | None:
-        sessions = SessionStore.list_sessions(Path(workspace).resolve())
+        sessions = JsonlSessionStore.list_sessions(Path(workspace).resolve())
         if not sessions:
             return None
         return cls(workspace, store=sessions[-1][0], **kwargs)
