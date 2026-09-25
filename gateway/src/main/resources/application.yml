@@ -1,0 +1,23 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: springharness-gateway
+  datasource:
+    # 宿主 3307 → Docker 容器内 MySQL；serverTimezone=UTC 与库中 naive UTC 时间戳对齐
+    url: jdbc:mysql://127.0.0.1:3307/springharness?characterEncoding=utf8mb4&serverTimezone=UTC
+    username: root
+    password: root   # 开发环境本地值；生产用环境变量覆盖
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+
+app:
+  # 必须与 Python 引擎 ~/.springharness/config.toml 的 [cloud].jwt_secret 完全一致
+  # 这是"Java 签发、Python 验证"互认 token 的前提；生产用环境变量 JWT_SECRET 覆盖
+  jwt-secret: ${JWT_SECRET:dev-secret-change-me}
+  jwt-expire-minutes: 10080
+  # Python 引擎地址，会话删除/历史等请求会转发到这里
+  engine-base-url: ${ENGINE_BASE_URL:http://127.0.0.1:8001}
