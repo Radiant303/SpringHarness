@@ -126,15 +126,30 @@ function setMarkdown(node, text) {
 }
 
 let stickToBottom = true;
+let hasNewBelow = false;  // 不在底部时下面又来了新内容：即使只离开一点也提示「最新消息」
+
+function syncScrollBtn() {
+  const box = $("messages");
+  const dist = box.scrollHeight - box.scrollTop - box.clientHeight;
+  const cardOpen = !$("plan-dock").classList.contains("hidden") && !$("plan-panel").classList.contains("hidden");
+  // 出现时机：大幅上翻（>320px，在翻历史）才显示；只离开一点（选中文本等）不打扰，
+  // 除非此时下面来了新内容；贴着底部跟随流式输出时永远不显示；
+  // 计划卡展开时按钮被卡片完全盖住（层级：聊天区 < 按钮 < 计划卡），不露出来
+  const show = !cardOpen && !stickToBottom && (dist > 320 || hasNewBelow);
+  $("scroll-bottom").classList.toggle("hidden", !show);
+}
 
 function updateStick() {
   const box = $("messages");
   stickToBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
-  $("scroll-bottom").classList.toggle("hidden", stickToBottom);
+  if (stickToBottom) hasNewBelow = false;
+  syncScrollBtn();
 }
 
-function maybeScroll() {
-  if (stickToBottom) scrollToBottom();
+function maybeScroll(layoutOnly) {
+  if (stickToBottom) { scrollToBottom(); return; }
+  if (!layoutOnly) hasNewBelow = true;
+  syncScrollBtn();
 }
 
 /* ================= 全局状态 ================= */
@@ -1461,14 +1476,22 @@ function bind() {
   };
   $("plan-pill").onclick = togglePlan;
   $("plan-header").onclick = togglePlan;
-  // 胶囊常驻在消息区底部上方：只把胶囊高度写进 --plan-h 让最后一条消息不被胶囊遮住；
-  // 展开卡片是浮层，直接盖在消息流上，不挤压消息布局
-  new ResizeObserver(() => {
+  // 计划胶囊常驻消息区底部上方：--plan-h 只预留胶囊高度，展开卡片作为浮层盖在消息上；
+  // 「最新消息」按钮按 --scroll-b 浮在胶囊/输入区上方（计划卡展开时按钮被卡片盖住，由 syncScrollBtn 隐藏）。
+  // 输入区高度（多行输入）和计划层尺寸变化都会触发重算
+  const syncChrome = () => {
     const dock = $("plan-dock");
-    const h = dock.classList.contains("hidden") ? 0 : $("plan-pill").offsetHeight;
-    document.documentElement.style.setProperty("--plan-h", h + "px");
-    maybeScroll();
-  }).observe($("plan-dock"));
+    const dockHidden = dock.classList.contains("hidden");
+    const pillH = dockHidden ? 0 : $("plan-pill").offsetHeight;
+    document.documentElement.style.setProperty("--plan-h", pillH + "px");
+    const inputH = $("input-area").offsetHeight;
+    const gap = dockHidden ? 12 : pillH + 10;
+    document.documentElement.style.setProperty("--scroll-b", inputH + gap + "px");
+    maybeScroll(true);
+  };
+  const chromeRO = new ResizeObserver(syncChrome);
+  chromeRO.observe($("plan-dock"));
+  chromeRO.observe($("input-area"));
   $("model-select").onchange = onModelChange;
   $("messages").addEventListener("scroll", updateStick);
   $("scroll-bottom").onclick = () => {

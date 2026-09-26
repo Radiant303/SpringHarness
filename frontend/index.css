@@ -47,6 +47,7 @@
   --scrollbar-menu-thumb: rgba(0, 0, 0, 0.16);
   --scrollbar-menu-thumb-hover: rgba(0, 0, 0, 0.48);
   --plan-h: 0px;  /* 只预留常驻胶囊的高度；展开卡片作为浮层直接盖在消息上，不占布局 */
+  --scroll-b: 140px;  /* 「最新消息」按钮距主区底部的偏移，由 JS 按输入区高度与计划层状态写入 */
 }
 
 * { box-sizing: border-box; }
@@ -796,10 +797,12 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 
 #scroll-bottom {
   position: absolute;
-  bottom: calc(140px + var(--plan-h));
+  bottom: var(--scroll-b);
   left: 50%;
   transform: translateX(-50%);
-  z-index: 20;
+  /* 层级：聊天区最低、「最新消息」中等（5）、计划卡最高（10）。
+     计划卡展开时按钮被卡片完全盖住（此时 syncScrollBtn 直接将其隐藏，不露出来） */
+  z-index: 5;
   border-radius: 999px;
   padding: 6px 16px;
   background: var(--panel);
