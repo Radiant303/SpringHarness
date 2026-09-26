@@ -9,7 +9,7 @@ import org.springframework.stereotype.Component;
 
 /**
  * workerId 分配器。实例启动时通过 Redis 的 INCR 命令获取全局递增序号，再对 1024 取模作为 workerId。
- * INCR 为原子操作，并发启动不会分配到重复序号。Redis 不可用时抛出异常使应用启动失败。
+ * Redis 不可用时抛出异常使应用启动失败。
  *
  * @author hanbing
  * @since 2026-09-25

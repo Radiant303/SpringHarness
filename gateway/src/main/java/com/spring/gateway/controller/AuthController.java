@@ -8,8 +8,6 @@ import com.spring.gateway.dto.UserResponse;
 import com.spring.gateway.service.AuthService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -35,8 +33,8 @@ public class AuthController {
      * @return 用户信息
      */
     @PostMapping("/register")
-    public ResponseEntity<Result<UserResponse>> register(@Valid @RequestBody RegisterRequest req) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(Result.ok(authService.register(req)));
+    public Result<UserResponse> register(@Valid @RequestBody RegisterRequest req) {
+        return Result.ok(authService.register(req));
     }
 
     /**
