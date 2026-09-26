@@ -554,6 +554,18 @@ pre.tool-result.error { background: var(--diff-del-bg); color: var(--danger); }
 
 /* ---- 计划区（输入框上方悬浮：展开卡片 + 常驻小胶囊） ---- */
 #input-area { position: relative; }
+/* 消息区与输入区交界的渐隐遮罩：消息滚到底部时淡出，避免被输入区背景硬切 */
+#input-area::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  height: 48px;
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.75) 55%, var(--bg));
+  pointer-events: none;
+  z-index: 1;  /* 在聊天内容之上、计划层（10）和「最新消息」（5）之下 */
+}
 #plan-dock {
   position: absolute;
   left: max(24px, calc((100% - var(--content-max)) / 2));
