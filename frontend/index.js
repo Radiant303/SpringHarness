@@ -573,6 +573,8 @@ const ICONS = {
   work: '<circle cx="12" cy="12" r="3"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4"/>',
   chevron: '<path d="M9 6l6 6-6 6"/>',
   check: '<circle cx="12" cy="12" r="10.875" stroke-width="2.25"/><path d="M7.125 12.6L10.65 16.125L17.025 8.85" stroke-width="2.25"/>',
+  copy: '<rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6.5A2.5 2.5 0 0 0 13.5 4h-7A2.5 2.5 0 0 0 4 6.5v7A2.5 2.5 0 0 0 6.5 16H8"/>',
+  tick: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
 };
 
 function icon(name, className) {
@@ -677,17 +679,40 @@ function statsFromArgs(name, args) {
   return null;
 }
 
-function setToolTarget(card, target) {
-  card.target = target;
-  card.targetEl.textContent = target;
-  card.targetEl.title = target;
+function splitPath(path) {
+  const slash = path.lastIndexOf("/");
+  return slash >= 0 ? { dir: path.slice(0, slash), name: path.slice(slash + 1) } : { dir: "", name: path };
 }
 
+function isFileTool(name) {
+  const kind = toolMeta(name).kind;
+  return kind === "read" || kind === "edit";
+}
+
+// 文件类工具：「文件名 目录 N 行」，文件名深色、其余浅色；其他工具照旧显示整段目标
+function renderTarget(card) {
+  const t = card.targetEl;
+  t.textContent = "";
+  t.title = card.target;
+  if (!isFileTool(card.name) || !card.target) { t.textContent = card.target; return; }
+  t.classList.add("file");
+  const { dir, name } = splitPath(card.target);
+  t.appendChild(el("span", "tt-name", name));
+  if (dir) t.appendChild(el("span", "tt-meta", dir));
+  if (card.lineCount) t.appendChild(el("span", "tt-meta", `${card.lineCount} 行`));
+}
+
+function setToolTarget(card, target) {
+  card.target = target;
+  renderTarget(card);
+}
+
+// 只显示非零的一侧：+1 或 +7 −1
 function setToolStats(card, stats) {
   card.statsEl.textContent = "";
-  if (!stats || (!stats.add && !stats.del)) return;
-  card.statsEl.appendChild(el("span", "stat-add", `+${stats.add}`));
-  card.statsEl.appendChild(el("span", "stat-del", `−${stats.del}`));
+  if (!stats) return;
+  if (stats.add) card.statsEl.appendChild(el("span", "stat-add", `+${stats.add}`));
+  if (stats.del) card.statsEl.appendChild(el("span", "stat-del", `−${stats.del}`));
 }
 
 function setToolStatus(card, status) {
@@ -769,12 +794,212 @@ function colorizeDiff(pre, diff) {
   }
 }
 
+/* ================= 文件视图（读/写/编辑） ================= */
+
+const FILE_VIEW_MAX_ROWS = 400;
+
+// 统一 diff → 行：{type: add|del|ctx|gap, no, text}；行号取自 @@ 头
+function parseUnifiedDiff(diff) {
+  const rows = [];
+  let oldNo = 1, newNo = 1;
+  for (const line of String(diff).split("\n")) {
+    if (line === "" || line.startsWith("---") || line.startsWith("+++") || line.startsWith("\\")) continue;
+    const hunk = /^@@ -(\d+)(?:,\d+)? \+(\d+)/.exec(line);
+    if (hunk) {
+      oldNo = +hunk[1] || 1;
+      newNo = +hunk[2] || 1;
+      if (rows.length) rows.push({ type: "gap" });
+      continue;
+    }
+    const text = line.slice(1);
+    if (line[0] === "+") rows.push({ type: "add", no: newNo++, text });
+    else if (line[0] === "-") rows.push({ type: "del", no: oldNo++, text });
+    else { rows.push({ type: "ctx", no: newNo++, text }); oldNo++; }
+  }
+  return rows;
+}
+
+// 历史里没有 tool_diff 事件：按 old_text/new_text 做一次 LCS 行级 diff
+function lineDiff(oldText, newText) {
+  const a = oldText.split(/\r?\n/);
+  const b = newText.split(/\r?\n/);
+  if (a.length * b.length > 250000) {  // 片段过大时不做 LCS，直接整段删 + 整段增
+    return [
+      ...a.map((text, i) => ({ type: "del", no: i + 1, text })),
+      ...b.map((text, i) => ({ type: "add", no: i + 1, text })),
+    ];
+  }
+  const dp = Array.from({ length: a.length + 1 }, () => new Uint16Array(b.length + 1));
+  for (let i = a.length - 1; i >= 0; i--) {
+    for (let j = b.length - 1; j >= 0; j--) {
+      dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    }
+  }
+  const rows = [];
+  let i = 0, j = 0;
+  while (i < a.length || j < b.length) {
+    if (i < a.length && j < b.length && a[i] === b[j]) { rows.push({ type: "ctx", no: j + 1, text: b[j] }); i++; j++; }
+    // 同一位置的替换先删后增，与统一 diff 的阅读顺序一致
+    else if (i < a.length && (j >= b.length || dp[i + 1][j] >= dp[i][j + 1])) { rows.push({ type: "del", no: i + 1, text: a[i] }); i++; }
+    else { rows.push({ type: "add", no: j + 1, text: b[j] }); j++; }
+  }
+  return rows;
+}
+
+// read_file 结果：首行元信息头 + 「行号\t内容」，末尾可能带续读提示
+function parseReadResult(text) {
+  const rows = [];
+  let note = "";
+  // CRLF 文件读出来每行末尾带 \r，按 \r?\n 切分
+  for (const line of String(text).split(/\r?\n/)) {
+    const m = /^\s*(\d+)\t(.*)$/.exec(line);
+    if (m) rows.push({ type: "ctx", no: +m[1], text: m[2] });
+    else if (/^\.\.\. \((\d+) more lines/.test(line)) note = `还有 ${/\d+/.exec(line)[0]} 行未读取`;
+    else if (line === "(empty file)") note = "空文件";
+  }
+  return { rows, note };
+}
+
+function fileRowsFromArgs(name, args) {
+  if (!args) return null;
+  if (name === "edit_file" && typeof args.old_text === "string" && typeof args.new_text === "string") {
+    return lineDiff(args.old_text, args.new_text);
+  }
+  if (name === "write_file" && typeof args.content === "string") {
+    return args.content.replace(/\n$/, "").split("\n").map((text, i) => ({ type: "add", no: i + 1, text }));
+  }
+  if (name === "edit_knowledge" && typeof args.diff === "string") return parseUnifiedDiff(args.diff);
+  return null;
+}
+
+/* ---- 轻量语法高亮：只做注释 / 字符串 / 关键字 / 数字 / 标签 / 属性几类，逐行着色 ---- */
+
+const HL_KEYWORDS = new Set((
+  "const let var function return if else for while do switch case break continue new class extends " +
+  "import from export default async await try catch finally throw typeof instanceof in of this null " +
+  "undefined true false def self None True False elif lambda pass with as yield raise and or not is " +
+  "public private protected static void int long boolean package interface implements"
+).split(" "));
+
+function hlLang(path) {
+  const ext = (/\.([a-z0-9]+)$/i.exec(path || "") || [])[1];
+  if (!ext) return "plain";
+  const e = ext.toLowerCase();
+  if (["html", "htm", "xml", "svg", "vue"].includes(e)) return "markup";
+  if (["css", "scss", "less"].includes(e)) return "css";
+  if (["py", "toml", "yaml", "yml", "sh", "ini"].includes(e)) return "hash";   // # 注释
+  if (["js", "ts", "jsx", "tsx", "mjs", "java", "go", "rs", "c", "cpp", "h", "kt", "json"].includes(e)) return "c";
+  return "plain";
+}
+
+const HL_RULES = {
+  c: /(\/\/.*$|\/\*.*?\*\/)|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)|\b(\d+(?:\.\d+)?)\b|\b([A-Za-z_$][\w$]*)\b/g,
+  hash: /(#.*$)|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')|\b(\d+(?:\.\d+)?)\b|\b([A-Za-z_][\w]*)\b/g,
+  css: /(\/\*.*?\*\/)|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')|(-?\d+(?:\.\d+)?(?:px|em|rem|%|s|ms|vh|vw|deg)?)\b|([#.][\w-]+(?=[^;{}]*\{))/g,
+  markup: /(<!--.*?-->)|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')|(<\/?[\w-]+|\/?>|<!DOCTYPE)|(\s[\w-]+(?==))/gi,
+};
+
+// 返回 DocumentFragment：纯文本节点 + 带类名的 span，全程 textContent，不拼 HTML
+function highlightLine(text, lang) {
+  const frag = document.createDocumentFragment();
+  const re = HL_RULES[lang];
+  if (!re) { frag.appendChild(document.createTextNode(text)); return frag; }
+  re.lastIndex = 0;
+  let last = 0, m;
+  while ((m = re.exec(text))) {
+    if (m[0] === "") { re.lastIndex++; continue; }
+    let cls = null;
+    if (m[1]) cls = "hl-comment";
+    else if (m[2]) cls = "hl-string";
+    else if (m[3]) cls = lang === "markup" ? "hl-tag" : "hl-number";
+    else if (m[4]) {
+      if (lang === "markup") cls = "hl-attr";
+      else if (lang === "css") cls = "hl-selector";
+      else if (HL_KEYWORDS.has(m[4])) cls = "hl-keyword";
+    }
+    if (!cls) continue;
+    if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+    frag.appendChild(el("span", cls, m[0]));
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+  return frag;
+}
+
+// 代码卡片：头部文件名 + 复制按钮；读取显示行号，编辑/写入只显示 +/− 标记列
+function renderFileView(card, rows, note) {
+  const view = card.fileView;
+  view.textContent = "";
+  const mode = card.name === "read_file" ? "read" : "diff";
+  view.className = "file-view mode-" + mode;
+
+  const head = el("div", "fv-head");
+  const { dir, name } = splitPath(card.target || "");
+  if (mode === "diff" && dir) head.appendChild(el("span", "fv-dir", dir + "/"));
+  head.appendChild(el("span", "fv-name", name));
+  if (mode === "diff") {
+    const stats = card.statsEl.cloneNode(true);
+    stats.className = "tool-stats fv-stats";
+    head.appendChild(stats);
+  }
+  head.appendChild(el("span", "spacer"));
+  const copy = el("button", "fv-copy");
+  copy.type = "button";
+  copy.title = "复制";
+  copy.setAttribute("aria-label", "复制代码");
+  copy.appendChild(icon("copy"));
+  const shown = rows.slice(0, FILE_VIEW_MAX_ROWS);
+  copy.onclick = (e) => {
+    e.stopPropagation();
+    // 编辑视图复制修改后的内容（跳过删除行），读取视图复制原文
+    const text = shown.filter((r) => r.type !== "del" && r.type !== "gap").map((r) => r.text).join("\n");
+    navigator.clipboard.writeText(text).then(() => {
+      copy.textContent = "";
+      copy.appendChild(icon("tick"));
+      setTimeout(() => { copy.textContent = ""; copy.appendChild(icon("copy")); }, 1200);
+    });
+  };
+  head.appendChild(copy);
+  view.appendChild(head);
+
+  const lang = hlLang(card.target);
+  const body = el("div", "fv-body");
+  const lines = el("div", "fv-lines");
+  for (const row of shown) {
+    const r = el("div", "fv-row " + row.type);
+    if (mode === "read") r.appendChild(el("span", "fv-no", row.type === "gap" ? "⋯" : String(row.no)));
+    else r.appendChild(el("span", "fv-sign", row.type === "add" ? "+" : row.type === "del" ? "−" : row.type === "gap" ? "⋯" : ""));
+    const textEl = el("span", "fv-text");
+    if (row.type !== "gap") textEl.appendChild(highlightLine(row.text || " ", lang));
+    r.appendChild(textEl);
+    lines.appendChild(r);
+  }
+  body.appendChild(lines);
+  view.appendChild(body);
+  const more = rows.length > FILE_VIEW_MAX_ROWS ? `还有 ${rows.length - FILE_VIEW_MAX_ROWS} 行未显示` : "";
+  if (note || more) view.appendChild(el("div", "fv-note", note || more));
+  card.el.classList.add("has-file");
+}
+
+// read_file 的结果头里带总行数：写回卡片，单行摘要显示「N 行」
+function applyReadMeta(card, resultText) {
+  const m = /^\[[^\]|]*\|\s*(\d+) lines/.exec(String(resultText || ""));
+  if (m) { card.lineCount = +m[1]; renderTarget(card); }
+}
+
 function historyToolCard(name, argsText, resultText, isError) {
   const card = buildToolCard(name);
   card.args.textContent = argsText || "";
   const args = parseArgs(argsText);
   setToolTarget(card, targetFromArgs(args));
   setToolStats(card, statsFromArgs(name, args));
+  const rows = fileRowsFromArgs(name, args);
+  if (rows) renderFileView(card, rows);
+  else if (name === "read_file" && resultText && !isError) {
+    applyReadMeta(card, resultText);
+    const read = parseReadResult(resultText);
+    if (read.rows.length || read.note) renderFileView(card, read.rows, read.note);
+  }
   if (resultText !== null && resultText !== undefined) {
     card.result.textContent = resultText;
     card.result.classList.remove("hidden");
@@ -808,6 +1033,8 @@ function buildToolCard(name, id) {
   const args = el("pre", "tool-args");
   const diff = el("pre", "tool-diff diff hidden");
   const result = el("pre", "tool-result hidden");
+  const fileView = el("div", "file-view hidden");
+  body.appendChild(fileView);
   body.appendChild(args);
   body.appendChild(diff);
   body.appendChild(result);
@@ -816,7 +1043,7 @@ function buildToolCard(name, id) {
   header.onclick = () => card.classList.toggle("expanded");
   return {
     el: card, id, name, target: "", error: false,
-    status, args, diff, result, pending, body, targetEl, statsEl,
+    status, args, diff, result, pending, body, targetEl, statsEl, fileView,
   };
 }
 
@@ -920,7 +1147,12 @@ function onSessionEvent(sid, event) {
           setToolTarget(card, target);
           if (state.work) refreshWorkSummary(state.work);
         }
-        if (args && !card.hasDiff) setToolStats(card, statsFromArgs(card.name, args));
+        if (args && !card.hasDiff) {
+          setToolStats(card, statsFromArgs(card.name, args));
+          // 参数完整后立刻渲染代码卡片（edit/write 不必等 tool_diff 或结果）
+          const rows = fileRowsFromArgs(card.name, args);
+          if (rows) renderFileView(card, rows);
+        }
         maybeScroll();
       }
       break;
@@ -932,6 +1164,8 @@ function onSessionEvent(sid, event) {
         card.diff.classList.remove("hidden");
         colorizeDiff(card.diff, event.diff);
         setToolStats(card, diffStats(event.diff));
+        const rows = parseUnifiedDiff(event.diff);
+        if (rows.length) renderFileView(card, rows);
       }
       break;
     }
@@ -948,6 +1182,11 @@ function onSessionEvent(sid, event) {
         card.result.textContent = event.result;
         card.result.classList.remove("hidden");
         card.result.classList.toggle("error", !!event.is_error);
+        if (card.name === "read_file" && !event.is_error) {
+          applyReadMeta(card, event.result);
+          const read = parseReadResult(event.result);
+          if (read.rows.length || read.note) renderFileView(card, read.rows, read.note);
+        }
         if (card.group) refreshWorkSummary(card.group);
         maybeScroll();
       }

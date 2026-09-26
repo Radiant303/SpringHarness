@@ -332,9 +332,8 @@ html, body {
 
 .work-body {
   display: none;
-  margin: 4px 0 0 7.5px;
-  padding: 2px 0 2px 15px;
-  border-left: 1px solid var(--border);
+  margin: 2px 0 0;
+  padding: 0;
 }
 .work-group.expanded > .work-body { display: flex; flex-direction: column; gap: 2px; }
 
@@ -370,7 +369,7 @@ html, body {
   display: none;
   margin: 2px 0 6px 7.5px;
   padding: 2px 0 2px 14px;
-  border-left: 2px solid var(--border);
+  border-left: 1px dashed rgba(0, 0, 0, 0.18);
   font-size: var(--fs-sm);
   line-height: calc(22 / 14);
   color: var(--text-dim);
@@ -384,7 +383,8 @@ html, body {
 /* ---- 工具卡片：单行摘要 ---- */
 .tool-card { flex-shrink: 0; align-self: stretch; }
 .tool-header {
-  display: flex;
+  display: inline-flex;
+  max-width: 100%;
   align-items: center;
   gap: 7px;
   min-width: 0;
@@ -412,7 +412,7 @@ html, body {
 .tool-stats:empty { display: none; }
 .stat-add { color: var(--diff-add-text); }
 .stat-del { color: var(--diff-del-text); }
-.tool-card .caret { margin-left: auto; opacity: 0; }
+.tool-card .caret { opacity: 0; }  /* 箭头紧跟在文字后面，与分组、思考标题一致 */
 .tool-header:hover .caret, .tool-card.expanded .caret { opacity: 1; }
 .tool-card.expanded .caret { transform: rotate(90deg); }
 
@@ -435,7 +435,7 @@ html, body {
   border-radius: 999px;
   padding: 1px 8px;
 }
-.tool-body { display: none; padding: 2px 0 8px 23px; }
+.tool-body { display: none; padding: 4px 0 8px; }
 .tool-card.expanded .tool-body { display: block; }
 
 pre.tool-args, pre.tool-result, pre.tool-diff, .modal-pre {
@@ -457,6 +457,99 @@ pre.tool-result.error { background: var(--diff-del-bg); color: var(--danger); }
 
 .diff .diff-add { background: var(--diff-add-bg); color: var(--diff-add-text); display: block; }
 .diff .diff-del { background: var(--diff-del-bg); color: var(--diff-del-text); display: block; }
+
+/* ---- 文件卡片（读取 / 写入 / 编辑） ---- */
+/* 有文件视图时不再展示原始参数 JSON 和结果文本；出错时保留结果，便于看报错 */
+.tool-card.has-file pre.tool-args,
+.tool-card.has-file pre.tool-diff,
+.tool-card.has-file pre.tool-result:not(.error) { display: none; }
+
+/* 单行摘要：文件名深色，目录 / 行数浅色 */
+.tool-target.file { display: inline-flex; gap: 6px; font-family: inherit; }
+.tt-name { color: var(--text); }
+.tt-meta { color: var(--text-faint); }
+.tt-name, .tt-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 灰底无边框的代码卡片 */
+.file-view {
+  margin-top: 2px;
+  background: var(--color-surface);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.fv-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 40px;
+  padding: 0 8px 0 16px;
+  font-size: var(--fs-sm);
+}
+.fv-head .spacer { flex: 1; }
+.fv-dir { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-faint); }
+.fv-name { flex-shrink: 0; white-space: nowrap; color: var(--text); }
+.fv-dir + .fv-name { margin-left: -8px; }  /* 目录与文件名紧挨，抵消 flex gap */
+.fv-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-faint);
+}
+.fv-copy:hover { background: transparent; color: var(--text); }
+.fv-copy .icon { width: var(--ic-sm); height: var(--ic-sm); }
+
+/* 代码区：直接铺在灰卡片上，不再套白色内容器 */
+.fv-body {
+  max-height: 320px;
+  overflow: auto;
+}
+.fv-lines {
+  display: table;
+  min-width: 100%;
+  padding: 0 0 10px;
+  font-family: ui-monospace, "JetBrains Mono", Consolas, monospace;
+  font-size: var(--fs-sm);
+  line-height: calc(22 / 14);
+}
+.fv-row { display: table-row; }
+.fv-row > span { display: table-cell; white-space: pre; }
+.fv-no, .fv-sign {
+  width: 1%;
+  text-align: right;
+  color: var(--text-faint);
+  user-select: none;
+}
+.fv-no { padding: 0 16px 0 16px; min-width: 2ch; }
+.fv-sign { padding: 0 12px 0 14px; }
+.fv-text { padding-right: 16px; color: var(--text); }
+/* 编辑视图：增删整行底色 */
+.fv-row.add { background: rgba(22, 196, 86, 0.1); }
+.fv-row.add .fv-sign { color: var(--success); }
+.fv-row.del { background: rgba(255, 77, 77, 0.1); }
+.fv-row.del .fv-sign { color: var(--danger); }
+.fv-row.gap > span { color: var(--text-faint); }
+.fv-note { padding: 0 16px 10px; font-size: var(--fs-sm); color: var(--text-faint); }
+
+/* 语法高亮 */
+.hl-keyword { color: #a500b5; }
+.hl-string { color: #22863a; }
+.hl-number { color: #8b6b00; }
+.hl-comment { color: #737373; font-style: italic; }
+.hl-tag { color: #2f6fc4; }
+.hl-attr { color: #8b6b00; }
+.hl-selector { color: #2f6fc4; }
+
+.fv-body::-webkit-scrollbar { width: 8px; height: 8px; }
+.fv-body::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border: 2px solid transparent; background-clip: padding-box; border-radius: 999px; }
+.fv-body::-webkit-scrollbar-thumb:hover { background-color: var(--scrollbar-thumb-hover); }
+.fv-body::-webkit-scrollbar-track { background: transparent; }
 
 /* ---- 计划区（输入框上方悬浮：展开卡片 + 常驻小胶囊） ---- */
 #input-area { position: relative; }
