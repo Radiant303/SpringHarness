@@ -1,27 +1,6 @@
 import datetime
 
-from pydantic import BaseModel, Field, field_serializer
-
-
-class RegisterRequest(BaseModel):
-    username: str = Field(min_length=2, max_length=64)
-    password: str = Field(min_length=6)
-
-
-class LoginRequest(BaseModel):
-    username: str = Field(min_length=1)
-    password: str = Field(min_length=1)
-
-
-class UserResponse(BaseModel):
-    user_id: int
-    username: str
-
-
-class TokenResponse(BaseModel):
-    token: str
-    user_id: int
-    username: str
+from pydantic import BaseModel, field_serializer
 
 
 class SessionSummary(BaseModel):

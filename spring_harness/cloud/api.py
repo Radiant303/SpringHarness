@@ -4,18 +4,10 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic_ai.messages import ModelMessagesTypeAdapter
-from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
 from spring_harness.cloud import schemas
-from spring_harness.cloud.auth import (
-    create_token,
-    get_current_user,
-    get_session_factory,
-    hash_password,
-    verify_password,
-)
+from spring_harness.cloud.auth import get_current_user, get_session_factory
 from spring_harness.cloud.db import SessionRow, UserRow
 from spring_harness.core.config.settings import config
 from spring_harness.core.store.mysql import (
@@ -44,47 +36,6 @@ def _summary(row: SessionRow) -> schemas.SessionSummary:
         title=row.title,
         created_at=row.created_at,
         updated_at=row.updated_at,
-    )
-
-
-@router.post(
-    "/auth/register", status_code=status.HTTP_201_CREATED, response_model=schemas.UserResponse,
-)
-def register(
-    body: schemas.RegisterRequest,
-    factory: _SessionFactory,
-) -> schemas.UserResponse:
-    with factory() as s:
-        exists = s.execute(
-            select(UserRow).where(UserRow.username == body.username),
-        ).scalar_one_or_none()
-        if exists is not None:
-            raise HTTPException(status.HTTP_409_CONFLICT, "用户名已存在")
-        user = UserRow(username=body.username, password_hash=hash_password(body.password))
-        s.add(user)
-        try:
-            s.commit()
-        except IntegrityError as e:
-            # 并发注册撞唯一索引：同样按重名处理
-            s.rollback()
-            raise HTTPException(status.HTTP_409_CONFLICT, "用户名已存在") from e
-    return schemas.UserResponse(user_id=user.id, username=user.username)
-
-
-@router.post("/auth/login", response_model=schemas.TokenResponse)
-def login(
-    body: schemas.LoginRequest,
-    factory: _SessionFactory,
-) -> schemas.TokenResponse:
-    with factory() as s:
-        user = s.execute(
-            select(UserRow).where(UserRow.username == body.username),
-        ).scalar_one_or_none()
-    # 用户不存在与密码错误回同一 401，避免用户名枚举
-    if user is None or not verify_password(body.password, user.password_hash):
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "用户名或密码错误")
-    return schemas.TokenResponse(
-        token=create_token(user.id, user.username), user_id=user.id, username=user.username,
     )
 
 

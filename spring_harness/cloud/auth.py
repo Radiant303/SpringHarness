@@ -1,7 +1,6 @@
 import datetime
 from typing import Annotated
 
-import bcrypt
 import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -12,17 +11,6 @@ from spring_harness.core.config.settings import config
 
 _ALGORITHM = "HS256"
 _bearer_scheme = HTTPBearer(auto_error=False)
-
-
-def hash_password(password: str) -> str:
-    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
-
-
-def verify_password(password: str, password_hash: str) -> bool:
-    try:
-        return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
-    except ValueError:
-        return False  # 哈希串损坏：按密码错误处理
 
 
 def create_token(user_id: int, username: str) -> str:

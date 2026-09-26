@@ -159,6 +159,8 @@ const state = {
 
 const TOKEN_KEY = "sh.token";
 const USER_KEY = "sh.username";
+// 页面由网关（8080）托管，聊天 WS 仍直连 Python 引擎（阶段④迁入网关）
+const WS_BASE = `${location.protocol === "https:" ? "wss" : "ws"}://${location.hostname}:8001`;
 
 function getToken() { return localStorage.getItem(TOKEN_KEY); }
 function clearToken() { localStorage.removeItem(TOKEN_KEY); }
@@ -194,15 +196,14 @@ async function doAuth(mode) {
       body: JSON.stringify({ username, password }),
     });
     if (!r.ok) {
-      errBox.textContent =
-        r.status === 401 ? "用户名或密码错误"
-        : r.status === 409 ? "用户名已被注册"
-        : r.status === 422 ? "用户名需 2~64 个字符，密码至少 6 位"
-        : `请求失败（${r.status}）`;
+      // 网关统一返回 {code, message, data}，错误详情在 message 里
+      let msg = null;
+      try { msg = (await r.json()).message; } catch { /* 非 JSON 响应 */ }
+      errBox.textContent = msg || `请求失败（${r.status}）`;
       return;
     }
     if (mode === "register") { await doAuth("login"); return; }  // 注册成功直接登录
-    const data = await r.json();
+    const data = (await r.json()).data;
     localStorage.setItem(TOKEN_KEY, data.token);
     localStorage.setItem(USER_KEY, data.username);
     localStorage.removeItem("sh.sessionId");  // 换账号不复用旧会话
@@ -253,8 +254,7 @@ function setConnected(ok) {
 }
 
 async function connectAndSetup() {
-  const scheme = location.protocol === "https:" ? "wss" : "ws";
-  await rpc.connect(`${scheme}://${location.host}/ws?token=${encodeURIComponent(getToken())}`);
+  await rpc.connect(`${WS_BASE}/ws?token=${encodeURIComponent(getToken())}`);
   const info = await rpc.request("initialize", {});
   state.workspace = info.workspace;
   state.models = info.models || [];

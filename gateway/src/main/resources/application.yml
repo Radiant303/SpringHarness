@@ -4,6 +4,13 @@ server:
 spring:
   application:
     name: springharness-gateway
+  web:
+    resources:
+      # 网关托管前端静态文件（相对 gateway 模块的工作目录）
+      static-locations: file:../frontend/
+      cache:
+        cachecontrol:
+          max-age: 0
   datasource:
     # 宿主 3307 → Docker 容器内 MySQL；serverTimezone=UTC 与库中 naive UTC 时间戳对齐
     # characterEncoding 要填 Java 字符集名 UTF-8，不是 MySQL 的 utf8mb4
