@@ -38,19 +38,29 @@
         </div>
       </div>
 
-      <div id="plan-panel" class="hidden">
-        <div class="plan-title">计划</div>
-        <ul id="plan-items"></ul>
-      </div>
-
       <button id="scroll-bottom" class="hidden">↓ 最新消息</button>
 
       <footer id="input-area">
+        <div id="plan-panel" class="hidden">
+          <div id="plan-header" title="展开/收起">
+            <svg class="plan-head-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M4.1 6C4.1 5.5 4.5 5.1 5 5.1H19C19.5 5.1 19.9 5.5 19.9 6C19.9 6.5 19.5 6.9 19 6.9H5C4.5 6.9 4.1 6.5 4.1 6ZM4.1 12C4.1 11.5 4.5 11.1 5 11.1H19C19.5 11.1 19.9 11.5 19.9 12C19.9 12.5 19.5 12.9 19 12.9H5C4.5 12.9 4.1 12.5 4.1 12ZM4.1 18C4.1 17.5 4.5 17.1 5 17.1H19C19.5 17.1 19.9 17.5 19.9 18C19.9 18.5 19.5 18.9 19 18.9H5C4.5 18.9 4.1 18.5 4.1 18Z" fill="currentColor"/></svg>
+            <span class="plan-title">当前进度</span>
+            <span id="plan-progress"></span>
+            <span class="spacer"></span>
+            <span class="plan-caret"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></span>
+          </div>
+          <ul id="plan-items"></ul>
+        </div>
+
         <div id="input-card">
           <textarea id="input" rows="1" placeholder="输入消息，Enter 发送，Shift+Enter 换行，Esc 中断运行"></textarea>
           <div id="input-toolbar">
-            <span id="usage" title="上下文用量"></span>
+            <span id="input-ws" class="ws-chip">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+              <span id="input-ws-name"></span>
+            </span>
             <span class="spacer"></span>
+            <span id="usage" title="上下文用量"></span>
             <div id="model-pill" title="模型">
               <select id="model-select"></select>
               <span class="model-caret">▾</span>
