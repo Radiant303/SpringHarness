@@ -8,8 +8,11 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
 /**
- * 启动时从 Redis 申请本实例的 workerId：INCR 一个全局计数器后对 1024 取模。
- * Redis 不可用时拒绝启动
+ * workerId 分配器。实例启动时通过 Redis 的 INCR 命令获取全局递增序号，再对 1024 取模作为 workerId。
+ * INCR 为原子操作，并发启动不会分配到重复序号。Redis 不可用时抛出异常使应用启动失败。
+ *
+ * @author hanbing
+ * @since 2026-09-25
  */
 @Component
 public class WorkerIdAllocator {
@@ -22,10 +25,16 @@ public class WorkerIdAllocator {
 
     private long workerId = -1L;
 
+    /**
+     * @param redis Redis 操作模板
+     */
     public WorkerIdAllocator(StringRedisTemplate redis) {
         this.redis = redis;
     }
 
+    /**
+     * 分配本实例的 workerId，由 Spring 在依赖注入完成后、对外提供服务前回调
+     */
     @PostConstruct
     void allocate() {
         Long seq;
@@ -37,11 +46,14 @@ public class WorkerIdAllocator {
         if (seq == null) {
             throw new IllegalStateException("Redis 未返回 workerId 序号，服务拒绝启动");
         }
-        // 第 1 个实例拿 0；超过 1024 个实例会回绕，届时需要引入租约回收
+        // 序号从 0 开始分配；领号次数超过 1024 后序号回绕
         this.workerId = Math.floorMod(seq - 1, WORKER_SLOTS);
         log.info("雪花 workerId 分配成功: workerId={}, seq={}", workerId, seq);
     }
 
+    /**
+     * @return 本实例的 workerId
+     */
     public long getWorkerId() {
         return workerId;
     }
