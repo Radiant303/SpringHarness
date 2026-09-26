@@ -151,6 +151,7 @@ const state = {
   busy: false,
   assistant: null,      // 当前流式正文气泡 {el, answer, text}
   work: null,           // 当前「工作过程」分组（连续的思考 + 工具调用）
+  turnGroups: [],       // 本轮已创建的分组：进行中平铺，本轮结束统一折叠
   thinking: null,       // 当前流式思考区 {el, body}
   active: null,         // 当前展开的那一项（思考区或工具卡片），渐进式收起用
   tools: new Map(),     // tool_call_id -> 卡片引用
@@ -406,7 +407,7 @@ function clearMessages() {
   state.tools.clear();
   state.historyCursor = null;
   state.historyHasMore = false;
-  $("plan-panel").classList.add("hidden");
+  $("plan-dock").classList.add("hidden");
 }
 
 async function loadHistory(cursor) {
@@ -822,10 +823,20 @@ function buildToolCard(name, id) {
 /* ================= 实时事件 ================= */
 
 function resetFlow() {
+  foldTurnGroups();
   state.assistant = null;
   state.work = null;
   state.thinking = null;
   state.active = null;
+}
+
+// 本轮结束：进行中平铺展示的工作分组统一收成一行摘要
+function foldTurnGroups() {
+  for (const group of state.turnGroups) {
+    refreshWorkSummary(group);
+    group.el.classList.remove("live", "expanded");
+  }
+  state.turnGroups = [];
 }
 
 // 渐进式收起：新元素开始时收起上一个展开项，页面上只保留进行中的那一项展开。
@@ -837,12 +848,10 @@ function setActive(node) {
   if (node) node.classList.add("expanded");
 }
 
-// 工作过程收口（正文开始、系统消息插入或本轮结束）：分组默认折叠
+// 工作过程收口（正文开始、系统消息插入）：后续思考/工具另起一组。
+// 本轮进行中分组保持平铺（live），等 turn_finished 再统一折叠
 function closeWork() {
-  if (state.work) {
-    refreshWorkSummary(state.work);
-    state.work.el.classList.remove("live", "expanded");
-  }
+  if (state.work) refreshWorkSummary(state.work);
   state.work = null;
   state.thinking = null;
 }
@@ -855,6 +864,7 @@ function ensureWork() {
   group.el.classList.add("expanded", "live");
   $("messages").appendChild(group.el);
   state.work = group;
+  state.turnGroups.push(group);
   return group;
 }
 
@@ -996,6 +1006,7 @@ function finishTurn(event) {
   groups.forEach(refreshWorkSummary);
   setActive(null);
   closeWork();
+  foldTurnGroups();
   state.assistant = null;
   state.tools.clear();
   if (event.cancelled && !event.wake) addSystem("已中断，可继续输入");
@@ -1017,10 +1028,11 @@ async function loadPlan() {
 }
 
 function renderPlan(items) {
+  const dock = $("plan-dock");
   const panel = $("plan-panel");
   const list = $("plan-items");
-  if (!items || !items.length) { panel.classList.add("hidden"); return; }
-  panel.classList.remove("hidden");
+  if (!items || !items.length) { dock.classList.add("hidden"); return; }
+  dock.classList.remove("hidden");
   list.textContent = "";
   let done = 0;
   for (const item of items) {
@@ -1032,7 +1044,10 @@ function renderPlan(items) {
     li.appendChild(el("span", "plan-text", text));
     list.appendChild(li);
   }
-  $("plan-progress").textContent = `${done}/${items.length}`;
+  const label = `${done}/${items.length}`;
+  $("plan-progress").textContent = label;
+  $("plan-pill-count").textContent = label;
+  $("plan-pill").setAttribute("aria-label", `当前进度 ${label}`);
   panel.classList.toggle("all-done", done === items.length);
 }
 
@@ -1201,14 +1216,20 @@ function bind() {
   $("stop-btn").onclick = cancelTurn;
   $("new-session-btn").onclick = newSession;
   $("toggle-sidebar").onclick = () => $("sidebar").classList.toggle("collapsed");
-  $("plan-header").onclick = () => $("plan-panel").classList.toggle("collapsed");
-  // 计划卡片悬浮在消息区上方：把它的高度写进 --plan-h，消息区底部留出同样空间，最后一条不被遮住
+  const togglePlan = () => {
+    const collapsed = $("plan-panel").classList.toggle("hidden");
+    $("plan-pill").setAttribute("aria-pressed", String(!collapsed));
+  };
+  $("plan-pill").onclick = togglePlan;
+  $("plan-header").onclick = togglePlan;
+  // 胶囊常驻在消息区底部上方：只把胶囊高度写进 --plan-h 让最后一条消息不被胶囊遮住；
+  // 展开卡片是浮层，直接盖在消息流上，不挤压消息布局
   new ResizeObserver(() => {
-    const panel = $("plan-panel");
-    const h = panel.classList.contains("hidden") ? 0 : panel.offsetHeight;
+    const dock = $("plan-dock");
+    const h = dock.classList.contains("hidden") ? 0 : $("plan-pill").offsetHeight;
     document.documentElement.style.setProperty("--plan-h", h + "px");
     maybeScroll();
-  }).observe($("plan-panel"));
+  }).observe($("plan-dock"));
   $("model-select").onchange = onModelChange;
   $("messages").addEventListener("scroll", updateStick);
   $("scroll-bottom").onclick = () => {

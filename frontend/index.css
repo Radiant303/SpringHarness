@@ -46,7 +46,7 @@
   --scrollbar-thumb-hover: rgba(0, 0, 0, 0.25);
   --scrollbar-menu-thumb: rgba(0, 0, 0, 0.16);
   --scrollbar-menu-thumb-hover: rgba(0, 0, 0, 0.48);
-  --plan-h: 0px;  /* 计划卡片悬浮高度，由 JS 写入，消息区据此留出底部空间 */
+  --plan-h: 0px;  /* 只预留常驻胶囊的高度；展开卡片作为浮层直接盖在消息上，不占布局 */
 }
 
 * { box-sizing: border-box; }
@@ -338,6 +338,18 @@ html, body {
 }
 .work-group.expanded > .work-body { display: flex; flex-direction: column; gap: 2px; }
 
+/* 进行中（live）：不显示分组标题、不缩进，思考和工具直接平铺在正文流里；
+   本轮结束去掉 live 后才折叠成一行「工作过程」摘要 */
+.work-group.live > .work-header { display: none; }
+.work-group.live > .work-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  border-left: none;
+}
+
 /* ---- 思考区 ---- */
 .thinking { font-size: var(--fs-sm); }
 .thinking-header {
@@ -446,16 +458,21 @@ pre.tool-result.error { background: var(--diff-del-bg); color: var(--danger); }
 .diff .diff-add { background: var(--diff-add-bg); color: var(--diff-add-text); display: block; }
 .diff .diff-del { background: var(--diff-del-bg); color: var(--diff-del-text); display: block; }
 
-/* ---- 计划卡片（输入框上方，悬浮） ---- */
+/* ---- 计划区（输入框上方悬浮：展开卡片 + 常驻小胶囊） ---- */
 #input-area { position: relative; }
-#plan-panel {
+#plan-dock {
   position: absolute;
-  left: 24px;
-  right: 24px;
+  left: max(24px, calc((100% - var(--content-max)) / 2));
+  right: max(24px, calc((100% - var(--content-max)) / 2));
   bottom: calc(100% - 2px);
   z-index: 10;
-  max-width: calc(var(--content-max) - 24px);
-  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+#plan-panel {
+  width: 100%;
   background: rgba(255, 255, 255, 0.9);
   -webkit-backdrop-filter: blur(24px) saturate(1.8);
   backdrop-filter: blur(24px) saturate(1.8);
@@ -500,10 +517,34 @@ pre.tool-result.error { background: var(--diff-del-bg); color: var(--danger); }
   transform: rotate(90deg);
   transition: transform 0.15s, opacity 0.15s;
 }
-#plan-header:hover .plan-caret, #plan-panel.collapsed .plan-caret { opacity: 1; }
+#plan-header:hover .plan-caret { opacity: 1; }
 .plan-caret svg { width: 100%; height: 100%; }
-#plan-panel.collapsed .plan-caret { transform: rotate(0deg); }
-#plan-panel.collapsed #plan-items { display: none; }
+
+/* 常驻小胶囊：始终可见，点击切换上方卡片；不透明底色，避免透出下面的消息内容 */
+#plan-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: none;
+  border-radius: 10px;
+  background: #f7f7f7;
+  color: var(--text);
+  font-size: var(--fs-sm);
+  line-height: 20px;
+  white-space: nowrap;
+  user-select: none;
+  transition: background 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+}
+#plan-pill:hover { background: #f0f0f0; }
+#plan-pill:active { background: #e8e8e8; }
+#plan-pill:focus-visible { box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.08); }
+#plan-pill .plan-head-icon { color: rgba(0, 0, 0, 0.65); }
+#plan-pill-count {
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  color: rgba(0, 0, 0, 0.55);
+}
 
 #plan-items {
   display: flex;
@@ -718,7 +759,8 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   #sidebar { position: absolute; z-index: 50; height: 100%; box-shadow: var(--shadow); }
   #messages { padding: 14px 12px; }
   #input-area { padding: 8px 12px 14px; }
-  #plan-panel { left: 12px; right: 12px; padding: 14px 16px 16px; }
+  #plan-dock { left: 12px; right: 12px; }
+  #plan-panel { padding: 14px 16px 16px; }
   #usage { display: none; }
   .msg.user { max-width: 96%; }
 }
