@@ -7,6 +7,7 @@ from typing import Any
 from pydantic import BaseModel, ValidationError
 from pydantic_ai.messages import ModelMessagesTypeAdapter
 
+from spring_harness.capabilities.planning import load_plan_items
 from spring_harness.core.log import logger
 from spring_harness.core.rpc.connection import (
     INVALID_PARAMS,
@@ -21,6 +22,7 @@ from spring_harness.core.rpc.schema import (
     HistoryQueryParams,
     HistoryResult,
     InitializeResult,
+    PlanResult,
     QuestionRequestParams,
     QuestionResult,
     SessionEventParams,
@@ -67,6 +69,7 @@ class AppServer:
             "session/attach": (AttachParams, self._session_attach),
             "session/history": (HistoryQueryParams, self._session_history),
             "session/set_model": (SetModelParams, self._session_set_model),
+            "session/plan": (SessionParams, self._session_plan),
             "turn/start": (TurnStartParams, self._turn_start),
             "turn/cancel": (SessionParams, self._turn_cancel),
         }
@@ -196,6 +199,12 @@ class AppServer:
             previous_cursor=page.previous_cursor,
             has_more=page.has_more,
         )
+
+    async def _session_plan(self, p: SessionParams) -> PlanResult:
+        # 只读已挂载的会话：归属校验由 attach 负责，这里不能绕过
+        session = self._require(p.session_id)
+        items = await load_plan_items(session.session_id)
+        return PlanResult(items=[i.model_dump() for i in items])
 
     async def _session_set_model(self, p: SetModelParams) -> None:
         self._require(p.session_id).set_model(p.model)

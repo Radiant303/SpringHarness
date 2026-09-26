@@ -78,6 +78,10 @@ class HistoryResult(_WireModel):
     has_more: bool = Field(validation_alias="hasMore", serialization_alias="hasMore")
 
 
+class PlanResult(_WireModel):
+    items: list[dict]
+
+
 class SessionEventParams(_WireModel):
     session_id: str = Field(validation_alias="sessionId", serialization_alias="sessionId")
     event: dict
