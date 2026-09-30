@@ -244,7 +244,10 @@ function clearToken() { localStorage.removeItem(TOKEN_KEY); }
 function showUserChip() {
   const name = localStorage.getItem(USER_KEY);
   if (name) {
-    $("user-name").textContent = name;
+    const el = $("user-name");
+    /* 昵称最多显示 4 个字符，超出以 … 代替，完整名留在悬浮提示 */
+    el.textContent = name.length > 4 ? name.slice(0, 4) + "…" : name;
+    el.title = name;
     $("user-chip").classList.remove("hidden");
   }
 }
@@ -340,9 +343,6 @@ async function connectAndSetup() {
   $("ws-name").textContent = localStorage.getItem(USER_KEY) || wsName;
   $("input-ws-name").textContent = wsName;
   $("input-ws").title = state.workspace;
-  const footer = $("workspace-footer");
-  footer.textContent = state.workspace;
-  footer.title = state.workspace;
   setConnected(true);
   await openSession();
   reconnectDelay = 1000;
