@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>小芽团子</title>
+<style>
+  html, body { height: 100%; margin: 0; }
+  body { display: grid; place-items: center; background: #f4f4ee; }
+  canvas {
+    width: min(80vmin, 512px);
+    height: min(80vmin, 512px);
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    border-radius: 16px;
+  }
+  canvas:focus { outline: none; }
+  canvas:focus-visible { outline: 2px solid #9dc577; outline-offset: 4px; }
+</style>
+</head>
+<body>
+<canvas id="c" tabindex="0" role="button"
+  aria-label="一个头顶小芽、会呼吸和眨眼的绿色团子，点击或按回车戳它一下"></canvas>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const SIZE = 512; // 逻辑坐标系，和原图 512×512 一致
+
+// 哑光配色：低饱和、明度差小
+const C = {
+  line: '#6f9a50',
+  body: '#d4e8be',
+  bodyShade: '#c1dba6',
+  leaf: '#b0d38c',
+  leafShade: '#9dc577',
+  eye: '#3d2c22',
+  blush: '246,148,162',
+  tongue: '#ee9aa6',
+  ground: '90,110,70',
+};
+
+// 用户开启“减少动态效果”时降低幅度
+const amp = matchMedia('(prefers-reduced-motion: reduce)').matches ? 0.3 : 1;
+
+function resize() {
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = Math.round(rect.width * dpr);
+  canvas.height = Math.round(rect.height * dpr);
+}
+window.addEventListener('resize', resize);
+resize();
+
+// 颗粒噪点：给表面一点纸感/磨砂感，只生成一次
+const grain = (() => {
+  const n = 160;
+  const off = document.createElement('canvas');
+  off.width = off.height = n;
+  const octx = off.getContext('2d');
+  const img = octx.createImageData(n, n);
+  for (let i = 0; i < img.data.length; i += 4) {
+    const v = 128 + (Math.random() - 0.5) * 90;
+    img.data[i] = img.data[i + 1] = img.data[i + 2] = v;
+    img.data[i + 3] = 255;
+  }
+  octx.putImageData(img, 0, 0);
+  return ctx.createPattern(off, 'repeat');
+})();
+
+function applyGrain(pathFn, strength) {
+  ctx.save();
+  pathFn();
+  ctx.clip();
+  ctx.globalCompositeOperation = 'overlay';
+  ctx.globalAlpha = strength;
+  ctx.fillStyle = grain;
+  ctx.fillRect(0, 0, SIZE, SIZE);
+  ctx.restore();
+}
+
+// ---------- 绘制部件 ----------
+
+// 团子身体：底部略宽的圆
+function bodyPath() {
+  ctx.beginPath();
+  ctx.moveTo(256, 172);
+  ctx.bezierCurveTo(332, 172, 387, 226, 387, 294);
+  ctx.bezierCurveTo(387, 362, 330, 404, 256, 404);
+  ctx.bezierCurveTo(182, 404, 125, 362, 125, 294);
+  ctx.bezierCurveTo(125, 226, 180, 172, 256, 172);
+  ctx.closePath();
+}
+
+function drawBody() {
+  // 大面积平涂，只在右下边缘柔和压暗
+  bodyPath();
+  const g = ctx.createRadialGradient(236, 262, 0, 236, 262, 176);
+  g.addColorStop(0, C.body);
+  g.addColorStop(0.7, C.body);
+  g.addColorStop(1, C.bodyShade);
+  ctx.fillStyle = g;
+  ctx.fill();
+
+  // 左上一块很淡的柔光，不做镜面高光
+  ctx.save();
+  bodyPath();
+  ctx.clip();
+  const l = ctx.createRadialGradient(190, 222, 0, 190, 222, 70);
+  l.addColorStop(0, 'rgba(255,255,255,0.32)');
+  l.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = l;
+  ctx.fillRect(110, 160, 170, 140);
+  ctx.restore();
+
+  applyGrain(bodyPath, 0.14);
+
+  bodyPath();
+  ctx.lineWidth = 3.5;
+  ctx.strokeStyle = C.line;
+  ctx.stroke();
+}
+
+function drawStem() {
+  ctx.beginPath();
+  ctx.moveTo(240, 182);
+  ctx.quadraticCurveTo(235, 166, 238, 150);
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = C.line;
+  ctx.lineWidth = 8.5;
+  ctx.stroke();
+  ctx.strokeStyle = C.leaf;
+  ctx.lineWidth = 3.5;
+  ctx.stroke();
+}
+
+// 叶片在局部坐标里画：叶柄在原点，叶尖在 (len, 0)
+function leafPath(len, w) {
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.bezierCurveTo(len * 0.15, -w, len * 0.7, -w, len, 0);
+  ctx.bezierCurveTo(len * 0.7, w, len * 0.15, w, 0, 0);
+  ctx.closePath();
+}
+
+// shadeSide 决定哪一半用深色（±1），形成扁平风的双色叶片
+function drawLeaf(bx, by, tx, ty, w, sway, shadeSide) {
+  const len = Math.hypot(tx - bx, ty - by);
+  ctx.save();
+  ctx.translate(bx, by);
+  ctx.rotate(Math.atan2(ty - by, tx - bx) + sway);
+
+  leafPath(len, w);
+  ctx.fillStyle = C.leaf;
+  ctx.fill();
+
+  ctx.save();
+  leafPath(len, w);
+  ctx.clip();
+  ctx.fillStyle = C.leafShade;
+  ctx.fillRect(0, shadeSide > 0 ? 0 : -w, len, w);
+  ctx.restore();
+
+  applyGrain(() => leafPath(len, w), 0.12);
+
+  leafPath(len, w);
+  ctx.lineWidth = 3.5;
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = C.line;
+  ctx.stroke();
+  ctx.restore();
+}
+
+// closed: 0 睁眼 → 1 闭眼
+function drawEye(x, y, closed) {
+  if (closed > 0.8) {
+    ctx.beginPath();
+    ctx.moveTo(x - 12, y + 3);
+    ctx.quadraticCurveTo(x, y + 9, x + 12, y + 3);
+    ctx.lineWidth = 3.5;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = C.eye;
+    ctx.stroke();
+    return;
+  }
+  ctx.save();
+  ctx.translate(x, y + closed * 5); // 眼皮往下合
+  ctx.scale(1, 1 - closed);
+  ctx.fillStyle = C.eye;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 14, 16, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // 只留一个小高光点
+  ctx.fillStyle = 'rgba(255,255,255,0.9)';
+  ctx.beginPath();
+  ctx.arc(-4, -5.5, 4.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+// 被戳时的开心眼 ^ ^
+function drawHappyEye(x, y) {
+  ctx.beginPath();
+  ctx.moveTo(x - 12, y + 4);
+  ctx.quadraticCurveTo(x, y - 14, x + 12, y + 4);
+  ctx.lineWidth = 4;
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = C.eye;
+  ctx.stroke();
+}
+
+function drawMouth() {
+  ctx.beginPath();
+  ctx.moveTo(240, 281);
+  ctx.quadraticCurveTo(246, 292, 254, 284);
+  ctx.quadraticCurveTo(262, 292, 268, 281);
+  ctx.lineWidth = 3;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = C.eye;
+  ctx.stroke();
+}
+
+// 被戳时张开的小嘴
+function openMouthPath() {
+  ctx.beginPath();
+  ctx.moveTo(243, 281);
+  ctx.quadraticCurveTo(254, 279, 265, 281);
+  ctx.quadraticCurveTo(264, 297, 254, 297);
+  ctx.quadraticCurveTo(244, 297, 243, 281);
+  ctx.closePath();
+}
+
+function drawOpenMouth() {
+  openMouthPath();
+  ctx.fillStyle = C.eye;
+  ctx.fill();
+  ctx.save();
+  openMouthPath();
+  ctx.clip();
+  ctx.fillStyle = C.tongue;
+  ctx.beginPath();
+  ctx.ellipse(254, 297, 7, 5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+// 平涂腮红，只把边缘羽化一点
+function drawBlush(x, y, alpha) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(1, 0.6);
+  const g = ctx.createRadialGradient(0, 0, 0, 0, 0, 22);
+  g.addColorStop(0, `rgba(${C.blush},${0.5 * alpha})`);
+  g.addColorStop(0.65, `rgba(${C.blush},${0.5 * alpha})`);
+  g.addColorStop(1, `rgba(${C.blush},0)`);
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(0, 0, 22, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+// k: 0 最低点 → 1 最高点，越高影子越小越淡；spread: 挤压时影子变宽
+function drawShadow(k, spread) {
+  const rx = 118 * (1 - 0.12 * k) * spread;
+  ctx.save();
+  ctx.translate(256, 418);
+  ctx.scale(1, 12 / rx);
+  const g = ctx.createRadialGradient(0, 0, 0, 0, 0, rx);
+  const a = 0.13 - 0.05 * k;
+  g.addColorStop(0, `rgba(${C.ground},${a})`);
+  g.addColorStop(0.75, `rgba(${C.ground},${a})`);
+  g.addColorStop(1, `rgba(${C.ground},0)`);
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(0, 0, rx, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+// 爱心路径：以 (0,0) 为中心，大约 2s 宽
+function heartPath(s) {
+  ctx.save();
+  ctx.scale(s / 55, s / 55);
+  ctx.translate(-75, -72);
+  ctx.beginPath();
+  ctx.moveTo(75, 40);
+  ctx.bezierCurveTo(75, 37, 70, 25, 50, 25);
+  ctx.bezierCurveTo(20, 25, 20, 62.5, 20, 62.5);
+  ctx.bezierCurveTo(20, 80, 40, 102, 75, 120);
+  ctx.bezierCurveTo(110, 102, 130, 80, 130, 62.5);
+  ctx.bezierCurveTo(130, 62.5, 130, 25, 100, 25);
+  ctx.bezierCurveTo(85, 25, 75, 37, 75, 40);
+  ctx.closePath();
+  ctx.restore();
+}
+
+// ---------- 眨眼调度 ----------
+const BLINK = 0.2;       // 单次眨眼时长（秒）
+let nextBlink = 1.5;
+let blinkStart = -1;
+let doubleBlink = false;
+
+function blinkAmount(t) {
+  if (blinkStart < 0 && t >= nextBlink) blinkStart = t;
+  if (blinkStart < 0) return 0;
+
+  const p = (t - blinkStart) / BLINK;
+  if (p >= 1) {
+    blinkStart = -1;
+    if (doubleBlink) {
+      doubleBlink = false;
+      nextBlink = t + 0.12;
+    } else {
+      nextBlink = t + 2 + Math.random() * 3.5;
+      doubleBlink = Math.random() < 0.25; // 偶尔连眨两下
+    }
+    return 0;
+  }
+  // 闭得快、睁得慢
+  return p < 0.35 ? p / 0.35 : 1 - (p - 0.35) / 0.65;
+}
+
+// ---------- 静止时的小动作：往右上角看 ----------
+const LOOK_IN = 0.45, LOOK_HOLD = 1.6, LOOK_OUT = 0.5;
+let nextLook = 3.5;
+let lookStart = -1;
+
+const ease = (x) => x * x * (3 - 2 * x);
+
+function lookAmount(t) {
+  if (lookStart < 0 && t >= nextLook) lookStart = t;
+  if (lookStart < 0) return 0;
+
+  const p = t - lookStart;
+  if (p < LOOK_IN) return ease(p / LOOK_IN);
+  if (p < LOOK_IN + LOOK_HOLD) return 1;
+  if (p < LOOK_IN + LOOK_HOLD + LOOK_OUT) {
+    return ease(1 - (p - LOOK_IN - LOOK_HOLD) / LOOK_OUT);
+  }
+  lookStart = -1;
+  nextLook = t + 5 + Math.random() * 4;
+  // 视线收回后有一半概率眨一下眼，更自然
+  if (blinkStart < 0 && Math.random() < 0.5) nextBlink = t + 0.1;
+  return 0;
+}
+
+// ---------- 点击交互 ----------
+const JOY_TIME = 1.0;   // 开心表情持续时长（秒）
+const MAX_HEARTS = 30;
+
+let squash = 0;         // >0 压扁，<0 拉长
+let squashV = 0;
+let pokeTime = -10;
+let joyUntil = -10;
+let joyLevel = 0;       // 0~1，用来平滑腮红变化
+let floatY = 0;         // 当前浮动偏移，点击判定要跟着它走
+const hearts = [];
+
+// 阻尼弹簧：戳一下后果冻一样弹几下再停
+function updateSquash(dt) {
+  const K = 300, D = 12, steps = 2;
+  const h = dt / steps;
+  for (let i = 0; i < steps; i++) {
+    squashV += (-K * squash - D * squashV) * h;
+    squash += squashV * h;
+  }
+}
+
+function spawnHearts() {
+  const n = 3 + Math.floor(Math.random() * 3);
+  for (let i = 0; i < n && hearts.length < MAX_HEARTS; i++) {
+    // 从左右“肩膀”外侧生成，沿径向往外飘，避开头顶的小芽
+    const side = i % 2 ? 1 : -1;
+    const a = -Math.PI / 2 + side * (0.7 + Math.random() * 0.6);
+    const r = 150;
+    const speed = 70 + Math.random() * 50;
+    hearts.push({
+      x: 256 + Math.cos(a) * r,
+      y: 300 + floatY + Math.sin(a) * r,
+      vx: Math.cos(a) * speed,
+      vy: Math.sin(a) * speed - 30,
+      size: 8 + Math.random() * 5,
+      rot: (Math.random() - 0.5) * 0.6,
+      age: 0,
+      life: 1.1 + Math.random() * 0.4,
+    });
+  }
+}
+
+function updateHearts(dt) {
+  for (let i = hearts.length - 1; i >= 0; i--) {
+    const h = hearts[i];
+    h.age += dt;
+    if (h.age >= h.life) { hearts.splice(i, 1); continue; }
+    h.x += h.vx * dt;
+    h.y += h.vy * dt;
+    h.vx *= 1 - dt * 2;
+    h.vy *= 1 - dt * 1.2;
+  }
+}
+
+function drawHearts() {
+  for (const h of hearts) {
+    const pop = Math.min(1, h.age / 0.18);
+    const scale = pop < 1 ? pop * (1.25 - 0.25 * pop) : 1; // 弹出时略微过冲
+    const fade = Math.min(1, (h.life - h.age) / 0.4);
+    ctx.save();
+    ctx.translate(h.x, h.y);
+    ctx.rotate(h.rot + Math.sin(h.age * 5) * 0.12);
+    ctx.globalAlpha = 0.85 * fade;
+    heartPath(h.size * scale);
+    ctx.fillStyle = `rgb(${C.blush})`;
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+function poke() {
+  const t = now; // 和动画用同一个时钟，避免 since 为负导致抖动失控
+  squashV = 9 * amp;
+  pokeTime = t;
+  joyUntil = t + JOY_TIME;
+  spawnHearts();
+  // 被戳时立刻收回视线，过一会儿再发呆
+  lookStart = -1;
+  nextLook = t + 4 + Math.random() * 3;
+}
+
+function toLogical(e) {
+  const r = canvas.getBoundingClientRect();
+  return {
+    x: ((e.clientX - r.left) / r.width) * SIZE,
+    y: ((e.clientY - r.top) / r.height) * SIZE,
+  };
+}
+
+// 身体用椭圆近似，小芽用矩形近似
+function hitTest({ x, y }) {
+  y -= floatY;
+  const dx = (x - 256) / 136, dy = (y - 288) / 120;
+  if (dx * dx + dy * dy <= 1) return true;
+  return x > 140 && x < 305 && y > 80 && y < 185;
+}
+
+canvas.addEventListener('pointerdown', (e) => {
+  if (hitTest(toLogical(e))) poke();
+});
+canvas.addEventListener('pointermove', (e) => {
+  canvas.style.cursor = hitTest(toLogical(e)) ? 'pointer' : 'default';
+});
+canvas.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault();
+    poke();
+  }
+});
+
+// ---------- 主循环 ----------
+const PERIOD = 2.6; // 浮动周期（秒）
+let lastT = null;
+let now = 0;
+let look = 0;           // 0 正视 → 1 看向右上角（平滑后）
+let lookVel = 0;
+
+function frame(ms) {
+  const t = ms / 1000;
+  const dt = lastT === null ? 0 : Math.min(t - lastT, 1 / 30); // 切回标签页时防止跳帧
+  lastT = t;
+  now = t;
+
+  updateSquash(dt);
+  updateHearts(dt);
+  const joy = t < joyUntil;
+  joyLevel += ((joy ? 1 : 0) - joyLevel) * Math.min(1, dt * 10);
+
+  const prevLook = look;
+  look += (lookAmount(t) - look) * Math.min(1, dt * 12);
+  lookVel = dt > 0 ? (look - prevLook) / dt : 0;
+
+  const s = canvas.width / SIZE;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.setTransform(s, 0, 0, s, 0, 0);
+
+  const w = (Math.PI * 2) / PERIOD;
+  const ph = Math.sin(t * w);           // -1 最低，1 最高
+  floatY = -ph * 9 * amp;
+  // 呼吸/挤压：略滞后于浮动，低处压扁、高处拉长；再叠加点击的弹簧形变
+  const breath = Math.sin(t * w - 0.5);
+  const sx = 1 - breath * 0.03 * amp + squash * 0.16;
+  // 看右上角时身体微微抬高
+  const sy = 1 + breath * 0.035 * amp - squash * 0.16 + look * 0.015;
+
+  drawShadow((ph + 1) / 2, 1 + squash * 0.12);
+
+  ctx.save();
+  // 以身体底部为锚点缩放，挤压时像压在地上；看右上角时整体往右倾
+  ctx.translate(256, 404 + floatY);
+  ctx.rotate(look * 0.045 * amp);
+  ctx.scale(sx, sy);
+  ctx.translate(-256, -404);
+
+  // 小芽整体摆动（比身体更滞后，带出跟随感），被戳后额外抖几下，
+  // 转头时往反方向甩一下
+  const since = t - pokeTime;
+  const wiggle = since < 1.5 ? Math.exp(-since * 4) * Math.sin(since * 22) * 0.22 : 0;
+  const lag = Math.max(-0.12, Math.min(0.12, -lookVel * 0.05));
+  const sway = (Math.sin(t * w - 1.2) * 0.07 + wiggle + lag) * amp;
+  ctx.save();
+  ctx.translate(240, 178);
+  ctx.rotate(sway);
+  ctx.translate(-240, -178);
+  drawStem();
+  drawLeaf(236, 152, 150, 128, 29, (Math.sin(t * 2.1) * 0.05 - wiggle * 0.6) * amp, -1);
+  drawLeaf(240, 150, 298, 90, 24, (Math.sin(t * 2.1 + 1) * 0.06 + wiggle * 0.6) * amp, 1);
+  ctx.restore();
+
+  drawBody();
+
+  // 五官往右上角偏：眼睛移得最多，嘴和腮红少一些，像微微转头
+  const lx = look * 10, ly = -look * 7;
+  const blushAlpha = (0.9 + 0.1 * Math.sin(t * w)) * (1 + 0.6 * joyLevel);
+  drawBlush(178 + lx * 0.6, 296 + ly * 0.6, blushAlpha);
+  drawBlush(330 + lx * 0.6, 296 + ly * 0.6, blushAlpha);
+
+  const b = blinkAmount(t); // 开心时也照常推进眨眼调度
+  if (joy) {
+    drawHappyEye(207 + lx, 268 + ly);
+    drawHappyEye(299 + lx, 268 + ly);
+  } else {
+    drawEye(207 + lx, 268 + ly, b);
+    drawEye(299 + lx, 268 + ly, b);
+  }
+  ctx.save();
+  ctx.translate(lx * 0.75, ly * 0.75);
+  if (joy) drawOpenMouth(); else drawMouth();
+  ctx.restore();
+  ctx.restore();
+
+  drawHearts();
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

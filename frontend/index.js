@@ -104,9 +104,10 @@ function scrollToBottom() {
 /* 请求中指示：发送后到首个响应事件前显示，收到任意会话事件即移除 */
 function showPending() {
   hidePending();
+  const turn = ensureTurn();
   const node = el("div", "pending-indicator", "请求中…");
   node.id = "pending-indicator";
-  $("messages").appendChild(node);
+  turn.content.appendChild(node);
 }
 
 function hidePending() {
@@ -229,6 +230,7 @@ const state = {
   tools: new Map(),     // tool_call_id -> 卡片引用
   historyCursor: null,  // 继续向回翻页的 previousCursor
   historyHasMore: false,
+  currentTurn: null,    // 当前助手回合容器 {el, content, petBox, canvas, pet}
 };
 
 /* ================= 认证 ================= */
@@ -481,11 +483,54 @@ async function newSession() {
 function clearMessages() {
   const box = $("messages");
   box.textContent = "";
+  if (typeof SproutManager !== "undefined") {
+    SproutManager.clear();
+  }
   resetFlow();
   state.tools.clear();
   state.historyCursor = null;
   state.historyHasMore = false;
   $("plan-dock").classList.add("hidden");
+}
+
+function createAssistantTurnNode(isDynamic = false) {
+  const wrap = el("div", "assistant-turn");
+  const petBox = el("div", "turn-pet");
+  const canvas = el("canvas", "sprout-pet");
+  petBox.appendChild(canvas);
+  const content = el("div", "turn-content");
+  wrap.appendChild(petBox);
+  wrap.appendChild(content);
+
+  let pet = null;
+  if (typeof SproutManager !== "undefined") {
+    pet = SproutManager.register(canvas, isDynamic);
+    wrap._sproutPet = pet;
+  }
+
+  return { el: wrap, content, petBox, canvas, pet };
+}
+
+function updateLatestPet() {
+  if (typeof SproutManager === "undefined") return;
+  const turnEls = document.querySelectorAll(".assistant-turn");
+  SproutManager.makeAllStatic();
+  if (turnEls.length > 0) {
+    const last = turnEls[turnEls.length - 1];
+    if (last._sproutPet) {
+      SproutManager.setActive(last._sproutPet);
+    }
+  }
+}
+
+function ensureTurn() {
+  if (state.currentTurn) return state.currentTurn;
+  $("welcome") && $("welcome").remove();
+  const turn = createAssistantTurnNode(true);
+  $("messages").appendChild(turn.el);
+  state.currentTurn = turn;
+  updateLatestPet();
+  return turn;
 }
 
 async function loadHistory(cursor) {
@@ -532,16 +577,43 @@ function renderHistory(segments, prepend) {
   }
 
   const frag = document.createDocumentFragment();
-  // 连续的思考 + 工具调用收进同一个「工作过程」分组，遇到正文/用户消息等边界时收口
+  let currentTurn = null;
   let group = null;
-  const groupFor = () => {
-    if (!group) { group = workGroupNode(); frag.appendChild(group.el); }
-    return group;
+
+  const turnFor = () => {
+    if (!currentTurn) {
+      currentTurn = createAssistantTurnNode(false);
+      frag.appendChild(currentTurn.el);
+    }
+    return currentTurn;
   };
+
   const endGroup = () => {
     if (group) { refreshWorkSummary(group); group = null; }
   };
-  const append = (node) => { endGroup(); frag.appendChild(node); };
+
+  const groupFor = () => {
+    if (!group) {
+      group = workGroupNode();
+      turnFor().content.appendChild(group.el);
+    }
+    return group;
+  };
+
+  const endTurn = () => {
+    endGroup();
+    currentTurn = null;
+  };
+
+  const appendAnswer = (node) => {
+    endGroup();
+    turnFor().content.appendChild(node);
+  };
+
+  const appendRoot = (node) => {
+    endTurn();
+    frag.appendChild(node);
+  };
 
   const rendered = new Set();
   const renderTool = (part) => {
@@ -560,21 +632,19 @@ function renderHistory(segments, prepend) {
   };
 
   segments.forEach((seg, i) => {
-    if (i > 0) append(systemNode("── 上下文已压缩，以上内容已压缩为摘要 ──"));
+    if (i > 0) appendRoot(systemNode("── 上下文已压缩，以上内容已压缩为摘要 ──"));
     for (const msg of seg) {
       const source = msg.metadata && msg.metadata.source;
       if (msg.kind === "request") {
         for (const part of msg.parts || []) {
           if (part.part_kind === "user-prompt" && typeof part.content === "string") {
-            if (source === "background_task") append(noticeNode(part.content));
-            else if (!AUTO_SOURCES.has(source)) append(userNode(part.content));
+            if (source === "background_task") appendRoot(noticeNode(part.content));
+            else if (!AUTO_SOURCES.has(source)) appendRoot(userNode(part.content));
           } else if (part.part_kind === "tool-return" || part.part_kind === "retry-prompt") {
             renderTool(part);
           }
         }
       } else if (msg.kind === "response") {
-        // 按 part 顺序渲染：thinking 进工作分组，text 收口分组后落成正文气泡；
-        // 有返回值的卡片等 tool-return 出现时再渲染（保持真实时间序），悬挂调用就地渲染
         let text = "";
         let thinking = "";
         const flushThinking = () => {
@@ -582,7 +652,7 @@ function renderHistory(segments, prepend) {
           thinking = "";
         };
         const flushText = () => {
-          if (text) append(answerNode(text));
+          if (text) appendAnswer(answerNode(text));
           text = "";
         };
         for (const part of msg.parts || []) {
@@ -599,7 +669,7 @@ function renderHistory(segments, prepend) {
       }
     }
   });
-  endGroup();
+  endTurn();
 
   if (prepend) {
     const anchor = document.querySelector(".load-more");
@@ -611,6 +681,8 @@ function renderHistory(segments, prepend) {
     stickToBottom = true;
     scrollToBottom();
   }
+
+  updateLatestPet();
 }
 
 /* ================= 消息节点 ================= */
@@ -1133,6 +1205,7 @@ function resetFlow() {
   state.work = null;
   state.thinking = null;
   state.active = null;
+  state.currentTurn = null;
 }
 
 // 本轮结束：进行中平铺展示的工作分组统一收成一行摘要
@@ -1167,7 +1240,8 @@ function ensureWork() {
   state.assistant = null;  // 正文被工作过程打断，后续正文另起气泡
   const group = workGroupNode();
   group.el.classList.add("expanded", "live");
-  $("messages").appendChild(group.el);
+  const turn = ensureTurn();
+  turn.content.appendChild(group.el);
   state.work = group;
   state.turnGroups.push(group);
   return group;
@@ -1178,7 +1252,8 @@ function ensureAssistant() {
   $("welcome") && $("welcome").remove();
   closeWork();
   const wrap = answerNode("");
-  $("messages").appendChild(wrap);
+  const turn = ensureTurn();
+  turn.content.appendChild(wrap);
   state.assistant = { el: wrap, answer: wrap.querySelector(".answer"), text: "" };
   return state.assistant;
 }
@@ -1335,6 +1410,14 @@ function finishTurn(event) {
   foldTurnGroups();
   state.assistant = null;
   state.tools.clear();
+  if (state.currentTurn && state.currentTurn.content.children.length === 0) {
+    if (typeof SproutManager !== "undefined" && state.currentTurn.pet) {
+      SproutManager.unregister(state.currentTurn.pet);
+    }
+    state.currentTurn.el.remove();
+  }
+  state.currentTurn = null;
+  updateLatestPet();
   if (event.cancelled && !event.wake) addSystem("已中断，可继续输入");
   else if (event.error) addSystem("❌ 运行出错：" + event.error, true);
   if (!event.wake) {   // 催醒轮是系统轮次，不占输入锁
