@@ -101,6 +101,54 @@ function scrollToBottom() {
   box.scrollTop = box.scrollHeight;
 }
 
+/* 请求中指示：发送后到首个响应事件前显示，收到任意会话事件即移除 */
+function showPending() {
+  hidePending();
+  const node = el("div", "pending-indicator", "请求中…");
+  node.id = "pending-indicator";
+  $("messages").appendChild(node);
+}
+
+function hidePending() {
+  const node = $("pending-indicator");
+  if (node) node.remove();
+}
+
+/* 「最新消息」按钮专用：easeOutCubic 缓动，0.5s 内滚到底。
+   不用 behavior:"smooth"——其时长由浏览器按距离决定，长距离会超过 0.5s。
+   动画期间用户滚轮/触摸可立即接管（取消动画） */
+let smoothScrolling = false;
+let smoothScrollCancel = null;
+
+function smoothScrollToBottom() {
+  const box = $("messages");
+  const start = box.scrollTop;
+  const delta = box.scrollHeight - box.clientHeight - start;
+  if (delta <= 0) return;
+  if (smoothScrollCancel) smoothScrollCancel();
+  const DURATION = 500;
+  const t0 = performance.now();
+  smoothScrolling = true;
+  const cancel = () => {
+    smoothScrolling = false;
+    smoothScrollCancel = null;
+    box.removeEventListener("wheel", cancel);
+    box.removeEventListener("touchstart", cancel);
+    updateStick();
+  };
+  smoothScrollCancel = cancel;
+  box.addEventListener("wheel", cancel);
+  box.addEventListener("touchstart", cancel);
+  function step(now) {
+    if (!smoothScrolling) return;
+    const p = Math.min((now - t0) / DURATION, 1);
+    box.scrollTop = start + delta * (1 - Math.pow(1 - p, 3));
+    if (p < 1) { requestAnimationFrame(step); return; }
+    cancel();
+  }
+  requestAnimationFrame(step);
+}
+
 /* ================= Markdown ================= */
 
 marked.setOptions({ breaks: true, gfm: true });
@@ -140,6 +188,7 @@ function syncScrollBtn() {
 }
 
 function updateStick() {
+  if (smoothScrolling) return;  // 平滑滚动动画途中不结算 stick 状态，动画结束时统一结算
   const box = $("messages");
   stickToBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
   if (stickToBottom) hasNewBelow = false;
@@ -1122,6 +1171,7 @@ function ensureAssistant() {
 
 function onSessionEvent(sid, event) {
   if (sid !== state.sessionId) return;
+  hidePending();  // 任意事件到达都视为响应已开始
   switch (event.kind) {
     case "text_delta": {
       const a = ensureAssistant();
@@ -1312,12 +1362,20 @@ function addSystem(text, isError) {
   maybeScroll();
 }
 
+const USAGE_RING_LEN = 56.5;  /* 圆环周长 2πr，r=9，与 CSS 中 stroke-dasharray 一致 */
+
 function updateUsage(tokens) {
   const model = state.models.find((m) => m.id === state.model);
   const max = model ? model.maxContextSize : 0;
-  $("usage").textContent = max
-    ? `上下文 ${(tokens / 1000).toFixed(1)}k / ${Math.round(max / 1000)}k`
-    : `上下文 ${(tokens / 1000).toFixed(1)}k`;
+  const prog = $("usage-ring-prog");
+  if (!max) {
+    prog.style.strokeDashoffset = String(USAGE_RING_LEN);
+    $("usage-tip").textContent = `已使用 ${(tokens / 1000).toFixed(1)}k tokens`;
+    return;
+  }
+  const pct = Math.min(tokens / max, 1);
+  prog.style.strokeDashoffset = String(USAGE_RING_LEN * (1 - pct));
+  $("usage-tip").textContent = `使用 ${(tokens / 1000).toFixed(1)}k / ${Math.round(max / 1000)}k tokens (${Math.round(pct * 100)}%)`;
 }
 
 /* ================= 服务器反向请求：审批 / 提问 ================= */
@@ -1403,7 +1461,7 @@ function updateInputState() {
   const stop = $("stop-btn");
   send.classList.toggle("hidden", state.busy);
   stop.classList.toggle("hidden", !state.busy);
-  send.disabled = !state.connected;
+  send.disabled = !state.connected || !$("input").value.trim();
   stop.disabled = !state.connected;
 }
 
@@ -1418,6 +1476,7 @@ async function send() {
   $("welcome") && $("welcome").remove();
   resetFlow();
   $("messages").appendChild(userNode(text));
+  showPending();
   stickToBottom = true;
   scrollToBottom();
   input.value = "";
@@ -1425,6 +1484,7 @@ async function send() {
   try {
     await rpc.request("turn/start", { sessionId: state.sessionId, input: text });
   } catch (e) {
+    hidePending();
     state.busy = false;
     updateInputState();
     addSystem("❌ " + e.message, true);
@@ -1440,24 +1500,33 @@ async function cancelTurn() {
 /* ================= 模型 ================= */
 
 function populateModelSelect() {
-  const select = $("model-select");
-  select.textContent = "";
+  const menu = $("model-menu");
+  menu.textContent = "";
   for (const m of state.models) {
-    const opt = el("option", null, m.displayName || m.id);
-    opt.value = m.id;
-    select.appendChild(opt);
+    const item = el("div", "model-item");
+    const check = el("span", "model-check");
+    if (m.id === state.model) check.appendChild(icon("tick"));
+    item.appendChild(check);
+    item.appendChild(el("span", "model-item-name", m.displayName || m.id));
+    item.onclick = () => { closeModelMenu(); onModelChange(m.id); };
+    menu.appendChild(item);
   }
-  if (state.model) select.value = state.model;
+  const cur = state.models.find((m) => m.id === state.model);
+  $("model-name").textContent = cur ? (cur.displayName || cur.id) : "";
 }
 
-async function onModelChange() {
-  const select = $("model-select");
-  const picked = select.value;
+function closeModelMenu() {
+  $("model-menu").classList.add("hidden");
+  $("model-pill").classList.remove("open");
+}
+
+async function onModelChange(picked) {
   if (!picked || picked === state.model) return;
   state.model = picked;
+  populateModelSelect();  // 立即更新按钮文字与选中勾
   try {
     if (state.sessionId) await rpc.request("session/set_model", { sessionId: state.sessionId, model: picked });
-    addSystem(`已切换到 ${select.options[select.selectedIndex].text}`);
+    addSystem(`已切换到 ${$("model-name").textContent}`);
   } catch (e) {
     addSystem("❌ 切换模型失败：" + e.message, true);
   }
@@ -1492,11 +1561,18 @@ function bind() {
   const chromeRO = new ResizeObserver(syncChrome);
   chromeRO.observe($("plan-dock"));
   chromeRO.observe($("input-area"));
-  $("model-select").onchange = onModelChange;
+  $("model-btn").onclick = (e) => {
+    e.stopPropagation();  // 防止被下面的 document click 立即关掉
+    const open = $("model-menu").classList.toggle("hidden");
+    $("model-pill").classList.toggle("open", !open);
+  };
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest("#model-pill")) closeModelMenu();
+  });
   $("messages").addEventListener("scroll", updateStick);
   $("scroll-bottom").onclick = () => {
     stickToBottom = true;
-    scrollToBottom();
+    smoothScrollToBottom();
     updateStick();
   };
 
@@ -1524,14 +1600,37 @@ function bind() {
   input.addEventListener("input", () => {
     input.style.height = "auto";
     input.style.height = Math.min(input.scrollHeight, 180) + "px";
+    updateInputState();
   });
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") cancelTurn();
+    if (e.key === "Escape") { closeModelMenu(); cancelTurn(); }
     if ((e.ctrlKey || e.metaKey) && (e.key === "n" || e.key === "N")) {
       e.preventDefault();
       newSession();
     }
   });
+
+  /* 滚动中显示滚动条：scroll 事件不冒泡，用捕获阶段统一监听所有滚动容器。
+     只在指针悬停于容器时生效——加载历史、流式输出等程序化滚动不显示。
+     停止滚动 0.9s 后移除 class，滑块随 CSS 规则隐藏 */
+  document.addEventListener("scroll", (e) => {
+    const el = e.target;
+    if (!(el instanceof HTMLElement)) return;
+    if (!el.matches(":hover")) return;
+    el.classList.add("is-scrolling");
+    clearTimeout(el._scrollbarTimer);
+    el._scrollbarTimer = setTimeout(() => el.classList.remove("is-scrolling"), 900);
+  }, true);
+
+  /* 指针离开滚动容器时立即隐藏滚动条，不等 0.9s 计时结束。
+     mouseout 在子元素间移动也会触发，用 contains(relatedTarget) 排除容器内部移动 */
+  document.addEventListener("mouseout", (e) => {
+    const el = e.target;
+    if (!(el instanceof HTMLElement) || !el.classList.contains("is-scrolling")) return;
+    if (e.relatedTarget instanceof Node && el.contains(e.relatedTarget)) return;
+    clearTimeout(el._scrollbarTimer);
+    el.classList.remove("is-scrolling");
+  }, true);
 
   // 代码块复制按钮（事件委托：markdown 重绘后按钮会重建，委托不用重绑）
   $("messages").addEventListener("click", (e) => {

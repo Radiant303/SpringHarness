@@ -37,15 +37,15 @@
   --radius: 12px;
   --shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
   --content-max: 780px;
-  --fs-sm: 14px;   /* 页面最小字号：辅助信息、标签、代码、计划项 */
-  --fs-md: 15px;   /* 正文、输入框 */
+  --fs-sm: 16px;   /* 辅助信息、标签、代码、计划项（与正文同号） */
+  --fs-md: 16px;   /* 正文、输入框 */
   --fs-lg: 16px;
-  --ic-sm: 14px;   /* 折叠箭头、行内小图标 */
-  --ic-md: 16px;   /* 行首图标、状态图标 */
-  --scrollbar-thumb: rgba(0, 0, 0, 0.12);
-  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.25);
-  --scrollbar-menu-thumb: rgba(0, 0, 0, 0.16);
-  --scrollbar-menu-thumb-hover: rgba(0, 0, 0, 0.48);
+  --ic-sm: 16px;   /* 折叠箭头、行内小图标 */
+  --ic-md: 20px;   /* 行首图标、状态图标：略大于字号，补偿描边图形在 viewBox 内的留白 */
+  --scrollbar-thumb: #c8c8c8;
+  --scrollbar-thumb-hover: #a8a8a8;
+  --scrollbar-menu-thumb: #c8c8c8;
+  --scrollbar-menu-thumb-hover: #a8a8a8;
   --plan-h: 0px;  /* 只预留常驻胶囊的高度；展开卡片作为浮层直接盖在消息上，不占布局 */
   --scroll-b: 140px;  /* 「最新消息」按钮距主区底部的偏移，由 JS 按输入区高度与计划层状态写入 */
 }
@@ -61,13 +61,12 @@ html, body {
   background: var(--bg);
 }
 
-#app { display: flex; height: 100vh; }
+#app { display: flex; height: 100vh; background: #fbfaf9; }
 
-/* ---- 侧栏 ---- */
+/* ---- 侧栏：透明背景融入底层 ground 色，无边线，与主区卡片靠留白分隔 ---- */
 #sidebar {
-  width: 260px;
-  background: var(--surface);
-  border-right: 1px solid var(--border);
+  width: 240px;
+  border: none;
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
@@ -139,8 +138,19 @@ html, body {
   white-space: nowrap;
 }
 
-/* ---- 主区 ---- */
-#main { flex: 1; display: flex; flex-direction: column; min-width: 0; position: relative; }
+/* ---- 主区：悬浮在 ground 色上的白色圆角卡片，上/右/下留缝露出底色 ---- */
+#main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  position: relative;
+  background: var(--bg);
+  margin: 8px 8px 8px 0;
+  border: 1px solid #0000000d;
+  border-radius: 12px;
+  overflow: hidden;
+}
 
 #topbar {
   display: flex;
@@ -173,7 +183,7 @@ html, body {
 #messages {
   flex: 1;
   overflow-y: auto;
-  padding: 28px max(24px, calc((100% - var(--content-max)) / 2)) calc(24px + var(--plan-h));
+  padding: 28px max(24px, calc((100% - var(--content-max)) / 2)) calc(64px + var(--plan-h));
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -233,6 +243,19 @@ html, body {
   white-space: pre-wrap;
 }
 .msg.system.error { color: var(--danger); }
+
+/* 请求中指示：发送后、首个响应事件前显示，呼吸式渐隐渐显 */
+.pending-indicator {
+  flex-shrink: 0;
+  align-self: flex-start;
+  color: var(--text-faint);
+  font-size: var(--fs-sm);
+  animation: pending-breathe 1.2s ease-in-out infinite;
+}
+@keyframes pending-breathe {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
 
 /* ---- Markdown 正文 ---- */
 .markdown-body > *:first-child { margin-top: 0; }
@@ -547,10 +570,6 @@ pre.tool-result.error { background: var(--diff-del-bg); color: var(--danger); }
 .hl-attr { color: #8b6b00; }
 .hl-selector { color: #2f6fc4; }
 
-.fv-body::-webkit-scrollbar { width: 8px; height: 8px; }
-.fv-body::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border: 2px solid transparent; background-clip: padding-box; border-radius: 999px; }
-.fv-body::-webkit-scrollbar-thumb:hover { background-color: var(--scrollbar-thumb-hover); }
-.fv-body::-webkit-scrollbar-track { background: transparent; }
 
 /* ---- 计划区（输入框上方悬浮：展开卡片 + 常驻小胶囊） ---- */
 #input-area { position: relative; }
@@ -584,7 +603,6 @@ pre.tool-result.error { background: var(--diff-del-bg); color: var(--danger); }
   backdrop-filter: blur(24px) saturate(1.8);
   border: 0.5px solid rgba(0, 0, 0, 0.13);
   border-radius: 20px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
   padding: 18px 6px 20px 20px;  /* 右侧留给滚动条 */
   max-height: min(300px, 50vh);
   display: flex;
@@ -703,10 +721,11 @@ pre.tool-result.error { background: var(--diff-del-bg); color: var(--danger); }
   max-width: var(--content-max);
   margin: 0 auto;
   background: var(--panel);
-  border: 1px solid var(--border);
+  border: 1px solid rgba(0, 0, 0, 0.06);
   border-radius: 24px;
   padding: 14px 14px 10px 18px;
-  box-shadow: 0 2px 14px rgba(0, 0, 0, 0.06);
+  box-shadow: rgba(0, 0, 0, 0.07) 0px 5px 16px -4px;
+  transition: 0.3s;
   position: relative;
 }
 #input-card:focus-within { border-color: rgba(0, 0, 0, 0.16); box-shadow: 0 2px 16px rgba(0, 0, 0, 0.06); }
@@ -754,32 +773,105 @@ pre.tool-result.error { background: var(--diff-del-bg); color: var(--danger); }
 #input-ws-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #input-ws-name:empty::before { content: "工作区"; }
 
-#usage { font-size: var(--fs-sm); color: var(--text-faint); white-space: nowrap; }
+/* 上下文用量：环形进度图标常驻，悬停浮出深色气泡（参考 Kimi 的用量提示） */
+#usage {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  cursor: default;
+}
+#usage svg { width: 16px; height: 16px; transform: rotate(-90deg); }  /* 进度从 12 点方向起算 */
+.ring-track { fill: none; stroke: rgba(0, 0, 0, 0.08); stroke-width: 3; }
+.ring-prog {
+  fill: none;
+  stroke: var(--text-dim);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-dasharray: 56.5;  /* 2πr，r=9 */
+  stroke-dashoffset: 56.5;
+  transition: stroke-dashoffset 0.3s;
+}
+#usage-tip {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);  /* 气泡在圆环正上方居中 */
+  z-index: 20;
+  background: rgba(0, 0, 0, 0.85);
+  color: #fff;
+  font-size: 12px;
+  padding: 5px 10px;
+  border-radius: 8px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s;
+}
+#usage:hover #usage-tip { opacity: 1; }
+/* 模型菜单展开时压住用量气泡，避免两个浮层叠在一起 */
+#input-toolbar:has(#model-pill.open) #usage-tip { display: none; }
 
-#model-pill {
+#model-pill { position: relative; }
+
+#model-btn {
   display: flex;
   align-items: center;
   gap: 3px;
   height: 32px;
+  border: none;
   border-radius: 999px;
   padding: 0 12px;
-  color: var(--text-dim);
-}
-#model-pill:hover { color: var(--text); }
-.model-caret { font-size: var(--fs-sm); pointer-events: none; }
-
-#model-select {
-  border: none;
   background: transparent;
-  color: inherit;
-  font: inherit;
-  font-size: var(--fs-sm);
-  max-width: 200px;
-  appearance: none;
-  -webkit-appearance: none;
-  outline: none;
+  color: var(--text-dim);
+  font-size: 14px;  /* 模型名称是全局唯一保持 14px 的文字 */
   cursor: pointer;
 }
+#model-btn:hover { color: var(--text); background: var(--hover-bg); }
+.model-caret {
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+  transition: transform 0.15s;
+}
+.model-caret svg { width: 100%; height: 100%; }
+#model-pill.open .model-caret { transform: rotate(180deg); }  /* 菜单展开时箭头朝上 */
+#model-name { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 自绘模型菜单：向上展开，白卡圆角 + 阴影 */
+#model-menu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 0;
+  z-index: 20;
+  min-width: 200px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 4px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+}
+.model-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  font-size: 14px;
+  color: var(--text);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.model-item:hover { background: var(--hover-bg); }
+.model-check { width: 16px; flex-shrink: 0; display: inline-flex; color: var(--text); }
+.model-check .icon { width: 16px; height: 16px; }
+#model-menu::-webkit-scrollbar { width: 8px; }
+#model-menu::-webkit-scrollbar-track { background: transparent; }
+#model-menu::-webkit-scrollbar-thumb { background: transparent; border-radius: 999px; }
+#model-menu:is(:hover, .is-scrolling)::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); }
 
 button { font: inherit; cursor: pointer; border-radius: 8px; border: 1px solid var(--border); background: var(--panel); padding: 6px 14px; }
 button:hover { background: var(--hover-bg); }
@@ -798,16 +890,16 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   border-radius: 50%;
   border: none;
   background: var(--accent);
-  color: #fff;
-  font-size: var(--fs-lg);
-  line-height: 1;
+  color: rgba(245, 245, 245, 0.9);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0;
+  padding: 4px;
+  transition: background-color 0.15s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .round-btn:hover { background: var(--accent-hover); }
 .round-btn:disabled { background: rgba(0, 0, 0, 0.12); color: #fff; cursor: not-allowed; opacity: 1; }
+.round-btn svg { width: 100%; height: 100%; display: block; }
 
 #scroll-bottom {
   position: absolute;
@@ -866,7 +958,8 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* ---- 窄屏 ---- */
 @media (max-width: 760px) {
-  #sidebar { position: absolute; z-index: 50; height: 100%; box-shadow: var(--shadow); }
+  #sidebar { position: absolute; z-index: 50; height: 100%; background: #fbfaf9; box-shadow: var(--shadow); }
+  #main { margin: 0; border: none; border-radius: 0; }
   #messages { padding: 14px 12px; }
   #input-area { padding: 8px 12px 14px; }
   #plan-dock { left: 12px; right: 12px; }
@@ -897,42 +990,36 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   margin-right: 6px;
 }
 
-/* ---- 滚动条 ---- */
-/* 消息区、会话列表、代码块：8px 轨道，细淡滑块，悬停加深 */
-#messages::-webkit-scrollbar,
-#session-list::-webkit-scrollbar,
-pre::-webkit-scrollbar,
-.thinking-body::-webkit-scrollbar { width: 8px; height: 8px; }
-#messages::-webkit-scrollbar-thumb,
-#session-list::-webkit-scrollbar-thumb,
-pre::-webkit-scrollbar-thumb,
-.thinking-body::-webkit-scrollbar-thumb {
-  background: var(--scrollbar-thumb);
-  border: 2px solid transparent;
-  background-clip: padding-box;
+/* ---- 滚动条：默认隐藏，悬停或滚动中浮现 ---- */
+/* 消息区、会话列表、输入框、代码块、思考区、文件视图：8px 轨道 */
+:is(#messages, #session-list, #input, pre, .thinking-body, .fv-body)::-webkit-scrollbar { width: 8px; height: 8px; }
+:is(#messages, #session-list, #input, pre, .thinking-body, .fv-body)::-webkit-scrollbar-track { background: transparent; }
+:is(#messages, #session-list, #input, pre, .thinking-body, .fv-body)::-webkit-scrollbar-thumb {
+  background: transparent;
   border-radius: 999px;
 }
-#messages::-webkit-scrollbar-thumb:hover,
-#session-list::-webkit-scrollbar-thumb:hover,
-pre::-webkit-scrollbar-thumb:hover,
-.thinking-body::-webkit-scrollbar-thumb:hover { background-color: var(--scrollbar-thumb-hover); }
-#messages::-webkit-scrollbar-track,
-#session-list::-webkit-scrollbar-track,
-pre::-webkit-scrollbar-track,
-.thinking-body::-webkit-scrollbar-track { background: transparent; }
+:is(#messages, #session-list, #input, pre, .thinking-body, .fv-body):is(:hover, .is-scrolling)::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); }
+:is(#messages, #session-list, #input, pre, .thinking-body, .fv-body)::-webkit-scrollbar-thumb:hover { background-color: var(--scrollbar-thumb-hover); }
 
 /* 计划列表：3px 细滑块，上下内缩避开圆角，最短 24px */
 #plan-items::-webkit-scrollbar { width: 3px; }
 #plan-items::-webkit-scrollbar-track { background: transparent; margin: 6px 0; }
 #plan-items::-webkit-scrollbar-thumb {
   min-height: 24px;
-  background: var(--scrollbar-menu-thumb);
+  background: transparent;
   border-radius: 999px;
 }
+#plan-items:is(:hover, .is-scrolling)::-webkit-scrollbar-thumb { background: var(--scrollbar-menu-thumb); }
 #plan-items::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-menu-thumb-hover); }
 
 /* 不支持 ::-webkit-scrollbar 的浏览器（Firefox）退回标准属性 */
 @supports not selector(::-webkit-scrollbar) {
-  #messages, #session-list, pre, .thinking-body { scrollbar-width: thin; scrollbar-color: var(--scrollbar-thumb) transparent; }
-  #plan-items { scrollbar-width: thin; scrollbar-color: var(--scrollbar-menu-thumb) transparent; }
+  #messages, #session-list, #input, pre, .thinking-body, .fv-body, #plan-items {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+  }
+  :is(#messages, #session-list, #input, pre, .thinking-body, .fv-body):is(:hover, .is-scrolling) {
+    scrollbar-color: var(--scrollbar-thumb) transparent;
+  }
+  #plan-items:is(:hover, .is-scrolling) { scrollbar-color: var(--scrollbar-menu-thumb) transparent; }
 }

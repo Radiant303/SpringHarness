@@ -42,7 +42,7 @@
 
       <footer id="input-area">
         <div id="plan-dock" class="hidden">
-          <div id="plan-panel">
+          <div id="plan-panel" class="hidden">
             <div id="plan-header" title="收起">
               <svg class="plan-head-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M4.1 6C4.1 5.5 4.5 5.1 5 5.1H19C19.5 5.1 19.9 5.5 19.9 6C19.9 6.5 19.5 6.9 19 6.9H5C4.5 6.9 4.1 6.5 4.1 6ZM4.1 12C4.1 11.5 4.5 11.1 5 11.1H19C19.5 11.1 19.9 11.5 19.9 12C19.9 12.5 19.5 12.9 19 12.9H5C4.5 12.9 4.1 12.5 4.1 12ZM4.1 18C4.1 17.5 4.5 17.1 5 17.1H19C19.5 17.1 19.9 17.5 19.9 18C19.9 18.5 19.5 18.9 19 18.9H5C4.5 18.9 4.1 18.5 4.1 18Z" fill="currentColor"/></svg>
               <span class="plan-title">当前进度</span>
@@ -52,7 +52,7 @@
             </div>
             <ul id="plan-items"></ul>
           </div>
-          <button id="plan-pill" type="button" aria-pressed="true" title="展开/收起">
+          <button id="plan-pill" type="button" aria-pressed="false" title="展开/收起">
             <svg class="plan-head-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M4.1 6C4.1 5.5 4.5 5.1 5 5.1H19C19.5 5.1 19.9 5.5 19.9 6C19.9 6.5 19.5 6.9 19 6.9H5C4.5 6.9 4.1 6.5 4.1 6ZM4.1 12C4.1 11.5 4.5 11.1 5 11.1H19C19.5 11.1 19.9 11.5 19.9 12C19.9 12.5 19.5 12.9 19 12.9H5C4.5 12.9 4.1 12.5 4.1 12ZM4.1 18C4.1 17.5 4.5 17.1 5 17.1H19C19.5 17.1 19.9 17.5 19.9 18C19.9 18.5 19.5 18.9 19 18.9H5C4.5 18.9 4.1 18.5 4.1 18Z" fill="currentColor"/></svg>
             <span>当前进度</span>
             <span id="plan-pill-count"></span>
@@ -67,13 +67,26 @@
               <span id="input-ws-name"></span>
             </span>
             <span class="spacer"></span>
-            <span id="usage" title="上下文用量"></span>
-            <div id="model-pill" title="模型">
-              <select id="model-select"></select>
-              <span class="model-caret">▾</span>
+            <span id="usage">
+              <svg id="usage-ring" viewBox="0 0 24 24" aria-hidden="true">
+                <circle class="ring-track" cx="12" cy="12" r="9"/>
+                <circle id="usage-ring-prog" class="ring-prog" cx="12" cy="12" r="9"/>
+              </svg>
+              <span id="usage-tip" role="tooltip">上下文用量</span>
+            </span>
+            <div id="model-pill">
+              <button id="model-btn" type="button" title="模型">
+                <span id="model-name"></span>
+                <span class="model-caret"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
+              </button>
+              <div id="model-menu" class="hidden"></div>
             </div>
-            <button id="send-btn" class="round-btn" title="发送">↑</button>
-            <button id="stop-btn" class="round-btn hidden" title="停止">■</button>
+            <button id="send-btn" class="round-btn" title="发送" aria-label="发送">
+              <svg viewBox="0 0 1024 1024"><path d="M705.536 433.664a38.4 38.4 0 1 1-54.272 54.272L550.4 387.114667V729.6a38.4 38.4 0 0 1-76.8 0V387.114667l-100.864 100.821333a38.4 38.4 0 1 1-54.272-54.272l166.4-166.4a38.4 38.4 0 0 1 54.272 0l166.4 166.4z" fill="currentColor"/></svg>
+            </button>
+            <button id="stop-btn" class="round-btn hidden" title="停止" aria-label="停止">
+              <svg viewBox="0 0 1024 1024"><path d="M331.946667 379.904c-11.946667 23.466667-11.946667 54.186667-11.946667 115.626667v32.938666c0 61.44 0 92.16 11.946667 115.626667 10.538667 20.650667 27.306667 37.418667 47.957333 47.957333 23.466667 11.946667 54.186667 11.946667 115.626667 11.946667h32.938666c61.44 0 92.16 0 115.626667-11.946667 20.650667-10.538667 37.418667-27.306667 47.957333-47.957333 11.946667-23.466667 11.946667-54.186667 11.946667-115.626667v-32.938666c0-61.44 0-92.16-11.946667-115.626667a109.696 109.696 0 0 0-47.957333-47.957333c-23.466667-11.946667-54.186667-11.946667-115.626667-11.946667h-32.938666c-61.44 0-92.16 0-115.626667 11.946667-20.650667 10.538667-37.418667 27.306667-47.957333 47.957333z" fill="currentColor"/></svg>
+            </button>
           </div>
         </div>
       </footer>
