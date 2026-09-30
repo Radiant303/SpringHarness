@@ -978,16 +978,78 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .modal-label { color: var(--text-dim); margin-right: 8px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px; }
 
-#question-options { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
-#question-options button { text-align: left; padding: 9px 12px; }
-#question-custom-row { display: flex; gap: 8px; margin-top: 10px; }
+/* ---- Agent 提问卡：占据输入卡片的位置（提问期间输入卡片隐藏） ---- */
+#question-card {
+  max-width: var(--content-max);
+  margin: 0 auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 12px 14px;
+  box-shadow: 0 2px 14px rgba(0, 0, 0, 0.06);
+}
+#question-head { display: flex; align-items: center; gap: 8px; }
+#question-head .icon { width: 18px; height: 18px; color: var(--text-dim); }
+#question-head .spacer { flex: 1; }
+#question-text { font-size: var(--fs-md); font-weight: 500; color: var(--text); min-width: 0; }
+#question-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  color: var(--text-dim);
+}
+#question-close:hover { color: var(--text); }
+#question-close svg { width: 14px; height: 14px; }
+
+#question-options { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; }
+.q-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+  text-align: left;
+  font-size: var(--fs-sm);
+  color: var(--text);
+}
+.q-option:hover { background: var(--hover-bg); border-color: rgba(0, 0, 0, 0.16); }
+.q-num {
+  flex-shrink: 0;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  font-size: 12px;
+  color: var(--text-faint);
+  background: var(--code-bg);
+}
+
+#question-custom-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
 #question-custom {
   flex: 1;
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 8px 10px;
+  border-radius: 10px;
+  padding: 8px 12px;
   font: inherit;
+  font-size: var(--fs-sm);
+  color: var(--text);
+  outline: none;
 }
+#question-custom:focus { border-color: rgba(0, 0, 0, 0.16); }
+
+#question-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+#question-actions .q-kbd { margin-left: 6px; font-size: 12px; opacity: 0.55; }
 
 .hidden { display: none !important; }
 

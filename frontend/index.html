@@ -91,6 +91,26 @@
             </button>
           </div>
         </div>
+
+        <!-- Agent 提问卡：到达时顶替输入卡片的位置，不再全屏遮罩 -->
+        <div id="question-card" class="hidden">
+          <div id="question-head">
+            <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17h.01"/></svg></span>
+            <span id="question-text"></span>
+            <span class="spacer"></span>
+            <button id="question-close" class="icon-btn" title="放弃 (Esc)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+          </div>
+          <div id="question-options"></div>
+          <div id="question-custom-row" class="hidden">
+            <span class="q-opt-label">其他</span>
+            <input id="question-custom" type="text" placeholder="说说你的想法…">
+            <span class="q-num" id="question-custom-num"></span>
+          </div>
+          <div id="question-actions" class="hidden">
+            <button id="question-cancel">放弃 <span class="q-kbd">Esc</span></button>
+            <button id="question-submit" class="btn-primary">提交 <span class="q-kbd">Enter</span></button>
+          </div>
+        </div>
       </footer>
     </main>
   </div>
@@ -104,21 +124,6 @@
       <div class="modal-actions">
         <button id="approval-reject" class="btn-danger">拒绝</button>
         <button id="approval-approve" class="btn-primary">批准</button>
-      </div>
-    </div>
-  </div>
-
-  <div id="question-modal" class="modal hidden">
-    <div class="modal-box">
-      <h3>Agent 提问</h3>
-      <div id="question-text" class="modal-row"></div>
-      <div id="question-options"></div>
-      <div id="question-custom-row" class="hidden">
-        <input id="question-custom" type="text" placeholder="自定义回答…">
-        <button id="question-submit" class="btn-primary">提交</button>
-      </div>
-      <div class="modal-actions">
-        <button id="question-cancel">取消</button>
       </div>
     </div>
   </div>

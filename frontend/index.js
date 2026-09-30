@@ -1421,20 +1421,25 @@ function settleApproval(approved) {
 function hideApproval() { if (approvalResolve) settleApproval(false); }
 
 function handleQuestionRequest(params) {
+  // 串行排队，避免多个提问叠在一起
   const task = questionQueue.then(() => new Promise((resolve) => {
     questionResolve = resolve;
     $("question-text").textContent = params.question || "";
     const optionsBox = $("question-options");
     optionsBox.textContent = "";
-    for (const opt of params.options || []) {
-      const btn = el("button", null, String(opt));
+    (params.options || []).forEach((opt, i) => {
+      const btn = el("button", "q-option");
+      btn.appendChild(el("span", "q-opt-label", String(opt)));
+      btn.appendChild(el("span", "q-num", String(i + 1)));
       btn.onclick = () => settleQuestion(String(opt));
       optionsBox.appendChild(btn);
-    }
-    const customRow = $("question-custom-row");
-    customRow.classList.toggle("hidden", !params.allowCustom);
+    });
+    $("question-custom-row").classList.toggle("hidden", !params.allowCustom);
+    $("question-actions").classList.toggle("hidden", !params.allowCustom);
+    $("question-custom-num").textContent = String((params.options || []).length + 1);
     $("question-custom").value = "";
-    $("question-modal").classList.remove("hidden");
+    $("input-card").classList.add("hidden");  // 提问卡吞掉输入框
+    $("question-card").classList.remove("hidden");
     if (params.allowCustom) $("question-custom").focus();
   }));
   questionQueue = task.catch(() => {});
@@ -1442,7 +1447,8 @@ function handleQuestionRequest(params) {
 }
 
 function settleQuestion(answer) {
-  $("question-modal").classList.add("hidden");
+  $("question-card").classList.add("hidden");
+  $("input-card").classList.remove("hidden");
   const resolve = questionResolve;
   questionResolve = null;
   if (resolve) resolve(answer);
@@ -1585,6 +1591,7 @@ function bind() {
   $("approval-approve").onclick = () => settleApproval(true);
   $("approval-reject").onclick = () => settleApproval(false);
   $("question-cancel").onclick = () => settleQuestion(null);
+  $("question-close").onclick = () => settleQuestion(null);
   $("question-submit").onclick = () => {
     const v = $("question-custom").value.trim();
     if (v) settleQuestion(v);
@@ -1609,6 +1616,17 @@ function bind() {
     updateInputState();
   });
   document.addEventListener("keydown", (e) => {
+    /* 提问卡打开期间接管按键：Esc 放弃提问，数字键 1-9 快选选项，
+       自定义输入框聚焦时放行字符输入（Enter 提交由输入框自己的监听器处理） */
+    if (!$("question-card").classList.contains("hidden")) {
+      if (e.key === "Escape") { e.preventDefault(); settleQuestion(null); return; }
+      if (e.target === $("question-custom")) return;
+      const n = parseInt(e.key, 10);
+      const btns = $("question-options").children;
+      if (n >= 1 && n <= btns.length) btns[n - 1].click();
+      else if (n === btns.length + 1 && !$("question-custom-row").classList.contains("hidden")) $("question-custom").focus();
+      return;
+    }
     if (e.key === "Escape") { closeModelMenu(); cancelTurn(); }
     if ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "K")) {
       e.preventDefault();
