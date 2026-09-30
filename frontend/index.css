@@ -80,23 +80,26 @@ html, body {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  padding: 8px 12px;
+  border: 0.5px solid var(--border);
+  border-radius: 12px;
   background: var(--panel);
   font-size: var(--fs-sm);
   color: var(--text);
 }
 .new-session-btn:hover { background: var(--hover-bg); }
-.new-session-btn .plus { font-size: var(--fs-lg); }
+.new-session-btn .icon { width: 18px; height: 18px; }
+/* 悬停时气泡内的加号旋转 90° */
+.new-session-btn .nb-plus {
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform 0.3s;
+}
+.new-session-btn:hover .nb-plus { transform: rotate(90deg); }
 .new-session-btn .kbd {
   margin-left: auto;
-  font-size: var(--fs-sm);
-  color: var(--text-dim);
-  background: var(--code-bg);
-  border-radius: 5px;
-  padding: 0 6px;
-  line-height: 20px;
+  font-size: 13px;
+  color: var(--text-faint);
 }
 
 .sidebar-section {

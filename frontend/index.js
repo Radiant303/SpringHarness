@@ -408,7 +408,13 @@ async function refreshSessionList() {
   list.textContent = "";
   const active = sessions.find((s) => s.sessionId === state.sessionId);
   $("session-title").textContent = active ? (active.title || "(空会话)") : "";
-  for (const s of [...sessions].reverse()) {
+  /* 按最近更新倒序：新会话排在列表顶部 */
+  const sorted = [...sessions].sort((a, b) => {
+    const ta = Date.parse(a.updatedAt || a.createdAt || "") || 0;
+    const tb = Date.parse(b.updatedAt || b.createdAt || "") || 0;
+    return tb - ta;
+  });
+  for (const s of sorted) {
     const item = el("div", "session-item" + (s.sessionId === state.sessionId ? " active" : ""));
     item.appendChild(el("span", "session-title", s.title || "(空会话)"));
     item.appendChild(el("span", "session-time", formatTime(s.updatedAt || s.createdAt)));
@@ -1604,7 +1610,7 @@ function bind() {
   });
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") { closeModelMenu(); cancelTurn(); }
-    if ((e.ctrlKey || e.metaKey) && (e.key === "n" || e.key === "N")) {
+    if ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "K")) {
       e.preventDefault();
       newSession();
     }
