@@ -114,6 +114,14 @@ function hidePending() {
   if (node) node.remove();
 }
 
+/* 标记元素正在滚动：滚动条显示，停止 0.9s 后由定时器移除。
+   用户滚动由全局 scroll 监听触发，程序化滚动（如思考区钉底）按需主动调用 */
+function markScrolling(el) {
+  el.classList.add("is-scrolling");
+  clearTimeout(el._scrollbarTimer);
+  el._scrollbarTimer = setTimeout(() => el.classList.remove("is-scrolling"), 900);
+}
+
 /* 「最新消息」按钮专用：easeOutCubic 缓动，0.5s 内滚到底。
    不用 behavior:"smooth"——其时长由浏览器按距离决定，长距离会超过 0.5s。
    动画期间用户滚轮/触摸可立即接管（取消动画） */
@@ -1194,7 +1202,15 @@ function onSessionEvent(sid, event) {
         addToGroup(group, state.thinking);
         setActive(state.thinking);  // 新的思考开始：收起上一项
       }
-      state.thinking.querySelector(".thinking-body").textContent += event.text;
+      const body = state.thinking.querySelector(".thinking-body");
+      /* 钉底滚动：追加前贴底才跟随（容忍 40px 取整误差），
+         用户上翻即松手，滚回底部后下一片段自动恢复跟随 */
+      const atBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 40;
+      body.textContent += event.text;
+      if (atBottom) {
+        body.scrollTop = body.scrollHeight;
+        markScrolling(body);  // 流式期间让滚动条可见，提示下面还有内容
+      }
       maybeScroll();
       break;
     }
@@ -1635,15 +1651,13 @@ function bind() {
   });
 
   /* 滚动中显示滚动条：scroll 事件不冒泡，用捕获阶段统一监听所有滚动容器。
-     只在指针悬停于容器时生效——加载历史、流式输出等程序化滚动不显示。
-     停止滚动 0.9s 后移除 class，滑块随 CSS 规则隐藏 */
+     只在指针悬停于容器时生效——加载历史、流式输出等程序化滚动不显示
+     （思考区钉底是刻意例外，在 thinking_delta 里主动标记） */
   document.addEventListener("scroll", (e) => {
     const el = e.target;
     if (!(el instanceof HTMLElement)) return;
     if (!el.matches(":hover")) return;
-    el.classList.add("is-scrolling");
-    clearTimeout(el._scrollbarTimer);
-    el._scrollbarTimer = setTimeout(() => el.classList.remove("is-scrolling"), 900);
+    markScrolling(el);
   }, true);
 
   /* 指针离开滚动容器时立即隐藏滚动条，不等 0.9s 计时结束。
