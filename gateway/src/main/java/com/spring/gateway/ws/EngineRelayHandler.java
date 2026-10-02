@@ -1,6 +1,7 @@
 package com.spring.gateway.ws;
 
 import com.spring.gateway.service.TurnDispatchService;
+import jakarta.websocket.WebSocketContainer;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -45,14 +46,20 @@ public class EngineRelayHandler extends TextWebSocketHandler {
     private final String engineWsBase;
     private final ObjectMapper objectMapper;
     private final TurnDispatchService turnDispatchService;
+    private final TurnStreamReader turnStreamReader;
+    private final WebSocketContainer webSocketContainer;
 
     public EngineRelayHandler(@Value("${app.engine-base-url}") String engineBaseUrl,
                               ObjectMapper objectMapper,
-                              TurnDispatchService turnDispatchService) {
+                              TurnDispatchService turnDispatchService,
+                              TurnStreamReader turnStreamReader,
+                              WebSocketContainer webSocketContainer) {
         // http(s)://host:port → ws(s)://host:port
         this.engineWsBase = engineBaseUrl.replaceFirst("^http", "ws");
         this.objectMapper = objectMapper;
         this.turnDispatchService = turnDispatchService;
+        this.turnStreamReader = turnStreamReader;
+        this.webSocketContainer = webSocketContainer;
     }
 
     @Override
@@ -62,7 +69,7 @@ public class EngineRelayHandler extends TextWebSocketHandler {
         URI engineUri = URI.create(engineWsBase + "/ws?token="
                 + URLEncoder.encode(token, StandardCharsets.UTF_8));
 
-        StandardWebSocketClient client = new StandardWebSocketClient();
+        StandardWebSocketClient client = new StandardWebSocketClient(webSocketContainer);
         WebSocketSession engineSession;
         try {
             engineSession = client
@@ -92,6 +99,7 @@ public class EngineRelayHandler extends TextWebSocketHandler {
 
     @Override
     public void afterConnectionClosed(WebSocketSession browserSession, CloseStatus status) throws Exception {
+        turnStreamReader.closeFor(browserSession);
         WebSocketSession engineSession = engineSession(browserSession);
         if (engineSession != null && engineSession.isOpen()) {
             engineSession.close(status);
@@ -108,8 +116,10 @@ public class EngineRelayHandler extends TextWebSocketHandler {
     }
 
     /**
-     * 拦截控制面请求帧（turn/start、turn/cancel）转 MQ；返回 true 表示已处理，不再透传。
-     * 非控制面方法、响应帧（无 method）、解析失败的帧一律透传；MQ 发布失败回退透传。
+     * 拦截网关本地处理的请求帧，返回 true 表示已处理，不再透传：
+     * - turn/start、turn/cancel：控制面转 MQ（阶段④）；MQ 发布失败回退透传
+     * - stream/subscribe：数据面订阅 Redis Stream（阶段⑤），由 TurnStreamReader 推送
+     * 其余方法、响应帧（无 method）、解析失败的帧一律透传。
      */
     private boolean tryHandleControlPlane(WebSocketSession browserSession, String payload) throws IOException {
         JsonNode frame;
@@ -124,7 +134,8 @@ public class EngineRelayHandler extends TextWebSocketHandler {
             return false;
         }
         String method = methodNode.asText();
-        if (!"turn/start".equals(method) && !"turn/cancel".equals(method)) {
+        if (!"turn/start".equals(method) && !"turn/cancel".equals(method)
+                && !"stream/subscribe".equals(method)) {
             return false;
         }
 
@@ -136,6 +147,14 @@ public class EngineRelayHandler extends TextWebSocketHandler {
             return true;
         }
         String sessionId = sessionIdNode.asText();
+
+        if ("stream/subscribe".equals(method)) {
+            JsonNode lastSeqNode = params.get("lastSeq");
+            String lastSeq = lastSeqNode == null || lastSeqNode.isNull() ? null : lastSeqNode.asText();
+            turnStreamReader.subscribe(browserSession, sessionId, lastSeq);
+            sendRpcResult(browserSession, idNode);
+            return true;
+        }
 
         try {
             if ("turn/start".equals(method)) {

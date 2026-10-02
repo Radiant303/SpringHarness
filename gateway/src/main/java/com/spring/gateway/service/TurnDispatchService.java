@@ -14,6 +14,7 @@ import java.util.Map;
  * turn 控制面派发：把 WS 上拦下的 turn/start、turn/cancel 转为 MQ 消息。
  *
  * <p>turnId 为雪花 ID，同时是 Python 消费端的幂等键。
+ * 发布同步等 broker 确认（publisher confirm），失败抛异常由调用方回退 WS 透传。
  *
  * @author hanbing
  * @since 2026-10-02
@@ -21,6 +22,9 @@ import java.util.Map;
 @Service
 @RequiredArgsConstructor
 public class TurnDispatchService {
+
+    /** 同步确认超时：超过视为发布失败 */
+    private static final long CONFIRM_TIMEOUT_MS = 5000;
 
     private final RabbitTemplate rabbitTemplate;
     private final SnowflakeIdGenerator idGenerator;
@@ -41,7 +45,7 @@ public class TurnDispatchService {
         message.put("userId", userId);
         message.put("input", input);
         message.put("enqueuedAt", Instant.now().toString());
-        rabbitTemplate.convertAndSend(RabbitConfig.TURN_EXCHANGE, RabbitConfig.QUEUE_DISPATCH, message);
+        publish(RabbitConfig.QUEUE_DISPATCH, message);
         return turnId;
     }
 
@@ -56,6 +60,15 @@ public class TurnDispatchService {
         message.put("sessionId", sessionId);
         message.put("userId", userId);
         message.put("enqueuedAt", Instant.now().toString());
-        rabbitTemplate.convertAndSend(RabbitConfig.TURN_EXCHANGE, RabbitConfig.QUEUE_CANCEL, message);
+        publish(RabbitConfig.QUEUE_CANCEL, message);
+    }
+
+    /** 发送并同步等待 broker 确认；确认失败/超时抛 AmqpException，由调用方决定回退 */
+    private void publish(String routingKey, Map<String, Object> message) {
+        rabbitTemplate.invoke(template -> {
+            template.convertAndSend(RabbitConfig.TURN_EXCHANGE, routingKey, message);
+            template.waitForConfirmsOrDie(CONFIRM_TIMEOUT_MS);
+            return null;
+        });
     }
 }

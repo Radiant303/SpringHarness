@@ -31,12 +31,13 @@ services:
       --read-buffer-size=256K
       --read-rnd-buffer-size=256K
 
-  # 阶段③启用：雪花 ID worker 分配；阶段④再用作缓存/会话锁/流式推送
+  # 阶段③启用：雪花 ID worker 分配；阶段⑤用作事件流（Redis Stream）
   redis:
     image: redis:7
     container_name: springharness-redis
     ports:
-      - "6379:6379"
+      # 宿主 6380 → 容器 6379（避开 Windows 本地 Redis 占用的 6379）
+      - "6380:6379"
     volumes:
       - redis-data:/data
 

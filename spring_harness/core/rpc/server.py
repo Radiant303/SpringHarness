@@ -37,7 +37,7 @@ from spring_harness.core.rpc.schema import (
 from spring_harness.core.session import HarnessSession
 from spring_harness.core.store.base import SessionStore
 from spring_harness.core.store.jsonl import JsonlSessionStore
-from spring_harness.core.stream.events import ApprovalRequest, QuestionRequest, TurnFinished
+from spring_harness.core.stream.events import ApprovalRequest, QuestionRequest, ServerEvent
 
 PROTOCOL_VERSION = 1
 
@@ -60,6 +60,8 @@ class AppServer:
         self._pumps: dict[str, asyncio.Task] = {}
         self._tasks: set[asyncio.Task] = set()
         self._shutting_down = False
+        # 在途审批/提问：request_id -> (session_id, 种类)。连接断开时用于默认拒绝
+        self._inflight_requests: dict[str, tuple[str, str]] = {}
         # 方法名 → (参数模型, 处理函数)；None 表示无参数
         self._routes: dict[str, tuple[type[BaseModel] | None, Callable[[Any], Awaitable[Any]]]] = {
             "initialize": (None, self._initialize),
@@ -221,22 +223,12 @@ class AppServer:
     async def _turn_cancel(self, p: SessionParams) -> None:
         self._require(p.session_id).cancel()
 
-    # ---- MQ 派发入口（阶段④）：与 _turn_start/_turn_cancel 等价，由 MQ 消费者驱动 ----
-
-    def start_turn_from_mq(self, session_id: str, text: str) -> None:
-        """MQ 派发的 turn 启动。网关已鉴权并即时应答，这里只做 busy 校验与任务启动。"""
-        session = self._require(session_id)
-        if session.busy:
-            raise JsonRpcError(BUSY, "上一轮还没结束")
-        if self._shutting_down:
-            raise RuntimeError("服务器正在关闭")
-        self._track(asyncio.create_task(self._run_turn(session, text)))
-
-    def cancel_turn_from_mq(self, session_id: str) -> None:
-        self._require(session_id).cancel()
-
-    async def _on_turn_finished(self, session: HarnessSession, event: TurnFinished) -> None:
-        """轮次结束钩子：云端子类覆写用于 MQ 生命周期回传；本地模式无需处理。"""
+    async def post_session_request(self, session: HarnessSession, event: ServerEvent) -> None:
+        """把审批/提问事件经本连接发给客户端（云端会话注册表在挂载/补投时调用）。"""
+        if isinstance(event, ApprovalRequest):
+            await self._post_approval(session, event)
+        elif isinstance(event, QuestionRequest):
+            await self._post_question(session, event)
 
     # ---- 事件泵：一个会话一条，ServerEvent → 通知 / 服务器请求 ----
 
@@ -265,8 +257,6 @@ class AppServer:
                         "session/event",
                         SessionEventParams(session_id=session.session_id, event=event.model_dump()),
                     )
-                    if isinstance(event, TurnFinished):
-                        await self._on_turn_finished(session, event)
         except asyncio.CancelledError:
             raise
         except Exception:  # noqa: BLE001 泵是长驻任务：任何意外只记日志，不让任务静默死掉
@@ -285,6 +275,7 @@ class AppServer:
             ),
             rid=event.request_id,
         )
+        self._inflight_requests[event.request_id] = (session.session_id, "approval")
         self._track(asyncio.create_task(self._await_approval(session, event.request_id)))
 
     async def _await_approval(self, session: HarnessSession, request_id: str) -> None:
@@ -293,6 +284,8 @@ class AppServer:
             approved = ApprovalResult.model_validate(result or {}).approved
         except (JsonRpcError, ValidationError):
             approved = False  # 客户端出错/断连：默认拒绝，宁安全勿放行
+        finally:
+            self._inflight_requests.pop(request_id, None)
         session.respond(request_id, approved)
 
     async def _post_question(self, session: HarnessSession, event) -> None:
@@ -306,6 +299,7 @@ class AppServer:
             ),
             rid=event.request_id,
         )
+        self._inflight_requests[event.request_id] = (session.session_id, "question")
         self._track(asyncio.create_task(self._await_question(session, event.request_id)))
 
     async def _await_question(self, session: HarnessSession, request_id: str) -> None:
@@ -314,6 +308,8 @@ class AppServer:
             answer = QuestionResult.model_validate(result or {}).answer
         except (JsonRpcError, ValidationError):
             answer = None  # 视为用户取消提问
+        finally:
+            self._inflight_requests.pop(request_id, None)
         session.respond(request_id, answer)
 
     # ---- 收尾 ----

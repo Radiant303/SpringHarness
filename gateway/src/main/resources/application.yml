@@ -19,8 +19,19 @@ spring:
     password: root   # 开发环境本地值；生产用环境变量覆盖
   data:
     redis:
+      # 宿主 6380 → Docker 容器内 Redis 7（避开 Windows 本地 Redis 占用的 6379）
       host: 127.0.0.1
-      port: 6379
+      port: 6380
+  rabbitmq:
+    host: 127.0.0.1
+    port: 5672
+    # 发布确认：TurnDispatchService 逐条同步等确认；confirm/returns 回调记日志
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    listener:
+      simple:
+        # 消费失败不重投（消息进 DLQ，由 DlqListener 告警），避免 poison 消息死循环
+        default-requeue-rejected: false
 
 app:
   # 必须与 Python 引擎 ~/.springharness/config.toml 的 [cloud].jwt_secret 完全一致

@@ -231,6 +231,7 @@ const state = {
   historyCursor: null,  // 继续向回翻页的 previousCursor
   historyHasMore: false,
   currentTurn: null,    // 当前助手回合容器 {el, content, petBox, canvas, pet}
+  lastSeq: {},          // sessionId -> 最后收到的事件流条目 ID（断线续读游标，阶段⑤）
 };
 
 /* ================= 认证 ================= */
@@ -404,6 +405,13 @@ async function openSession() {
   await loadHistory();
   await loadPlan();
   await refreshSessionList();
+  subscribeStream(sid);
+}
+
+/* 订阅会话事件流（阶段⑤）：带上本地已见的最后条目 ID，网关据此续读补发 */
+function subscribeStream(sid) {
+  rpc.request("stream/subscribe", { sessionId: sid, lastSeq: state.lastSeq[sid] || null })
+    .catch(() => { /* 订阅失败只影响实时事件流，重连逻辑会再试 */ });
 }
 
 /* ================= 会话管理 ================= */
@@ -463,6 +471,7 @@ async function switchSession(sid) {
   await loadHistory();
   await loadPlan();
   await refreshSessionList();
+  subscribeStream(sid);
 }
 
 async function newSession() {
@@ -473,6 +482,7 @@ async function newSession() {
     localStorage.setItem("sh.sessionId", r.sessionId);
     clearMessages();
     await refreshSessionList();
+    subscribeStream(r.sessionId);
   } catch (e) {
     addSystem("❌ 新建会话失败：" + e.message, true);
   }
@@ -1258,8 +1268,20 @@ function ensureAssistant() {
   return state.assistant;
 }
 
-function onSessionEvent(sid, event) {
+/* Stream 条目 ID 形如 "毫秒-序号"，按 (毫秒, 序号) 比较先后（阶段⑤去重） */
+function seqAfter(a, b) {
+  const [am, as] = a.split("-").map(Number);
+  const [bm, bs] = b.split("-").map(Number);
+  return am > bm || (am === bm && as > bs);
+}
+
+function onSessionEvent(sid, event, seq) {
   if (sid !== state.sessionId) return;
+  if (seq) {
+    const last = state.lastSeq[sid];
+    if (last && !seqAfter(seq, last)) return;  // 续读补发的重叠部分，去重
+    state.lastSeq[sid] = seq;
+  }
   hidePending();  // 任意事件到达都视为响应已开始
   switch (event.kind) {
     case "text_delta": {
@@ -1562,7 +1584,7 @@ rpc.onServerRequest = (method, params) => {
 };
 
 rpc.onNotification = (method, params) => {
-  if (method === "session/event") onSessionEvent(params.sessionId, params.event);
+  if (method === "session/event") onSessionEvent(params.sessionId, params.event, params.seq);
 };
 
 /* ================= 输入 / 轮次 ================= */
