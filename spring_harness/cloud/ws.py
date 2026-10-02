@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from spring_harness.cloud.auth import decode_user_id
 from spring_harness.cloud.db import get_sessionmaker
+from spring_harness.cloud.mq import get_dispatcher
 from spring_harness.core.config.settings import config
 from spring_harness.core.log import logger
 from spring_harness.core.rpc.connection import JsonRpcConnection, JsonRpcError
@@ -27,11 +28,13 @@ from spring_harness.core.rpc.server import (
     AppServer,
 )
 from spring_harness.core.services.web_server import WebInitializeResult, _model_infos
+from spring_harness.core.session import HarnessSession
 from spring_harness.core.store.mysql import (
     MysqlSessionStore,
     find_active_session,
     list_sessions_for_user,
 )
+from spring_harness.core.stream.events import TurnFinished
 
 # 会话已被其他连接占用（同会话串行的进程内拒绝码）
 SESSION_OCCUPIED = -32003
@@ -168,6 +171,31 @@ class CloudAppServer(AppServer):
         await super().shutdown()
         for session_id in tuple(self._owned_sessions):
             self._release(session_id)
+
+    async def _on_turn_finished(self, session: HarnessSession, event: TurnFinished) -> None:
+        """轮次结束回传 MQ 生命周期事件（阶段④控制面）。
+
+        TurnFinished 不携带 turnId；同会话串行（busy）保证任一时刻只有一个活跃
+        turn，故按 sessionId 关联。wake 轮（后台任务催醒）也回传，网关侧可自行过滤。
+        """
+        dispatcher = get_dispatcher()
+        if dispatcher is None:
+            return
+        if event.cancelled:
+            status = "cancelled"
+        elif event.error:
+            status = "error"
+        else:
+            status = "finished"
+        try:
+            await dispatcher.publish_lifecycle({
+                "sessionId": session.session_id,
+                "status": status,
+                "error": event.error,
+                "wake": event.wake,
+            })
+        except Exception:
+            logger.exception("turn 生命周期事件发布失败: session={}", session.session_id)
 
 
 async def ws_endpoint(websocket: WebSocket) -> None:

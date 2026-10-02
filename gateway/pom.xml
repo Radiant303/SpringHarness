@@ -43,6 +43,17 @@
             <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
 
+        <!-- 阶段④：MQ 控制面（turn 派发/取消/完成事件） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-amqp</artifactId>
+        </dependency>
+        <!-- 阶段④：WS 进网关（服务端 + 到引擎的 WS client relay 都要用） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-websocket</artifactId>
+        </dependency>
+
         <!-- ORM：MyBatis-Plus（boot4 专用 starter，3.5.13+ 才支持 Spring Boot 4） -->
         <dependency>
             <groupId>com.baomidou</groupId>

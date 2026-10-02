@@ -37,7 +37,7 @@ from spring_harness.core.rpc.schema import (
 from spring_harness.core.session import HarnessSession
 from spring_harness.core.store.base import SessionStore
 from spring_harness.core.store.jsonl import JsonlSessionStore
-from spring_harness.core.stream.events import ApprovalRequest, QuestionRequest
+from spring_harness.core.stream.events import ApprovalRequest, QuestionRequest, TurnFinished
 
 PROTOCOL_VERSION = 1
 
@@ -221,6 +221,23 @@ class AppServer:
     async def _turn_cancel(self, p: SessionParams) -> None:
         self._require(p.session_id).cancel()
 
+    # ---- MQ 派发入口（阶段④）：与 _turn_start/_turn_cancel 等价，由 MQ 消费者驱动 ----
+
+    def start_turn_from_mq(self, session_id: str, text: str) -> None:
+        """MQ 派发的 turn 启动。网关已鉴权并即时应答，这里只做 busy 校验与任务启动。"""
+        session = self._require(session_id)
+        if session.busy:
+            raise JsonRpcError(BUSY, "上一轮还没结束")
+        if self._shutting_down:
+            raise RuntimeError("服务器正在关闭")
+        self._track(asyncio.create_task(self._run_turn(session, text)))
+
+    def cancel_turn_from_mq(self, session_id: str) -> None:
+        self._require(session_id).cancel()
+
+    async def _on_turn_finished(self, session: HarnessSession, event: TurnFinished) -> None:
+        """轮次结束钩子：云端子类覆写用于 MQ 生命周期回传；本地模式无需处理。"""
+
     # ---- 事件泵：一个会话一条，ServerEvent → 通知 / 服务器请求 ----
 
     def _track(self, task: asyncio.Task) -> asyncio.Task:
@@ -248,6 +265,8 @@ class AppServer:
                         "session/event",
                         SessionEventParams(session_id=session.session_id, event=event.model_dump()),
                     )
+                    if isinstance(event, TurnFinished):
+                        await self._on_turn_finished(session, event)
         except asyncio.CancelledError:
             raise
         except Exception:  # noqa: BLE001 泵是长驻任务：任何意外只记日志，不让任务静默死掉

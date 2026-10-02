@@ -237,8 +237,8 @@ const state = {
 
 const TOKEN_KEY = "sh.token";
 const USER_KEY = "sh.username";
-// 页面由网关（8080）托管，聊天 WS 仍直连 Python 引擎（阶段④迁入网关）
-const WS_BASE = `${location.protocol === "https:" ? "wss" : "ws"}://${location.hostname}:8001`;
+// 页面与聊天 WS 都走网关（8080）：WS 由网关鉴权后 relay 到 Python 引擎（阶段④）
+const WS_BASE = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}`;
 
 function getToken() { return localStorage.getItem(TOKEN_KEY); }
 function clearToken() { localStorage.removeItem(TOKEN_KEY); }

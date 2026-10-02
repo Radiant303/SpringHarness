@@ -74,6 +74,8 @@ class Cloud(ConfigBase):
     jwt_expire_minutes: int = 10080
     host: str = "0.0.0.0"
     port: int = 8001
+    # MQ 控制面（阶段④）：turn 派发/取消消费、生命周期事件回传
+    rabbitmq_url: str = "amqp://guest:guest@127.0.0.1:5672/"
 
 
 class Config(ConfigBase):

@@ -40,16 +40,17 @@ services:
     volumes:
       - redis-data:/data
 
-  # 后续阶段启用：后台任务队列（云端 turn 的异步执行）
-  # rabbitmq:
-  #   image: rabbitmq:3-management
-  #   container_name: springharness-rabbitmq
-  #   ports:
-  #     - "5672:5672"
-  #     - "15672:15672"
-  #   volumes:
-  #     - rabbitmq-data:/var/lib/rabbitmq
+  # 阶段④启用：MQ 控制面（turn 派发/取消/完成事件）
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: springharness-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
 
 volumes:
   mysql-data:
   redis-data:
+  rabbitmq-data:

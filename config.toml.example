@@ -68,3 +68,5 @@ jwt_expire_minutes = 10080
 # 监听地址与端口
 host = "0.0.0.0"
 port = 8001
+# MQ 控制面（阶段④）：turn 派发/取消消费、生命周期事件回传
+rabbitmq_url = "amqp://guest:guest@127.0.0.1:5672/"
