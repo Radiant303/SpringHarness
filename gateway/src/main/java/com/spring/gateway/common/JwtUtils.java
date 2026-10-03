@@ -13,7 +13,7 @@ import java.util.Date;
 
 /**
  * JWT 工具类，提供 token 签发与校验能力。
- * <p>claims 格式、签名密钥与 Python 验签侧存在跨服务契约，修改需两侧同步。</p>
+ * <p>签名密钥与 Python 验签侧存在跨服务契约，修改需两侧同步。</p>
  *
  * @author hanbing
  * @since 2026-09-26
