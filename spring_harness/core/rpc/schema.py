@@ -10,6 +10,8 @@ class _WireModel(BaseModel):
 class WorkspaceParams(_WireModel):
     workspace: str
     model: str | None = None
+    # 会话落在哪个 work 下；缺省由服务端解析为默认 work
+    work_id: str | None = Field(default=None, validation_alias="workId", serialization_alias="workId")
 
 
 class SessionParams(_WireModel):

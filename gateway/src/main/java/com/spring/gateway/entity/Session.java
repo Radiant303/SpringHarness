@@ -30,11 +30,11 @@ public class Session {
     /** 所属用户 ID。 */
     private Long userId;
 
+    /** 所属 work ID，同 work 的会话共享同一工作区目录。 */
+    private String workId;
+
     /** 会话标题。 */
     private String title;
-
-    /** 工作区目录路径。 */
-    private String workspacePath;
 
     /** 当前历史段号。 */
     private Integer currentSegment;

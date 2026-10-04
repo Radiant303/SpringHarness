@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -29,14 +30,16 @@ public class SessionController {
     private final SessionService sessionService;
 
     /**
-     * 会话列表
+     * 会话列表；workId 非空时只返回该 work 下的会话
      *
      * @param userId 当前用户 ID（拦截器注入）
+     * @param workId work ID，可选
      * @return 会话摘要列表
      */
     @GetMapping
-    public Result<List<SessionSummary>> list(@RequestAttribute(AuthInterceptor.ATTR_USER_ID) Long userId) {
-        return Result.ok(sessionService.list(userId));
+    public Result<List<SessionSummary>> list(@RequestAttribute(AuthInterceptor.ATTR_USER_ID) Long userId,
+                                             @RequestParam(required = false) String workId) {
+        return Result.ok(sessionService.list(userId, workId));
     }
 
     /**
@@ -53,14 +56,16 @@ public class SessionController {
     }
 
     /**
-     * 新建会话（网关本地落库）
+     * 新建会话（网关本地落库）；workId 为空时落默认 work
      *
      * @param userId 当前用户 ID（拦截器注入）
+     * @param workId work ID，可选
      * @return 会话摘要
      */
     @PostMapping
-    public Result<SessionSummary> create(@RequestAttribute(AuthInterceptor.ATTR_USER_ID) Long userId) {
-        return Result.ok(sessionService.create(userId));
+    public Result<SessionSummary> create(@RequestAttribute(AuthInterceptor.ATTR_USER_ID) Long userId,
+                                         @RequestParam(required = false) String workId) {
+        return Result.ok(sessionService.create(userId, workId));
     }
 
     /**

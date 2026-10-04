@@ -8,7 +8,9 @@ from typing import ClassVar
 
 from fastapi import WebSocket, WebSocketDisconnect
 
+from spring_harness.cloud import gateway_store
 from spring_harness.cloud.auth import decode_user_id
+from spring_harness.cloud.db import UserRow, get_sessionmaker
 from spring_harness.cloud.gateway_store import (
     GatewaySessionStore,
     find_active_session,
@@ -38,6 +40,12 @@ SESSION_OCCUPIED = -32003
 WS_UNAUTHORIZED_CLOSE_CODE = 4401
 
 
+def _user_exists(user_id: int) -> bool:
+    """令牌是无状态的：签名有效不代表用户仍在库中（库重建/账号删除后旧 token 即幽灵），握手时复核。"""
+    with get_sessionmaker()() as s:
+        return s.get(UserRow, user_id) is not None
+
+
 class CloudAppServer(AppServer):
     """按 user_id 隔离的 JSON-RPC 协议面：会话数据经内部 HTTP API 读写，工作区由服务端分配。
 
@@ -61,10 +69,8 @@ class CloudAppServer(AppServer):
         self._data_root = data_root
         # 本连接登记的会话：连接关闭时统一卸载
         self._owned_sessions: set[str] = set()
-
-    @property
-    def _user_root(self) -> Path:
-        return self._data_root / "workspaces" / str(self._user_id)
+        # 当前挂载的会话：同一时间只服务一个，切换时卸载上一个
+        self._current_session: str | None = None
 
     # ---- 注册表：进程内同会话串行 ----
 
@@ -84,35 +90,62 @@ class CloudAppServer(AppServer):
             self._owned_sessions.discard(session_id)
 
     def _adopt(self, handle: CloudSessionHandle, model: str | None) -> None:
-        """把注册表中的会话绑定到本连接：占位 + 审批路由 + 基类 _sessions 视图。"""
+        """把注册表中的会话绑定到本连接：占位 + 审批路由 + 基类 _sessions 视图。
+
+        同一时间只挂载一个会话；切换时卸载上一个（会话本体不动，断线期间的
+        审批/提问由注册表暂存，下次挂载补投）。"""
+        previous = self._current_session
+        if previous is not None and previous != handle.session_id:
+            self._unmount(previous)
         self._acquire(handle.session_id)
         handle.set_approval_target(self)
         if model:
             handle.session.set_model(model)
         self._sessions[handle.session_id] = handle.session
+        self._current_session = handle.session_id
+
+    def _unmount(self, session_id: str) -> None:
+        """摘除挂载：审批路由置空、释放占用、移出基类视图；会话本体留在注册表。"""
+        registry = get_registry()
+        handle = registry.get(session_id) if registry is not None else None
+        if handle is not None and handle.approval_target is self:
+            handle.set_approval_target(None)
+        self._release(session_id)
+        self._sessions.pop(session_id, None)
+        if self._current_session == session_id:
+            self._current_session = None
 
     # ---- 方法实现：全部按 user_id 经内部 HTTP API 操作 ----
 
     async def _initialize(self, _: None) -> WebInitializeResult:
-        # workspace 上报用户云端根目录：前端只拿它做展示与请求参数，服务端忽略
+        # workspace 上报默认 work 目录：前端只拿它做展示与请求参数
+        work = await asyncio.to_thread(gateway_store.ensure_default_work, self._user_id)
         return WebInitializeResult(
             server_name="spring-harness",
             protocol_version=PROTOCOL_VERSION,
-            workspace=str(self._user_root),
+            workspace=work.workspace_path,
             models=_model_infos(),
             default_model=config.default_model,
         )
 
     async def _session_new(self, p: WorkspaceParams) -> SessionResult:
         session_id = str(uuid.uuid4())
-        workspace = self._user_root / session_id
-        await asyncio.to_thread(workspace.mkdir, parents=True, exist_ok=True)
+        # workId 传了则校验归属，没传解析为默认 work；工作区目录由所属 work 决定
+        if p.work_id:
+            work = await asyncio.to_thread(gateway_store.get_work, p.work_id)
+            if work is None or work.user_id != self._user_id:
+                raise JsonRpcError(SESSION_NOT_FOUND, f"未知项目: {p.work_id}")
+        else:
+            work = await asyncio.to_thread(gateway_store.ensure_default_work, self._user_id)
+        workspace = Path(work.workspace_path)
         store = await asyncio.to_thread(
-            GatewaySessionStore.create, self._user_id, workspace, session_id,
+            GatewaySessionStore.create, self._user_id, work.work_id, session_id,
         )
         registry = get_registry()
         assert registry is not None  # lifespan 已装配
-        handle = await registry.get_or_create(session_id, workspace=workspace, store=store)
+        handle = await registry.get_or_create(
+            session_id, workspace=workspace, store=store, work_id=work.work_id,
+        )
         self._adopt(handle, p.model)
         return SessionResult(session_id=session_id)
 
@@ -134,6 +167,7 @@ class CloudAppServer(AppServer):
                 raise JsonRpcError(SESSION_NOT_FOUND, f"未知会话: {target.id}")
             handle = await registry.get_or_create(
                 target.id, workspace=Path(target.workspace_path), store=store,
+                work_id=target.work_id,
             )
         except BaseException:
             self._release(target.id)
@@ -174,6 +208,7 @@ class CloudAppServer(AppServer):
                 raise JsonRpcError(SESSION_NOT_FOUND, f"未知会话: {p.session_id}")
             handle = await registry.get_or_create(
                 p.session_id, workspace=Path(row.workspace_path), store=store,
+                work_id=row.work_id,
             )
         except BaseException:
             self._release(p.session_id)
@@ -203,10 +238,14 @@ class CloudAppServer(AppServer):
 
 
 async def ws_endpoint(websocket: WebSocket) -> None:
-    """握手时验 token 得 user_id，无效则 close(4401)；之后按通用模式接 JsonRpcConnection。"""
+    """握手时验 token 得 user_id，无效则 close(4401)；token 合法但用户已不存在同样 4401。"""
     await websocket.accept()
     token = websocket.query_params.get("token")
     user_id = decode_user_id(token) if token else None
+    if user_id is not None:
+        exists = await asyncio.to_thread(_user_exists, user_id)
+        if not exists:
+            user_id = None
     if user_id is None:
         await websocket.close(code=WS_UNAUTHORIZED_CLOSE_CODE)
         return

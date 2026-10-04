@@ -2,12 +2,16 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 import redis.asyncio as aioredis
-from fastapi import FastAPI
+from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from spring_harness.cloud.mq import TurnDispatcher, set_dispatcher
-from spring_harness.cloud.registry import CloudSessionRegistry, set_registry
+from spring_harness.cloud.registry import (
+    CloudSessionRegistry,
+    get_registry,
+    set_registry,
+)
 from spring_harness.cloud.ws import ws_endpoint
 from spring_harness.core.config.settings import config
 from spring_harness.core.log import logger
@@ -48,5 +52,16 @@ def create_app() -> FastAPI:
     @app.get("/", include_in_schema=False)
     def index() -> FileResponse:
         return FileResponse(DEFAULT_FRONTEND_DIR / "index.html")
+
+    @app.get("/internal/works/{work_id}/active-sessions")
+    def active_sessions(
+        work_id: str, x_internal_token: str | None = Header(default=None),
+    ) -> dict[str, int]:
+        """网关删除 work 前的活跃校验：进程内注册（含在跑的 turn）即活跃。"""
+        if x_internal_token != config.cloud.internal_token:
+            raise HTTPException(status_code=401, detail="未认证")
+        registry = get_registry()
+        active = registry.active_count_in_work(work_id) if registry is not None else 0
+        return {"active": active}
 
     return app

@@ -27,19 +27,34 @@ def upgrade() -> None:
         sa.UniqueConstraint("username"),
     )
     op.create_table(
-        "sessions",
+        "works",
         sa.Column("id", sa.CHAR(length=36), nullable=False),
         sa.Column("user_id", sa.BigInteger(), nullable=False),
-        sa.Column("title", sa.String(length=128), nullable=True),
-        sa.Column("workspace_path", sa.String(length=512), nullable=False),
-        sa.Column("current_segment", sa.Integer(), nullable=False, server_default=sa.text("0")),
-        sa.Column("status", sa.String(length=16), nullable=False, server_default=sa.text("'active'")),
+        sa.Column("name", sa.String(length=128), nullable=False),
+        sa.Column("size_bytes", sa.BigInteger(), nullable=False, server_default=sa.text("0")),
+        sa.Column("is_default", sa.Boolean(), nullable=False, server_default=sa.text("0")),
         sa.Column("created_at", MicrosecondDateTime(), nullable=False, server_default=_TIMESTAMP_DEFAULT),
         sa.Column("updated_at", MicrosecondDateTime(), nullable=False, server_default=_TIMESTAMP_DEFAULT),
         sa.ForeignKeyConstraint(["user_id"], ["users.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
+    op.create_index("ix_works_user", "works", ["user_id"])
+    op.create_table(
+        "sessions",
+        sa.Column("id", sa.CHAR(length=36), nullable=False),
+        sa.Column("user_id", sa.BigInteger(), nullable=False),
+        sa.Column("work_id", sa.CHAR(length=36), nullable=False),
+        sa.Column("title", sa.String(length=128), nullable=True),
+        sa.Column("current_segment", sa.Integer(), nullable=False, server_default=sa.text("0")),
+        sa.Column("status", sa.String(length=16), nullable=False, server_default=sa.text("'active'")),
+        sa.Column("created_at", MicrosecondDateTime(), nullable=False, server_default=_TIMESTAMP_DEFAULT),
+        sa.Column("updated_at", MicrosecondDateTime(), nullable=False, server_default=_TIMESTAMP_DEFAULT),
+        sa.ForeignKeyConstraint(["user_id"], ["users.id"]),
+        sa.ForeignKeyConstraint(["work_id"], ["works.id"]),
+        sa.PrimaryKeyConstraint("id"),
+    )
     op.create_index("ix_sessions_user_updated", "sessions", ["user_id", "updated_at"])
+    op.create_index("ix_sessions_work", "sessions", ["work_id"])
     op.create_table(
         "messages",
         sa.Column("id", sa.BigInteger(), autoincrement=True, nullable=False),
@@ -58,6 +73,9 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_index("ix_messages_session_segment", table_name="messages")
     op.drop_table("messages")
+    op.drop_index("ix_sessions_work", table_name="sessions")
     op.drop_index("ix_sessions_user_updated", table_name="sessions")
     op.drop_table("sessions")
+    op.drop_index("ix_works_user", table_name="works")
+    op.drop_table("works")
     op.drop_table("users")

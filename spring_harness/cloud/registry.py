@@ -16,11 +16,16 @@ import asyncio
 import json
 from typing import TYPE_CHECKING
 
+from spring_harness.cloud import quota
 from spring_harness.core.log import logger
 from spring_harness.core.rpc.connection import JsonRpcError
 from spring_harness.core.rpc.server import BUSY, AppServer
 from spring_harness.core.session import HarnessSession
-from spring_harness.core.stream.events import ApprovalRequest, QuestionRequest, TurnFinished
+from spring_harness.core.stream.events import (
+    ApprovalRequest,
+    QuestionRequest,
+    TurnFinished,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -40,13 +45,18 @@ STREAM_TTL_AFTER_FINISH = 600
 class CloudSessionHandle:
     """一个云端会话的运行时：会话本体 + 事件扇出 + 审批路由。"""
 
-    def __init__(self, session: HarnessSession, redis: aioredis.Redis | None) -> None:
+    def __init__(
+        self, session: HarnessSession, redis: aioredis.Redis | None, *, work_id: str = "",
+    ) -> None:
         self.session = session
+        self.work_id = work_id
         self._redis = redis
         self._approval_target: AppServer | None = None
         self._parked_requests: list[ApprovalRequest | QuestionRequest] = []
         self._tasks: set[asyncio.Task] = set()
         self._fanout_task = self._track(asyncio.create_task(self._fanout_loop()))
+        if work_id:
+            quota.register_workspace(session.workspace, work_id)
 
     @property
     def session_id(self) -> str:
@@ -99,6 +109,7 @@ class CloudSessionHandle:
                     await self._write_stream(event)
                     if isinstance(event, TurnFinished):
                         await self._publish_lifecycle(event)
+                        self._track(asyncio.create_task(self._report_size()))
         except asyncio.CancelledError:
             raise
         except Exception:  # noqa: BLE001 扇出是长驻任务：任何意外只记日志，不让任务静默死掉
@@ -122,6 +133,15 @@ class CloudSessionHandle:
             await self._redis.expire(key, ttl)
         except Exception:  # noqa: BLE001 流写入失败不阻断 turn；事件仍有数据库落库兜底
             logger.exception("事件写 Redis Stream 失败: session={}", self.session_id)
+
+    async def _report_size(self) -> None:
+        """轮次结束后重算 work 目录大小并上报网关（异步，不阻断扇出）。"""
+        if not self.work_id:
+            return
+        from spring_harness.cloud import gateway_store  # 延迟导入避免循环依赖
+
+        size = await asyncio.to_thread(quota.directory_size_bytes, self.session.workspace)
+        await asyncio.to_thread(gateway_store.report_work_size, self.work_id, size)
 
     async def _publish_lifecycle(self, event: TurnFinished) -> None:
         from spring_harness.cloud.mq import get_dispatcher  # 延迟导入避免循环依赖
@@ -153,6 +173,8 @@ class CloudSessionHandle:
             task.cancel()
         if self._tasks:
             await asyncio.gather(*self._tasks, return_exceptions=True)
+        if self.work_id:
+            quota.unregister_workspace(self.session.workspace)
         await self.session.close()
 
 
@@ -167,18 +189,27 @@ class CloudSessionRegistry:
         return self._handles.get(session_id)
 
     async def get_or_create(
-        self, session_id: str, *, workspace: Path, store: SessionStore,
+        self, session_id: str, *, workspace: Path, store: SessionStore, work_id: str = "",
     ) -> CloudSessionHandle:
         handle = self._handles.get(session_id)
         if handle is not None:
             return handle
-        # 工作区目录惰性创建：会话行可能由外部接口预先创建（本进程还没建过目录）
+        # 工作区目录惰性创建：work 目录可能由本进程第一个挂载的会话创建
         workspace.mkdir(parents=True, exist_ok=True)
         session = await asyncio.to_thread(HarnessSession, workspace, store=store)
-        handle = CloudSessionHandle(session, self._redis)
+        handle = CloudSessionHandle(session, self._redis, work_id=work_id)
         self._handles[session_id] = handle
         logger.info("云端会话已注册: {}", session_id)
         return handle
+
+    def active_count_in_work(self, work_id: str) -> int:
+        """进程内该 work 下"活跃"的会话数：有连接挂载或 turn 在跑即活跃，
+        仅注册可续传的会话不算（否则删除入口会被永远堵死）。"""
+        return sum(
+            1 for handle in self._handles.values()
+            if handle.work_id == work_id
+            and (handle.approval_target is not None or handle.session.busy)
+        )
 
     async def close_all(self) -> None:
         handles, self._handles = list(self._handles.values()), {}

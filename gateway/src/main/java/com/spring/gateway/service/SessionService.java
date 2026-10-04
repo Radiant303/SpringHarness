@@ -4,8 +4,9 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.spring.gateway.common.BizException;
 import com.spring.gateway.dto.SessionSummary;
 import com.spring.gateway.entity.Session;
+import com.spring.gateway.entity.Work;
 import com.spring.gateway.mapper.SessionMapper;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -14,7 +15,8 @@ import java.util.UUID;
 /**
  * 会话业务：列表、详情、新建、删除。
  *
- * <p>写操作（新建、软删除）本地落库，读操作本地直查。
+ * <p>写操作（新建、软删除）本地落库，读操作本地直查；会话挂在 work 下，
+ * 不指定 work 时落默认 work。
  *
  * @author hanbing
  * @since 2026-09-26
@@ -24,29 +26,34 @@ public class SessionService {
 
     private final SessionMapper sessionMapper;
     private final InternalStoreService internalStoreService;
-    private final String dataRoot;
+    private final WorkService workService;
 
+    @Autowired
     public SessionService(SessionMapper sessionMapper,
                           InternalStoreService internalStoreService,
-                          @Value("${app.data-root}") String dataRoot) {
+                          WorkService workService) {
         this.sessionMapper = sessionMapper;
         this.internalStoreService = internalStoreService;
-        this.dataRoot = dataRoot;
+        this.workService = workService;
     }
 
     /**
-     * 查询当前用户未删除的会话列表，按更新时间倒序
+     * 查询当前用户未删除的会话列表，按更新时间倒序；workId 非 null 时只返回该 work 下的
      *
      * @param userId 用户 ID
+     * @param workId work ID，可为 null
      * @return 会话摘要列表
      */
-    public List<SessionSummary> list(Long userId) {
-        List<Session> rows = sessionMapper.selectList(new LambdaQueryWrapper<Session>()
+    public List<SessionSummary> list(Long userId, String workId) {
+        LambdaQueryWrapper<Session> query = new LambdaQueryWrapper<Session>()
                 .eq(Session::getUserId, userId)
                 .ne(Session::getStatus, Session.STATUS_DELETED)
                 .orderByDesc(Session::getUpdatedAt)
-                .orderByDesc(Session::getId));
-        return rows.stream().map(SessionService::toSummary).toList();
+                .orderByDesc(Session::getId);
+        if (workId != null) {
+            query.eq(Session::getWorkId, workId);
+        }
+        return sessionMapper.selectList(query).stream().map(SessionService::toSummary).toList();
     }
 
     /**
@@ -69,15 +76,19 @@ public class SessionService {
     }
 
     /**
-     * 新建会话：本地生成 UUID 与工作区路径后插入 sessions 行
+     * 新建会话：workId 为空时落默认 work，否则校验归属后落指定 work
      *
      * @param userId 当前用户 ID
+     * @param workId work ID，可为 null
      * @return 会话摘要
+     * @throws BizException work 不存在或不属于当前用户（404）
      */
-    public SessionSummary create(Long userId) {
+    public SessionSummary create(Long userId, String workId) {
+        Work work = workId == null
+                ? workService.ensureDefault(userId)
+                : workService.getOwned(userId, workId);
         String sessionId = UUID.randomUUID().toString();
-        String workspacePath = dataRoot + "/workspaces/" + userId + "/" + sessionId;
-        Session row = internalStoreService.createSession(sessionId, userId, workspacePath);
+        Session row = internalStoreService.createSession(sessionId, userId, work.getId());
         return toSummary(row);
     }
 
@@ -96,6 +107,7 @@ public class SessionService {
 
     /** 转换为会话摘要 */
     private static SessionSummary toSummary(Session row) {
-        return new SessionSummary(row.getId(), row.getTitle(), row.getCreatedAt(), row.getUpdatedAt());
+        return new SessionSummary(
+                row.getId(), row.getWorkId(), row.getTitle(), row.getCreatedAt(), row.getUpdatedAt());
     }
 }

@@ -84,6 +84,12 @@ public class EngineRelayHandler extends TextWebSocketHandler {
 
     @Override
     public void afterConnectionEstablished(WebSocketSession browserSession) throws Exception {
+        // 幽灵用户（签名有效、库中无此人）：4401 关闭，前端清 token 回登录页
+        if (Boolean.TRUE.equals(browserSession.getAttributes().get(AuthHandshakeInterceptor.ATTR_USER_MISSING))) {
+            log.warn("WS 拒绝幽灵用户: browser={}", browserSession.getId());
+            browserSession.close(new CloseStatus(4401, "用户不存在"));
+            return;
+        }
         String token = (String) browserSession.getAttributes().get(AuthHandshakeInterceptor.ATTR_TOKEN);
         Long userId = (Long) browserSession.getAttributes().get(AuthHandshakeInterceptor.ATTR_USER_ID);
         URI engineUri = URI.create(engineWsBase + "/ws?token="
@@ -208,7 +214,7 @@ public class EngineRelayHandler extends TextWebSocketHandler {
                                     Long userId) throws IOException {
         try {
             if ("session/list".equals(method)) {
-                sendRpcResult(session, idNode, listSessions(userId));
+                sendRpcResult(session, idNode, listSessions(userId, params));
                 return;
             }
             JsonNode sessionIdNode = params == null ? null : params.get("sessionId");
@@ -233,13 +239,17 @@ public class EngineRelayHandler extends TextWebSocketHandler {
         }
     }
 
-    /** session/list 的 result */
-    private ObjectNode listSessions(Long userId) {
+    /** session/list 的 result；params 里带 workId 时只返回该 work 下的会话 */
+    private ObjectNode listSessions(Long userId, JsonNode params) {
+        JsonNode workIdNode = params == null ? null : params.get("workId");
+        String workId = workIdNode != null && workIdNode.isTextual() && !workIdNode.asText().isBlank()
+                ? workIdNode.asText() : null;
         ObjectNode result = objectMapper.createObjectNode();
         ArrayNode sessions = result.putArray("sessions");
-        for (Session row : internalStoreService.listUserSessions(userId)) {
+        for (Session row : internalStoreService.listUserSessions(userId, workId)) {
             ObjectNode item = sessions.addObject();
             item.put("sessionId", row.getId());
+            item.put("workId", row.getWorkId());
             item.put("title", row.getTitle());
             item.put("createdAt", TimeFormat.isoUtc(row.getCreatedAt()));
             item.put("updatedAt", TimeFormat.isoUtc(row.getUpdatedAt()));

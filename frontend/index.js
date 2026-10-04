@@ -220,6 +220,8 @@ const state = {
   models: [],
   model: null,
   sessionId: null,
+  workId: localStorage.getItem("sh.workId") || null,
+  works: [],
   connected: false,
   busy: false,
   assistant: null,      // 当前流式正文气泡 {el, answer, text}
@@ -344,11 +346,18 @@ async function connectAndSetup() {
   populateModelSelect();
   const wsName = state.workspace.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || state.workspace;
   $("ws-name").textContent = localStorage.getItem(USER_KEY) || wsName;
-  $("input-ws-name").textContent = wsName;
   $("input-ws").title = state.workspace;
   setConnected(true);
-  await openSession();
+  await loadWorks();   // 项目列表先可见；input-ws-name 未加载时由 :empty 兜底"工作区"
+  await openSession(); // 可能触发默认 work 的自动创建
+  await loadWorks();   // 刷新列表与项目名，让自动创建的默认 work 被选中
   reconnectDelay = 1000;
+}
+
+/** input-ws-name 显示当前选中项目的名称（workId 本身是不可读 UUID） */
+function updateWorkName() {
+  const work = state.works.find((w) => w.work_id === state.workId);
+  $("input-ws-name").textContent = work ? work.name : "未选择项目";
 }
 
 rpc.onClose = (code) => {
@@ -396,7 +405,7 @@ async function openSession() {
     sid = r.sessionId;
   }
   if (!sid) {
-    const r = await rpc.request("session/new", { workspace: state.workspace, model: state.model });
+    const r = await rpc.request("session/new", { workspace: state.workspace, model: state.model, workId: state.workId });
     sid = r.sessionId;
   }
   state.sessionId = sid;
@@ -414,12 +423,143 @@ function subscribeStream(sid) {
     .catch(() => { /* 订阅失败只影响实时事件流，重连逻辑会再试 */ });
 }
 
+/* ================= 项目管理 ================= */
+
+async function apiFetch(path, options = {}) {
+  const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
+  const token = getToken();
+  if (token) headers["Authorization"] = "Bearer " + token;
+  const r = await fetch(path, { ...options, headers });
+  if (r.status === 401) {
+    clearToken();
+    location.reload();
+    throw new Error("登录已过期");
+  }
+  return r;
+}
+
+function formatSize(bytes) {
+  if (bytes >= 1024 * 1024) return (bytes / 1024 / 1024).toFixed(1) + "MB";
+  return Math.max(1, Math.round(bytes / 1024)) + "KB";
+}
+
+async function loadWorks() {
+  let works;
+  try {
+    const r = await apiFetch("/api/works");
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const body = await r.json();
+    works = body.data || [];
+  } catch (e) {
+    addSystem("❌ 项目列表加载失败：" + e.message, true);
+    return;
+  }
+  state.works = works;
+  // 选中项失效（被删/不存在）时回退到默认项目，再退到第一个
+  const stored = state.workId;
+  const found = works.find((w) => w.work_id === stored);
+  if (!found) {
+    const fallback = works.find((w) => w.default_work) || works[0] || null;
+    state.workId = fallback ? fallback.work_id : null;
+  }
+  if (state.workId) localStorage.setItem("sh.workId", state.workId);
+  renderWorks();
+  updateWorkName();
+}
+
+function renderWorks() {
+  const box = $("works");
+  box.textContent = "";
+  for (const w of state.works) {
+    const item = document.createElement("div");
+    item.className = "work-item" + (w.work_id === state.workId ? " active" : "");
+    item.title = w.name;
+
+    const name = document.createElement("span");
+    name.className = "work-name";
+    name.textContent = w.name;
+    item.appendChild(name);
+
+    if (w.default_work) {
+      const badge = document.createElement("span");
+      badge.className = "work-badge";
+      badge.textContent = "默认";
+      item.appendChild(badge);
+    }
+
+    const size = document.createElement("span");
+    size.className = "work-size";
+    size.textContent = formatSize(w.size_bytes || 0);
+    item.appendChild(size);
+
+    const del = document.createElement("button");
+    del.className = "work-del";
+    del.title = "删除项目（连同目录与数据一起删除）";
+    del.textContent = "×";
+    del.onclick = (e) => {
+      e.stopPropagation();
+      deleteWork(w);
+    };
+    item.appendChild(del);
+
+    item.onclick = () => selectWork(w.work_id);
+    box.appendChild(item);
+  }
+}
+
+async function selectWork(workId) {
+  if (workId === state.workId) return;
+  if (state.busy) { addSystem("运行中，不能切换项目"); return; }
+  state.workId = workId;
+  localStorage.setItem("sh.workId", workId);
+  renderWorks();
+  updateWorkName();
+  // 换项目后当前会话列表失效，清掉记忆重新落会话
+  state.sessionId = null;
+  localStorage.removeItem("sh.sessionId");
+  clearMessages();
+  await openSession();
+  await refreshSessionList();
+}
+
+async function createWork() {
+  const name = prompt("新项目名称：");
+  if (!name || !name.trim()) return;
+  const r = await apiFetch("/api/works", {
+    method: "POST",
+    body: JSON.stringify({ name: name.trim() }),
+  });
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    addSystem("❌ 新建项目失败：" + (body.message || r.status), true);
+    return;
+  }
+  await loadWorks();
+  await selectWork(body.data.work_id);
+}
+
+async function deleteWork(work) {
+  if (!confirm(`删除项目「${work.name}」？\n其工作区目录与全部会话数据会被物理删除，不可恢复。`)) return;
+  const r = await apiFetch(`/api/works/${work.work_id}`, { method: "DELETE" });
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    addSystem("❌ 删除失败：" + (body.message || r.status), true);
+    return;
+  }
+  addSystem(`项目「${work.name}」已删除`);
+  await loadWorks();
+  if (state.workId) {
+    await openSession();
+    await refreshSessionList();
+  }
+}
+
 /* ================= 会话管理 ================= */
 
 async function refreshSessionList() {
   let sessions;
   try {
-    const r = await rpc.request("session/list", { workspace: state.workspace });
+    const r = await rpc.request("session/list", { workspace: state.workspace, workId: state.workId });
     sessions = r.sessions || [];
   } catch { return; }
   const list = $("session-list");
@@ -477,7 +617,7 @@ async function switchSession(sid) {
 async function newSession() {
   if (state.busy) { addSystem("运行中，不能新建会话"); return; }
   try {
-    const r = await rpc.request("session/new", { workspace: state.workspace, model: state.model });
+    const r = await rpc.request("session/new", { workspace: state.workspace, model: state.model, workId: state.workId });
     state.sessionId = r.sessionId;
     localStorage.setItem("sh.sessionId", r.sessionId);
     clearMessages();
@@ -1671,6 +1811,7 @@ function bind() {
   $("send-btn").onclick = send;
   $("stop-btn").onclick = cancelTurn;
   $("new-session-btn").onclick = newSession;
+  $("new-work-btn").onclick = createWork;
   $("toggle-sidebar").onclick = () => $("sidebar").classList.toggle("collapsed");
   const togglePlan = () => {
     const collapsed = $("plan-panel").classList.toggle("hidden");

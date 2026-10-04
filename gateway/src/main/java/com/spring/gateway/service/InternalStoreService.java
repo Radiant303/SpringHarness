@@ -10,6 +10,7 @@ import com.spring.gateway.entity.Session;
 import com.spring.gateway.mapper.MessageMapper;
 import com.spring.gateway.mapper.SessionMapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.JsonNode;
@@ -23,7 +24,8 @@ import java.util.List;
 /**
  * sessions / messages 两表的读写服务，供内部接口调用。
  *
- * <p>时间戳统一使用 UTC。
+ * <p>会话摘要里的 workspacePath 由所属 work 派生（{data-root}/works/{workId}），
+ * 路径权威在本服务。时间戳统一使用 UTC。
  *
  * @author hanbing
  * @since 2026-10-03
@@ -34,22 +36,28 @@ public class InternalStoreService {
 
     private final SessionMapper sessionMapper;
     private final MessageMapper messageMapper;
+    private final WorkService workService;
     private final ObjectMapper objectMapper;
 
+    @Value("${app.data-root}")
+    private String dataRoot;
+
     /**
-     * 插入 sessions 行（current_segment=0, status=active）
+     * 插入 sessions 行（current_segment=0, status=active）；work 不存在或归属不符抛 404
      *
-     * @param sessionId     会话 ID，由调用方生成
-     * @param userId        所属用户 ID
-     * @param workspacePath 工作区目录路径
+     * @param sessionId 会话 ID，由调用方生成
+     * @param userId    所属用户 ID
+     * @param workId    所属 work ID
      * @return 插入的会话行
+     * @throws BizException work 不存在或不属于该用户（404）
      */
-    public Session createSession(String sessionId, Long userId, String workspacePath) {
+    public Session createSession(String sessionId, Long userId, String workId) {
+        workService.getOwned(userId, workId);
         LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
         Session session = new Session();
         session.setId(sessionId);
         session.setUserId(userId);
-        session.setWorkspacePath(workspacePath);
+        session.setWorkId(workId);
         session.setCurrentSegment(0);
         session.setStatus(Session.STATUS_ACTIVE);
         session.setCreatedAt(now);
@@ -69,17 +77,23 @@ public class InternalStoreService {
     }
 
     /**
-     * 查询用户未删除的会话，按更新时间倒序（同秒时按 id 倒序保证确定性）
+     * 查询用户未删除的会话，按更新时间倒序（同秒时按 id 倒序保证确定性）；
+     * workId 非 null 时只返回该 work 下的会话
      *
      * @param userId 用户 ID
+     * @param workId work ID，可为 null
      * @return 会话行列表
      */
-    public List<Session> listUserSessions(Long userId) {
-        return sessionMapper.selectList(new LambdaQueryWrapper<Session>()
+    public List<Session> listUserSessions(Long userId, String workId) {
+        LambdaQueryWrapper<Session> query = new LambdaQueryWrapper<Session>()
                 .eq(Session::getUserId, userId)
                 .ne(Session::getStatus, Session.STATUS_DELETED)
                 .orderByDesc(Session::getUpdatedAt)
-                .orderByDesc(Session::getId));
+                .orderByDesc(Session::getId);
+        if (workId != null) {
+            query.eq(Session::getWorkId, workId);
+        }
+        return sessionMapper.selectList(query);
     }
 
     /**
@@ -155,6 +169,16 @@ public class InternalStoreService {
         row.setUpdatedAt(LocalDateTime.now(ZoneOffset.UTC));
         sessionMapper.updateById(row);
         return true;
+    }
+
+    /**
+     * 会话摘要里派生的工作区目录路径
+     *
+     * @param workId work ID
+     * @return 目录路径
+     */
+    public String workspacePath(String workId) {
+        return workService.workspacePath(workId);
     }
 
     /** 按段号、主键升序查询会话的全部消息 */

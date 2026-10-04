@@ -42,7 +42,11 @@ app:
   # /internal/** 内部数据面接口的共享静态令牌：Python 引擎经网关切库时带在 X-Internal-Token 头，
   # 与用户 JWT 无关；生产用环境变量 INTERNAL_TOKEN 覆盖
   internal-token: ${INTERNAL_TOKEN:springharness-internal-dev-token-0123456789}
-  # 云端数据根目录：新建会话的工作区路径 = {data-root}/workspaces/{userId}/{sessionId}（只写字符串，不建目录）
+  # 云端数据根目录：work 工作区路径 = {data-root}/works/{workId}（只写字符串，不建目录）
   data-root: ${user.home}/.springharness/cloud
+  # 每用户最多可创建的 work 数量
+  work-max-works: ${WORK_MAX_WORKS:5}
+  # 每个 work 的目录容量上限（字节），引擎写文件前校验
+  work-max-bytes: ${WORK_MAX_BYTES:20971520}
   # Python 引擎地址，WS 中继（turn/start 回退透传、token 流）仍然需要
   engine-base-url: ${ENGINE_BASE_URL:http://127.0.0.1:8001}

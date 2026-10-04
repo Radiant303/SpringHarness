@@ -37,7 +37,11 @@ from spring_harness.core.rpc.schema import (
 from spring_harness.core.session import HarnessSession
 from spring_harness.core.store.base import SessionStore
 from spring_harness.core.store.jsonl import JsonlSessionStore
-from spring_harness.core.stream.events import ApprovalRequest, QuestionRequest, ServerEvent
+from spring_harness.core.stream.events import (
+    ApprovalRequest,
+    QuestionRequest,
+    ServerEvent,
+)
 
 PROTOCOL_VERSION = 1
 

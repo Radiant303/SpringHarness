@@ -7,6 +7,7 @@ from sqlalchemy import (
     CHAR,
     JSON,
     BigInteger,
+    Boolean,
     DateTime,
     ForeignKey,
     Index,
@@ -67,14 +68,36 @@ class UserRow(Base):
     )
 
 
-class SessionRow(Base):
-    __tablename__ = "sessions"
-    __table_args__ = (Index("ix_sessions_user_updated", "user_id", "updated_at"),)
+class WorkRow(Base):
+    """项目（work）：工作区的隔离单元，目录 = {data-root}/works/{id}，同 work 的会话共享。"""
+
+    __tablename__ = "works"
+    __table_args__ = (Index("ix_works_user", "user_id"),)
 
     id: Mapped[str] = mapped_column(CHAR(36), primary_key=True)  # uuid4 字符串
     user_id: Mapped[int] = mapped_column(_BigInt, ForeignKey("users.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(_BigInt, nullable=False, default=0)
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        MicrosecondDateTime, nullable=False, default=utc_now,
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        MicrosecondDateTime, nullable=False, default=utc_now,
+    )
+
+
+class SessionRow(Base):
+    __tablename__ = "sessions"
+    __table_args__ = (
+        Index("ix_sessions_user_updated", "user_id", "updated_at"),
+        Index("ix_sessions_work", "work_id"),
+    )
+
+    id: Mapped[str] = mapped_column(CHAR(36), primary_key=True)  # uuid4 字符串
+    user_id: Mapped[int] = mapped_column(_BigInt, ForeignKey("users.id"), nullable=False)
+    work_id: Mapped[str] = mapped_column(CHAR(36), ForeignKey("works.id"), nullable=False)
     title: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    workspace_path: Mapped[str] = mapped_column(String(512), nullable=False)
     current_segment: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default=STATUS_ACTIVE)
     created_at: Mapped[datetime.datetime] = mapped_column(
