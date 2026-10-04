@@ -167,8 +167,8 @@ class JsonlSessionStore:
     ) -> tuple[list[ModelMessage], HistoryPage]:
         """一次解析返回当前完整模型历史与按消息数分页的历史快照。
 
-        介质读取之后的分页语义（游标快照、去重、切片）在 store/paging.py 统一实现，
-        与云端实现（gateway_store）共用，保证游标格式与行为一致。
+        介质读取之后的分页语义（游标快照、去重、切片）在 paging 模块统一实现，
+        所有存储实现共用同一套，游标格式与行为天然一致。
         """
         raw_segments = self._load_segments() if self.path.exists() else []
         return page_history(raw_segments, self.session_id, cursor, limit, direction)

@@ -16,13 +16,12 @@ from spring_harness.core.services.web_server import DEFAULT_FRONTEND_DIR
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-    # 阶段⑤：进程级会话注册表 + Redis Stream 事件流（断线续传的前提）
+    # 进程级会话注册表 + Redis Stream 事件流（断线续传的前提）
     redis_client = aioredis.from_url(config.cloud.redis_url, decode_responses=True)
     registry = CloudSessionRegistry(redis_client)
     set_registry(registry)
 
-    # 阶段④：MQ 控制面。MQ 不可用时网关发布会失败并回退 WS 透传
-    # （turn/start 走引擎 RPC），本进程则仅缺席生命周期回传
+    # MQ 消费者：连接失败不阻断启动（turn/start 另有 WS 透传兜底），仅缺席生命周期回传
     dispatcher = TurnDispatcher(config.cloud.rabbitmq_url)
     try:
         await dispatcher.start()

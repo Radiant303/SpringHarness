@@ -65,22 +65,22 @@ class SubAgentConfig(ConfigBase):
 
 
 class Cloud(ConfigBase):
-    """云端部署（springcloud）配置：会话存储收敛网关 + JWT 认证 + 监听地址。"""
+    """云端部署配置：内部 API 基址 + JWT 认证 + 监听地址。"""
 
     database_url: str = "mysql+pymysql://root:root@127.0.0.1:3307/springharness?charset=utf8mb4"
     data_root: str = str(Path.home() / ".springharness" / "cloud")
-    # HS256 密钥需 ≥32 字节（RFC 7518，Java jjwt 会强制校验），两端默认值必须一致
+    # HS256 密钥需 ≥32 字节（RFC 7518）
     jwt_secret: str = "springharness-dev-secret-0123456789abcd"
     jwt_expire_minutes: int = 10080
     host: str = "0.0.0.0"
     port: int = 8001
-    # MQ 控制面（阶段④）：turn 派发/取消消费、生命周期事件回传
+    # MQ：turn 派发/取消消费、生命周期事件回传
     rabbitmq_url: str = "amqp://guest:guest@127.0.0.1:5672/"
-    # 事件流数据面（阶段⑤）：会话事件写 Redis Stream，网关按 offset 续读
+    # 事件流：会话事件写 Redis Stream，供按 offset 续读
     redis_url: str = "redis://127.0.0.1:6380/0"
-    # 网关内部 API 基址（阶段⑥：MySQL 操作收敛到网关）
+    # 内部 API 基址（sessions/messages 两表读写走这里）
     gateway_base_url: str = "http://127.0.0.1:8080"
-    # 与网关 app.internal-token 同值
+    # 内部接口的共享静态令牌
     internal_token: str = "springharness-internal-dev-token-0123456789"
 
 

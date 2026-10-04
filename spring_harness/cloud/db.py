@@ -92,7 +92,7 @@ class MessageRow(Base):
     id: Mapped[int] = mapped_column(_BigInt, primary_key=True, autoincrement=True)
     session_id: Mapped[str] = mapped_column(CHAR(36), ForeignKey("sessions.id"), nullable=False)
     segment_no: Mapped[int] = mapped_column(Integer, nullable=False)
-    # 单条 ModelMessage 经 ModelMessagesTypeAdapter dump 后的 JSON 对象
+    # 单条消息的 JSON 序列化对象
     payload: Mapped[dict] = mapped_column(JSON, nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(
         MicrosecondDateTime, nullable=False, default=utc_now,

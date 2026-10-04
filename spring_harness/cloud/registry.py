@@ -1,15 +1,13 @@
-"""云端会话注册表（阶段⑤）：会话生命周期与 WS 连接解耦。
+"""云端会话注册表：会话生命周期与 WS 连接解耦。
 
-阶段④里会话由连接持有，浏览器断开 → 引擎侧连接关闭 → 会话被销毁、turn 被
-取消。断线续传的前提是 turn 在断线后继续运行，因此会话改为进程级注册表持有：
+会话由本进程的注册表持有，WS 连接只是"挂载/卸载"——断开连接不销毁会话，
+正在运行的 turn 继续跑到结束（断线续传的前提）。
 
-- 每个会话一个"扇出"任务消费 HarnessSession 事件：普通事件 XADD 到
-  Redis Stream（stream:session:{id}，滑动 TTL，turn 结束后缩短保留期）；
+- 每个会话一个"扇出"任务消费会话事件：普通事件 XADD 到 Redis Stream
+  （stream:session:{id}，滑动 TTL，turn 结束后缩短保留期）；
   审批/提问路由给当前挂载的连接，断线期间暂存，重新挂载时补投。
-- WS 连接（CloudAppServer）只是"挂载/卸载"：挂载时成为审批路由目标，
-  断开时摘除目标并默认拒绝在途审批（宁安全勿放行），会话本身不动。
-- MQ 派发器经注册表驱动 turn（start_turn/cancel_turn），生命周期事件由
-  扇出任务在 TurnFinished 时回传。
+- 连接断开时摘除审批路由目标并默认拒绝在途审批（宁安全勿放行），会话本身不动。
+- MQ 派发器经注册表驱动 turn，turn 结束时由扇出任务回传生命周期事件。
 """
 
 from __future__ import annotations
@@ -35,12 +33,12 @@ if TYPE_CHECKING:
 STREAM_KEY_PREFIX = "stream:session:"
 # 滑动过期：每条事件写入都续期，活跃会话的流不会中途消失
 STREAM_TTL_SECONDS = 3600
-# turn 结束后缩短保留期：续传窗口已过，历史兜底在网关
+# turn 结束后缩短保留期：续传窗口已过，历史有数据库兜底
 STREAM_TTL_AFTER_FINISH = 600
 
 
 class CloudSessionHandle:
-    """一个云端会话的运行时：HarnessSession + 事件扇出 + 审批路由。"""
+    """一个云端会话的运行时：会话本体 + 事件扇出 + 审批路由。"""
 
     def __init__(self, session: HarnessSession, redis: aioredis.Redis | None) -> None:
         self.session = session
@@ -122,7 +120,7 @@ class CloudSessionHandle:
             await self._redis.xadd(key, {"event": json.dumps(event.model_dump(), ensure_ascii=False)})
             ttl = STREAM_TTL_AFTER_FINISH if isinstance(event, TurnFinished) else STREAM_TTL_SECONDS
             await self._redis.expire(key, ttl)
-        except Exception:  # noqa: BLE001 流写入失败不阻断 turn；事件仍经网关落库
+        except Exception:  # noqa: BLE001 流写入失败不阻断 turn；事件仍有数据库落库兜底
             logger.exception("事件写 Redis Stream 失败: session={}", self.session_id)
 
     async def _publish_lifecycle(self, event: TurnFinished) -> None:
@@ -174,7 +172,7 @@ class CloudSessionRegistry:
         handle = self._handles.get(session_id)
         if handle is not None:
             return handle
-        # 工作区目录惰性创建：sessions 行可能由网关 REST 建的（本进程还没建过目录）
+        # 工作区目录惰性创建：会话行可能由外部接口预先创建（本进程还没建过目录）
         workspace.mkdir(parents=True, exist_ok=True)
         session = await asyncio.to_thread(HarnessSession, workspace, store=store)
         handle = CloudSessionHandle(session, self._redis)

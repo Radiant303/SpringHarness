@@ -39,11 +39,10 @@ WS_UNAUTHORIZED_CLOSE_CODE = 4401
 
 
 class CloudAppServer(AppServer):
-    """按 user_id 隔离的 JSON-RPC 协议面：会话归属网关（内部 HTTP API），工作区由服务端分配。
+    """按 user_id 隔离的 JSON-RPC 协议面：会话数据经内部 HTTP API 读写，工作区由服务端分配。
 
-    阶段⑤起会话本体由进程级注册表（cloud.registry）持有：本连接只做挂载/卸载，
-    断开不销毁会话、不取消 turn（断线续传的前提）；事件流经扇出任务写 Redis
-    Stream，不再由本连接的泵直推。
+    会话本体由进程级注册表持有：本连接只做挂载/卸载，断开不销毁会话、
+    不取消 turn（断线续传的前提）；事件流经扇出任务写 Redis Stream，不由本连接直推。
     """
 
     # 类级别注册表：session_id -> 持有它的连接（进程内"同会话串行"锁）
@@ -92,7 +91,7 @@ class CloudAppServer(AppServer):
             handle.session.set_model(model)
         self._sessions[handle.session_id] = handle.session
 
-    # ---- 方法实现：全部改按 user_id 操作网关内部 API ----
+    # ---- 方法实现：全部按 user_id 经内部 HTTP API 操作 ----
 
     async def _initialize(self, _: None) -> WebInitializeResult:
         # workspace 上报用户云端根目录：前端只拿它做展示与请求参数，服务端忽略
@@ -204,7 +203,7 @@ class CloudAppServer(AppServer):
 
 
 async def ws_endpoint(websocket: WebSocket) -> None:
-    """握手时验 token 得 user_id，无效则 close(4401)；之后照 web_server 模式接 JsonRpcConnection。"""
+    """握手时验 token 得 user_id，无效则 close(4401)；之后按通用模式接 JsonRpcConnection。"""
     await websocket.accept()
     token = websocket.query_params.get("token")
     user_id = decode_user_id(token) if token else None

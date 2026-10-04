@@ -1,8 +1,7 @@
 """会话历史的存储介质无关逻辑：跨段去重、游标编解码、raw_segments 分页切片。
 
 各存储实现只负责把介质读成 list[list[ModelMessage]]（段列表，段内为追加序），
-分页语义统一在这里实现：jsonl（每会话一个文件）与 gateway_store（经网关内部 API 读段）
-因此拥有完全一致的游标格式与分页行为。
+分页语义统一在这里实现，因此所有存储实现拥有完全一致的游标格式与分页行为。
 """
 from __future__ import annotations
 

@@ -1,5 +1,5 @@
-"""云端部署包：鉴权用户模型（db.py）、网关会话存储（gateway_store.py）、WS 入口（ws.py / app.py）。
+"""云端部署包：用户鉴权、会话存储客户端、WS 服务。
 
-注意：本包 __init__ 保持空——cloud/gateway_store.py 会反向 import spring_harness.cloud.db，
+注意：本包 __init__ 保持空——包内模块相互反向 import，
 这里 import 任何应用模块都会形成环。
 """

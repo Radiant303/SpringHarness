@@ -1,18 +1,15 @@
-"""网关会话存储（阶段⑥）：sessions/messages 两表的 SQL 全部收敛到网关内部 API。
+"""会话存储客户端：sessions/messages 两表的读写全部经内部 HTTP API 完成。
 
-逐方法对齐原 MysqlSessionStore（core/store/mysql.py，已删除）的语义——段自增、
-title 首写、段列表装段（含空段）、query_history 复用 store/paging.py——所有 DB
-操作换成对网关的内部 HTTP 调用（X-Internal-Token 鉴权）：
+语义约定：段自增、title 首写、段列表装段（含空段）、游标分页。
+端点一览（X-Internal-Token 鉴权）：
 
 - POST /internal/sessions                         建行（current_segment=0, status=active）
 - GET  /internal/sessions/{id}                    打开/查询（404 → None）
 - GET  /internal/users/{userId}/sessions          列表（status != deleted, updated_at desc）
 - GET  /internal/sessions/{id}/messages           全量消息（段内按 id 升序，payload 为原始消息 JSON）
-- POST /internal/sessions/{id}/messages           追加（newSegment 控制开新段；网关单事务内
-                                                   处理段自增、title IS NULL 时写入、updated_at）
+- POST /internal/sessions/{id}/messages           追加（newSegment 控制开新段；段自增、title IS NULL
+                                                   时写入、updated_at 推进在服务端单事务内完成）
 - POST /internal/sessions/{id}/delete             软删除（404 → False）
-
-Python 侧自此只保留鉴权相关的 users 读取（cloud/auth.py + alembic 的 Base.metadata）。
 """
 
 from __future__ import annotations
@@ -43,15 +40,15 @@ def _load_message(payload: dict) -> ModelMessage:
 
 
 def _parse_utc(value: str) -> datetime.datetime:
-    """网关 ISO 串（…Z）→ naive UTC datetime；带偏移的串先归一到 UTC 再去时区，
-    与旧 MySQL DATETIME 列（naive UTC）语义一致，ws.py 的 .isoformat() + "Z" 不变。"""
+    """ISO 串（…Z）→ naive UTC datetime；带偏移的串先归一到 UTC 再去时区，
+    与 DATETIME 列（naive UTC）的存取语义一致。"""
     parsed = datetime.datetime.fromisoformat(value)
     if parsed.tzinfo is not None:
         parsed = parsed.astimezone(datetime.UTC).replace(tzinfo=None)
     return parsed
 
 
-# ---- 共享 HTTP client（懒加载单例；store 调用方本来就是同步阻塞形状，见 base.py Protocol）----
+# ---- 共享 HTTP client（懒加载单例；store 调用方本来就是同步阻塞形状）----
 
 _client: httpx.Client | None = None
 _client_lock = threading.Lock()
@@ -72,8 +69,10 @@ def _get_client() -> httpx.Client:
 
 @dataclass(frozen=True)
 class GatewaySessionRow:
-    """网关返回的会话行：承载 ws.py 用到的 SessionRow 属性面
-    （.id/.title/.workspace_path/.created_at/.updated_at，另带 user_id/status 供归属校验）。"""
+    """内部接口返回的会话行。
+
+    user_id/status 供归属校验；详情响应未承诺带 userId，缺失即 None。
+    """
 
     id: str
     user_id: int | None
@@ -88,7 +87,7 @@ class GatewaySessionRow:
     def from_payload(cls, payload: dict) -> GatewaySessionRow:
         return cls(
             id=payload["sessionId"],
-            # 详情响应未承诺带 userId：缺失即 None，find_active_session 按越权处理
+            # 详情响应未承诺带 userId：缺失即 None，按越权处理
             user_id=payload.get("userId"),
             title=payload.get("title"),
             workspace_path=payload.get("workspacePath", ""),
@@ -100,7 +99,7 @@ class GatewaySessionRow:
 
 
 class GatewaySessionStore:
-    """实现 SessionStore Protocol；所有存储操作经网关内部 HTTP API 完成。"""
+    """会话存储实现：所有读写操作经内部 HTTP API 完成。"""
 
     def __init__(self, session_id: str) -> None:
         self._session_id = session_id
@@ -116,7 +115,7 @@ class GatewaySessionStore:
         workspace: Path,
         session_id: str | None = None,
     ) -> GatewaySessionStore:
-        """建 sessions 行（current_segment=0，status=active，created_at/updated_at 由网关填）。
+        """建 sessions 行（current_segment=0，status=active，created_at/updated_at 由服务端填）。
 
         session_id 可显式传入：调用方已用同一 id 分配好工作区目录时传入，
         保证会话 id 与工作区目录名一致；缺省生成 uuid4。
@@ -144,13 +143,13 @@ class GatewaySessionStore:
         self._write(messages, new_segment=False)
 
     def append_rewritten(self, messages: list[ModelMessage]) -> None:
-        """历史被压缩/消息合并改写时调用：网关把 current_segment 自增后整体写入新段，
-        旧段保留备查，与 jsonl 的 history_rewrite 标记语义一致。"""
+        """历史被压缩/消息合并改写时调用：服务端把 current_segment 自增后整体写入新段，
+        旧段保留备查。"""
         self._write(messages, new_segment=True)
 
     def _write(self, messages: list[ModelMessage], *, new_segment: bool) -> None:
-        # title 候选与阶段⑥前的 MySQL 实现同语义：每批 append 都用首批用户消息算一次一并提交，
-        # 网关只在 title IS NULL 时采纳，已有 title 的会话不受影响
+        # 每批 append 都用首批用户消息算一次 title 候选一并提交；
+        # 服务端只在 title 为空时采纳，已有 title 的会话不受影响
         response = _get_client().post(
             f"/internal/sessions/{self._session_id}/messages",
             json={
@@ -164,7 +163,7 @@ class GatewaySessionStore:
         response.raise_for_status()
 
     def _load_segments(self) -> list[list[ModelMessage]]:
-        """读出全部段：段数 = currentSegment + 1（含空段，与网关段自增语义一致）。"""
+        """读出全部段：段数 = currentSegment + 1（含空段）。"""
         response = _get_client().get(f"/internal/sessions/{self._session_id}/messages")
         if response.status_code == 404:
             return []
@@ -189,11 +188,11 @@ class GatewaySessionStore:
         return page_history(self._load_segments(), self._session_id, cursor, limit, direction)
 
 
-# ---- 按 user_id 的会话查询（云端 API / WS 协议面用，本地 store 无此概念）----
+# ---- 按 user_id 的会话查询 ----
 
 
 def list_sessions_for_user(user_id: int) -> list[GatewaySessionRow]:
-    """当前用户未删除的会话，按 updated_at 倒序（网关侧过滤 status != deleted 并排序）。"""
+    """当前用户未删除的会话，按 updated_at 倒序（服务端已过滤 deleted 并排序）。"""
     response = _get_client().get(f"/internal/users/{user_id}/sessions")
     response.raise_for_status()
     return [GatewaySessionRow.from_payload(item) for item in response.json()]
@@ -207,14 +206,14 @@ def find_active_session(session_id: str, user_id: int) -> GatewaySessionRow | No
         return None
     response.raise_for_status()
     row = GatewaySessionRow.from_payload(response.json())
-    # 归属/状态在 Python 侧复核：详情响应不带 userId 或 status 非 active 一律按越权拒绝
+    # 归属/状态在本地复核：详情响应不带 userId 或 status 非 active 一律按越权拒绝
     if row.user_id != user_id or row.status != STATUS_ACTIVE:
         return None
     return row
 
 
 def soft_delete_session(session_id: str, user_id: int) -> bool:
-    """软删除：网关置 status=deleted 并推进 updated_at；行不存在（404）时返回 False。"""
+    """软删除：服务端置 status=deleted 并推进 updated_at；行不存在（404）时返回 False。"""
     response = _get_client().post(
         f"/internal/sessions/{session_id}/delete", json={"userId": user_id},
     )

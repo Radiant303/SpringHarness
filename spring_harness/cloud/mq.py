@@ -1,15 +1,13 @@
-"""MQ 控制面消费者（阶段④）：turn 派发/取消消费，生命周期事件回传。
+"""MQ 消费者：turn 派发/取消消费，生命周期事件回传。
 
-拓扑与网关 RabbitConfig 一致：direct 交换机 harness.turn，队列
-turn.dispatch（网关派发）、turn.cancel（取消）、turn.lifecycle（完成回传），
-各自挂死信交换机 harness.turn.dlx（同名 .dlq 队列）。
-两侧重复声明的参数必须完全一致，否则 RabbitMQ 报 406 PRECONDITION_FAILED。
+拓扑：direct 交换机 harness.turn，队列 turn.dispatch（派发）、turn.cancel（取消）、
+turn.lifecycle（完成回传），各自挂死信交换机 harness.turn.dlx（同名 .dlq 队列）。
+队列声明参数必须与 broker 上已有的定义保持一致，否则报 406 PRECONDITION_FAILED。
 
-可靠性：manual ack；消费失败按 x-death 计数有限重投（≤3 次），超限进 DLQ；
+可靠性：manual ack；消费失败按自定义头计数有限重投（≤3 次），超限进 DLQ；
 派发按 turnId 幂等去重。
 
-消费者与引擎同进程同事件循环运行（FastAPI lifespan 内启动），经进程级会话
-注册表（cloud.registry）驱动 turn；token 流经 Redis Stream（阶段⑤）。
+消费者与引擎同进程同事件循环运行，经进程级会话注册表驱动 turn。
 
 也可独立运行（调试 MQ 链路用）：python -m spring_harness.cloud.mq
 """
@@ -70,7 +68,7 @@ class TurnDispatcher:
         for name in QUEUES:
             queue = await channel.declare_queue(
                 name, durable=True,
-                # 与网关 RabbitConfig.businessQueue 保持一致
+                # 业务队列统一挂死信交换机；参数需与 broker 已有定义保持一致，否则 406
                 arguments={
                     "x-dead-letter-exchange": TURN_DLX,
                     "x-dead-letter-routing-key": f"{name}.dlq",
@@ -154,7 +152,7 @@ class TurnDispatcher:
     async def _nack_with_retry(self, message: AbstractIncomingMessage) -> None:
         """有限重投：requeue 不会累加任何计数（x-death 只在死信转投时记录），
         所以重投次数记在自定义头 x-retry-count——失败时把消息复制一份（计数 +1）
-        发回原队列并 ack 原件；超限后 nack(requeue=False) 进 DLQ 由网关告警。"""
+        发回原队列并 ack 原件；超限后 nack(requeue=False) 进 DLQ。"""
         retries = (message.headers or {}).get(RETRY_HEADER) or 0
         if retries < MAX_REQUEUE and self._exchange is not None:
             await self._exchange.publish(
