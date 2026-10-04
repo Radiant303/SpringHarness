@@ -8,7 +8,7 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 /**
- * messages 表实体：一条消息就是 Python 侧单条 ModelMessage dump 后的 JSON。
+ * messages 表的实体。
  *
  * @author hanbing
  * @since 2026-10-03
@@ -17,29 +17,19 @@ import java.time.LocalDateTime;
 @TableName("messages")
 public class Message {
 
-    /**
-     * 主键，数据库自增
-     */
+    /** 主键，数据库自增。 */
     @TableId(type = IdType.AUTO)
     private Long id;
 
-    /**
-     * 所属会话 ID
-     */
+    /** 所属会话 ID。 */
     private String sessionId;
 
-    /**
-     * 段号：会话历史压缩改写（current_segment 自增）后，消息整体写入新段
-     */
+    /** 消息所属的历史段号。 */
     private Integer segmentNo;
 
-    /**
-     * payload：messages.payload JSON 列原文，Java 不解析其内容，读出后原样返回
-     */
+    /** 消息内容，JSON 原文。 */
     private String payload;
 
-    /**
-     * 创建时间。数据库有默认值，插入时保持 null 即可生效
-     */
+    /** 创建时间。 */
     private LocalDateTime createdAt;
 }

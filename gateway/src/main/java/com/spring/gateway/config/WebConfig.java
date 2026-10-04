@@ -24,13 +24,13 @@ public class WebConfig implements WebMvcConfigurer {
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(authInterceptor).addPathPatterns("/api/sessions/**", "/api/admin/**");
-        // 内部数据面接口：Python 引擎持共享静态令牌访问
+        // 内部接口：持共享静态令牌访问
         registry.addInterceptor(internalAuthInterceptor).addPathPatterns("/internal/**");
     }
 
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
-        // 前端 HTML 以 /static/ 前缀引用静态资源，保持该前缀兼容
+        // 静态资源映射到 ../frontend/，保留 /static/ 前缀
         registry.addResourceHandler("/static/**").addResourceLocations("file:../frontend/");
     }
 }

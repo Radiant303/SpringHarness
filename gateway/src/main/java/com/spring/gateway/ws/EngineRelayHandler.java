@@ -28,17 +28,15 @@ import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeUnit;
 
 /**
- * 聊天 WS 中继：浏览器 ↔ 网关 ↔ Python 引擎。
+ * 聊天 WS 中继：浏览器 ↔ 网关 ↔ 引擎。
  *
  * <p>每条浏览器连接建立一条到引擎 /ws 的客户端连接，文本帧双向透传；
- * token 由握手拦截器校验后原样透传给引擎（引擎侧再做一次验签）。
+ * token 由握手拦截器校验后原样透传（引擎侧再做一次验签）。
  *
- * <p>控制面（阶段④）：turn/start、turn/cancel 请求帧不透传，转为 MQ 消息
- * （turn.dispatch / turn.cancel），网关本地合成 JSON-RPC 应答；token 流仍由
- * 引擎经既有 WS 泵推回。MQ 发布失败时回退为透传，由引擎 RPC 路由兜底。
+ * <p>turn/start、turn/cancel 请求帧不透传，转为 MQ 消息并本地合成 JSON-RPC 应答，
+ * 发布失败时回退为透传；token 流仍由引擎经既有 WS 泵推回。
  *
- * <p>只读会话查询（session/list、session/history）：MySQL 存储收敛到网关后，
- * 这两个方法由网关本地查库合成应答，不再透传引擎，消除回环。
+ * <p>session/list、session/history 为只读查询，网关本地查库合成应答，不再透传。
  *
  * @author hanbing
  * @since 2026-10-02
@@ -50,6 +48,7 @@ public class EngineRelayHandler extends TextWebSocketHandler {
     /** 浏览器会话属性键：对应的引擎 WS 会话 */
     private static final String ATTR_ENGINE_SESSION = "engineSession";
 
+    /** 连接引擎 WS 的超时时间（秒） */
     private static final long ENGINE_CONNECT_TIMEOUT_SECONDS = 10;
 
     /** JSON-RPC 标准错误码：参数不合法 */
@@ -138,9 +137,9 @@ public class EngineRelayHandler extends TextWebSocketHandler {
 
     /**
      * 拦截网关本地处理的请求帧，返回 true 表示已处理，不再透传：
-     * - session/list、session/history：只读查询，网关本地查 MySQL 合成应答
-     * - turn/start、turn/cancel：控制面转 MQ（阶段④）；MQ 发布失败回退透传
-     * - stream/subscribe：数据面订阅 Redis Stream（阶段⑤），由 TurnStreamReader 推送
+     * - session/list、session/history：只读查询，网关本地查库合成应答
+     * - turn/start、turn/cancel：转 MQ 消息；发布失败回退透传
+     * - stream/subscribe：订阅事件流推送
      * 其余方法、响应帧（无 method）、解析失败的帧一律透传。
      */
     private boolean tryHandleControlPlane(WebSocketSession browserSession, String payload) throws IOException {
@@ -203,7 +202,7 @@ public class EngineRelayHandler extends TextWebSocketHandler {
 
     /**
      * 本地应答只读会话查询：session/list 按用户列出未删除会话，session/history
-     * 归属校验后分页。字段与 Python 引擎的 WS 应答逐字段一致（驼峰 + naive UTC 补 "Z"）。
+     * 归属校验后分页。
      */
     private void handleSessionQuery(WebSocketSession session, JsonNode idNode, String method, JsonNode params,
                                     Long userId) throws IOException {
@@ -217,7 +216,7 @@ public class EngineRelayHandler extends TextWebSocketHandler {
                 sendRpcError(session, idNode, INVALID_PARAMS, "缺少 sessionId");
                 return;
             }
-            // 参数读取顺序与 Python 的 page_history 校验顺序一致：direction → limit → cursor
+            // 注意校验顺序：direction → limit → cursor，调整顺序会改变报错优先级
             String direction = readDirection(params);
             Integer limit = readLimit(params);
             String cursor = readCursor(params);
@@ -234,7 +233,7 @@ public class EngineRelayHandler extends TextWebSocketHandler {
         }
     }
 
-    /** session/list 的 result：字段与 Python SessionSummary 线格式一致（驼峰、时间补 "Z"） */
+    /** session/list 的 result */
     private ObjectNode listSessions(Long userId) {
         ObjectNode result = objectMapper.createObjectNode();
         ArrayNode sessions = result.putArray("sessions");
@@ -259,7 +258,7 @@ public class EngineRelayHandler extends TextWebSocketHandler {
         return node.asText();
     }
 
-    /** limit 非整数或缺失（null）分别按 Python 的 strict 校验与"完整历史"语义处理；0/负数由分页核心拒绝 */
+    /** limit 非整数按非法拒绝；缺失（null）表示返回完整历史；0/负数由分页核心拒绝 */
     private static Integer readLimit(JsonNode params) {
         JsonNode node = params.get("limit");
         if (node == null || node.isNull()) {

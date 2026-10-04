@@ -1,9 +1,8 @@
 package com.spring.gateway.common;
 
 /**
- * 会话不存在、不属于当前用户或已删除。与 Python 侧 engine 的
- * {@code JsonRpcError(SESSION_NOT_FOUND, f"未知会话: {session_id}")} 语义一致：
- * 不区分"不存在"与"越权"两种失败，以防 IDOR 探测。
+ * 未知会话异常：会话不存在、不属于当前用户或已删除时抛出；
+ * 两种情况统一报错，避免通过报错差异探测会话 ID。
  *
  * @author hanbing
  * @since 2026-10-03

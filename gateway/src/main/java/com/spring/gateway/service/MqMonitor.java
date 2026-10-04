@@ -13,8 +13,8 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 队列深度监控：被动声明拿到各队列的堆积量，非零即告警日志；
- * 同时供 MqAdminController 查询。被动声明不会创建队列，只读元数据。
+ * 队列深度监控：被动声明读取各队列的堆积量，非零即记告警日志。
+ * 被动声明不会创建队列，只读元数据。
  *
  * @author hanbing
  * @since 2026-10-02
@@ -44,7 +44,7 @@ public class MqMonitor {
         return depths;
     }
 
-    /** 每分钟巡检：任何队列有堆积都记 warn（DLQ 非零时 DlqListener 通常已先告警） */
+    /** 每分钟巡检：任何队列有堆积都记 warn 日志 */
     @Scheduled(fixedDelay = 60_000)
     public void inspect() {
         try {

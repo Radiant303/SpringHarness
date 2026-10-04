@@ -4,9 +4,7 @@ import com.spring.gateway.common.TimeFormat;
 import com.spring.gateway.entity.Session;
 
 /**
- * 会话摘要（网关内部线格式）。字段命名与 Python 侧 schemas.SessionSummary 一致：
- * 内部 API 用驼峰风格，REST /api/sessions 用下划线风格，两处都是跨服务契约。
- * <p>时间戳为 naive UTC，序列化成 ISO + "Z"；userId 供调用方复核归属。</p>
+ * 会话摘要。时间戳序列化为 ISO 格式并补 Z 后缀。
  *
  * @author hanbing
  * @since 2026-10-03

@@ -12,7 +12,7 @@ import tools.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
 
 /**
- * 内部数据面接口鉴权拦截器：校验共享静态令牌 X-Internal-Token。
+ * 内部接口鉴权拦截器：校验 X-Internal-Token 请求头。
  *
  * @author hanbing
  * @since 2026-10-03

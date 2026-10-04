@@ -14,8 +14,7 @@ import java.util.UUID;
 /**
  * 会话业务：列表、详情、新建、删除。
  *
- * <p>MySQL 会话存储收敛后，写操作（新建、软删除）由网关本地落库，
- * 读操作（列表、详情）本来就是本地直查。
+ * <p>写操作（新建、软删除）本地落库，读操作本地直查。
  *
  * @author hanbing
  * @since 2026-09-26
@@ -95,6 +94,7 @@ public class SessionService {
         }
     }
 
+    /** 转换为会话摘要 */
     private static SessionSummary toSummary(Session row) {
         return new SessionSummary(row.getId(), row.getTitle(), row.getCreatedAt(), row.getUpdatedAt());
     }

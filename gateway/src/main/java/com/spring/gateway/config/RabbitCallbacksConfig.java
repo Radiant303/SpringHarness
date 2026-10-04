@@ -19,6 +19,9 @@ public class RabbitCallbacksConfig {
 
     private final RabbitTemplate rabbitTemplate;
 
+    /**
+     * 注册发布确认与路由失败回调
+     */
     @PostConstruct
     void registerCallbacks() {
         rabbitTemplate.setConfirmCallback((correlationData, ack, cause) -> {

@@ -21,10 +21,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * sessions / messages 两表的数据面业务：MySQL 会话存储从 Python 引擎收敛到网关后，
- * Python 引擎经 /internal/** 内部 HTTP API 调用这里存取数据。
+ * sessions / messages 两表的读写服务，供内部接口调用。
  *
- * <p>时间戳约定与 Python 侧一致：naive UTC（DATETIME 不带时区）。
+ * <p>时间戳统一使用 UTC。
  *
  * @author hanbing
  * @since 2026-10-03
@@ -158,6 +157,7 @@ public class InternalStoreService {
         return true;
     }
 
+    /** 按段号、主键升序查询会话的全部消息 */
     private List<Message> selectMessages(String sessionId) {
         return messageMapper.selectList(new LambdaQueryWrapper<Message>()
                 .eq(Message::getSessionId, sessionId)
@@ -165,6 +165,7 @@ public class InternalStoreService {
                 .orderByAsc(Message::getId));
     }
 
+    /** 解析消息 payload，失败抛 500 */
     private JsonNode readPayload(String payload) {
         try {
             return objectMapper.readTree(payload);

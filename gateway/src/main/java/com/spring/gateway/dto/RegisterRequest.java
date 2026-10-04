@@ -4,7 +4,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
 /**
- * 注册请求。校验规则与 Python 侧 schemas.RegisterRequest 保持一致。
+ * 注册请求。用户名长度 2~64，密码至少 6 位。
  *
  * @author hanbing
  * @since 2026-09-26

@@ -13,8 +13,8 @@ import org.springframework.web.socket.server.HandshakeInterceptor;
 import java.util.Map;
 
 /**
- * WS 握手鉴权：从 query 参数取 token（与 Python 引擎 /ws 的 ?token= 形式一致），
- * 验签通过则把用户 ID 与原始 token 存入会话属性，供 relay 转发给引擎。
+ * WS 握手鉴权：从 query 参数取 token 并验签，
+ * 通过后把用户 ID 与原始 token 存入会话属性。
  *
  * @author hanbing
  * @since 2026-10-02
@@ -25,7 +25,7 @@ public class AuthHandshakeInterceptor implements HandshakeInterceptor {
 
     /** 握手成功后写入会话属性的键：用户 ID */
     public static final String ATTR_USER_ID = "userId";
-    /** 握手成功后写入会话属性的键：原始 JWT，relay 建引擎连接时透传 */
+    /** 握手成功后写入会话属性的键：原始 JWT */
     public static final String ATTR_TOKEN = "token";
 
     private final JwtUtils jwtUtils;

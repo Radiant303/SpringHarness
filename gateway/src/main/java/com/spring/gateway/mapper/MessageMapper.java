@@ -5,7 +5,7 @@ import com.spring.gateway.entity.Message;
 import org.apache.ibatis.annotations.Mapper;
 
 /**
- * messages 表 Mapper。
+ * messages 表的 Mapper。
  *
  * @author hanbing
  * @since 2026-10-03

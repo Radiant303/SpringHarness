@@ -6,8 +6,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import java.time.LocalDateTime;
 
 /**
- * 会话摘要。字段命名与 Python 侧响应结构一致，存在跨服务契约，修改需两侧同步。
- * <p>时间戳存储为 naive UTC，序列化补 "Z" 后缀标明时区。</p>
+ * 会话摘要。时间戳序列化时补 Z 后缀标明时区。
  *
  * @author hanbing
  * @since 2026-09-26

@@ -21,15 +21,9 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 /**
- * 内部数据面接口：Python 引擎经这些端点读写 sessions / messages 两表，
- * 鉴权走共享静态令牌（X-Internal-Token），与用户 JWT 无关。
+ * 内部接口：会话与消息两表的增查删，鉴权走共享静态令牌。
  *
- * <p>MySQL 会话存储收敛到网关后，引擎不再直连数据库；网关不跑引擎逻辑，
- * 只把两表的增查删原样暴露给引擎。</p>
- *
- * <p>成功响应体是业务数据本身（不套 /api 的统一返回体）：Python 侧 httpx client
- * 直接 {@code response.json()} 按字段消费；错误仍走 BizException
- * （404 时 Python 侧按"不存在"处理）。</p>
+ * <p>成功响应直接返回业务数据，不套统一返回体；错误仍走 BizException。</p>
  *
  * @author hanbing
  * @since 2026-10-03

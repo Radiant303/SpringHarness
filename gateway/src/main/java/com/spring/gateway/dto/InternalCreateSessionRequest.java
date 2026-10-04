@@ -4,7 +4,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 /**
- * 内部 API：新建会话请求。会话 ID 由调用方（Python 引擎）生成并写入工作区路径。
+ * 内部接口：新建会话请求，会话 ID 由调用方生成。
  *
  * @author hanbing
  * @since 2026-10-03

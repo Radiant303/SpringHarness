@@ -10,12 +10,11 @@ import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 /**
- * 死信队列监听：坏消息/ poison 消息（重试超限、消费异常）最终落在这里。
- * 出现 DLQ 消息 = 系统有缺陷或数据有问题，必须有人看见，故用 error 级别告警。
+ * 死信队列监听：重试超限或消费异常的消息最终落在这里。
+ * 出现 DLQ 消息代表系统有缺陷或数据有问题，必须有人看见，故用 error 级别告警。
  * <p>
- * 必须用 dlqListenerContainerFactory（SimpleMessageConverter）：DLQ 消息体可能
- * 根本不是 JSON（正是它毒死了消费端），若走默认 Jackson 转换器，转换失败会导致
- * 告警逻辑根本没机会执行。
+ * 监听必须使用不做 JSON 转换的容器工厂：DLQ 消息体可能根本不是 JSON
+ * （正是它导致消费失败），若走默认的 Jackson 转换器，转换失败会让告警逻辑无法执行。
  *
  * @author hanbing
  * @since 2026-10-02

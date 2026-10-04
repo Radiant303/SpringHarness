@@ -35,6 +35,7 @@ public class RabbitConfig {
     /** turn 生命周期队列：网关消费（完成/失败事件回传） */
     public static final String QUEUE_LIFECYCLE = "turn.lifecycle";
 
+    /** 业务队列对应的死信队列 */
     public static final String QUEUE_DISPATCH_DLQ = QUEUE_DISPATCH + ".dlq";
     public static final String QUEUE_CANCEL_DLQ = QUEUE_CANCEL + ".dlq";
     public static final String QUEUE_LIFECYCLE_DLQ = QUEUE_LIFECYCLE + ".dlq";
@@ -118,24 +119,22 @@ public class RabbitConfig {
     }
 
     /**
-     * 消息体统一 JSON 序列化（Jackson 3，与网关其他模块一致），
-     * 注入后 RabbitTemplate 会自动使用
+     * 消息体统一 JSON 序列化，注入后 RabbitTemplate 自动使用
      */
     @Bean
     public MessageConverter jsonMessageConverter() {
         return new JacksonJsonMessageConverter();
     }
 
-    /** Boot 4 不再自动装配 RabbitAdmin，显式声明供 MqMonitor 读队列深度 */
+    /** Boot 4 不再自动装配 RabbitAdmin，显式声明 */
     @Bean
     public RabbitAdmin rabbitAdmin(ConnectionFactory connectionFactory) {
         return new RabbitAdmin(connectionFactory);
     }
 
     /**
-     * DLQ 监听专用容器工厂：SimpleMessageConverter 对任何消息体都不会转换失败
-     * （非文本 contentType 原样给 byte[]）。DLQ 收的就是毒死消费端的坏消息，
-     * 默认工厂的 Jackson 转换器会在告警逻辑执行前先抛异常，必须换掉。
+     * DLQ 监听专用容器工厂：DLQ 中可能积压无法反序列化的坏消息，
+     * 必须改用不会转换失败的 SimpleMessageConverter
      */
     @Bean
     public SimpleRabbitListenerContainerFactory dlqListenerContainerFactory(

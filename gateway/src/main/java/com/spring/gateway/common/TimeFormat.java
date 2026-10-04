@@ -4,7 +4,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
 /**
- * 线格式时间工具：数据库里是 naive UTC，跨进程传输统一补 "Z"。
+ * 时间格式化工具：数据库时间为 UTC，对外输出统一补 Z 后缀。
  *
  * @author hanbing
  * @since 2026-10-03
@@ -17,7 +17,7 @@ public final class TimeFormat {
     }
 
     /**
-     * naive UTC 时间转线格式字符串，与 Python 的 {@code datetime.isoformat() + "Z"} 逐字节一致：
+     * UTC 时间转 ISO 格式字符串，末尾补 Z 后缀；
      * 微秒为 0 时省略小数部分，否则保留 6 位
      *
      * @param value naive UTC 时间，可为 null

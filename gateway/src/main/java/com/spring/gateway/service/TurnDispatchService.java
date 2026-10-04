@@ -11,10 +11,10 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * turn 控制面派发：把 WS 上拦下的 turn/start、turn/cancel 转为 MQ 消息。
+ * turn 派发：把拦下的 turn/start、turn/cancel 转为 MQ 消息。
  *
- * <p>turnId 为雪花 ID，同时是 Python 消费端的幂等键。
- * 发布同步等 broker 确认（publisher confirm），失败抛异常由调用方回退 WS 透传。
+ * <p>turnId 为雪花 ID，同时是消费端的幂等键。
+ * 发布同步等待 broker 确认，失败抛异常由调用方处理。
  *
  * @author hanbing
  * @since 2026-10-02

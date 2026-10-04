@@ -18,15 +18,13 @@ import java.util.Base64;
 import java.util.List;
 
 /**
- * 会话历史分页：把 Python 侧 core/store/paging.py 的分页语义（跨段去重、游标编解码、
- * raw_segments 切片）原样移植到网关，使 WS 的 session/history 拦截后本地应答与
- * 引擎透传时的结果逐字段一致。
+ * 会话历史分页：跨段去重、游标编解码、raw_segments 切片，
+ * 供 WS 的 session/history 本地应答。
  *
- * <p>段装载语义与 Python 的 MysqlSessionStore._load_segments 一致：段数 =
- * current_segment + 1（含空段），messages 按 (segment_no, id) 升序装入对应段；
- * 段内消息就是 payload 原文（JsonNode），不解析其结构。</p>
+ * <p>段装载语义：段数 = current_segment + 1（含空段），messages 按 (segment_no, id)
+ * 升序装入对应段；段内消息即 payload 原文，不解析其结构。
  *
- * <p>分页核心是包私有的纯静态方法：不依赖 DB 与 Spring，单元测试直接喂构造的段数据。</p>
+ * <p>分页核心是包私有的纯静态方法：不依赖 DB 与 Spring，单元测试直接喂构造的段数据。
  *
  * @author hanbing
  * @since 2026-10-03
@@ -34,10 +32,10 @@ import java.util.List;
 @Service
 public class SessionHistoryService {
 
-    /** 游标载荷版本：结构不兼容升级时 +1，旧游标按 invalid 拒绝（与 Python CURSOR_VERSION 对齐） */
+    /** 游标载荷版本：结构不兼容升级时 +1，旧游标按 invalid 拒绝 */
     private static final int CURSOR_VERSION = 1;
 
-    /** JSON-RPC 错误码：会话不存在（与 Python engine/server.py 的 SESSION_NOT_FOUND 对齐） */
+    /** JSON-RPC 错误码：会话不存在 */
     public static final int SESSION_NOT_FOUND = -32002;
 
     private final SessionMapper sessionMapper;
@@ -61,7 +59,7 @@ public class SessionHistoryService {
      * @param direction 翻页方向：forward / backward
      * @return JSON-RPC result 节点：segments / firstSegmentIndex / nextCursor / previousCursor / hasMore
      * @throws UnknownSessionException    会话不存在、不属于该用户或已删除（-32002）
-     * @throws IllegalArgumentException 参数或游标非法（-32602），消息与 Python 侧一致
+     * @throws IllegalArgumentException 参数或游标非法（-32602）
      */
     public ObjectNode queryHistory(String sessionId, Long userId, String cursor, Integer limit, String direction) {
         Session row = sessionMapper.selectOne(new LambdaQueryWrapper<Session>()
@@ -105,7 +103,7 @@ public class SessionHistoryService {
         }
     }
 
-    // ---- 分页核心：core/store/paging.py 的忠实移植，纯静态、不依赖 DB ----
+    // ---- 分页核心：纯静态、不依赖 DB ----
 
     /**
      * 对 raw_segments 分页切片。游标编码版本、会话 ID、存储段数、原始消息数、去重后消息边界。
@@ -192,8 +190,7 @@ public class SessionHistoryService {
 
     /**
      * 跨段去重：压缩改写后的新基线与旧段尾部有重叠前缀时，剥掉重叠部分。
-     * Python 按 ModelMessage 逐一相等比较，这里按 payload 的 JsonNode 深相等比较，
-     * 语义等价（payload 是同一序列化器确定性 dump 的）。
+     * 按 payload 的 JsonNode 深相等逐条比较。
      */
     static List<List<JsonNode>> dedupSegments(List<List<JsonNode>> segments) {
         List<List<JsonNode>> result = new ArrayList<>();
@@ -262,7 +259,7 @@ public class SessionHistoryService {
         if (!sessionIdNode.isTextual() || !sessionId.equals(sessionIdNode.asText())) {
             throw new IllegalArgumentException("invalid history cursor");
         }
-        // Python 要求 type(value) is int（拒绝 bool 与 float）且非负；超出 long 的大整数按越界游标走
+        // 要求整型（拒绝 bool 与 float）且非负；超出 long 的大整数按越界游标走
         long[] values = new long[3];
         for (int i = 0; i < values.length; i++) {
             JsonNode node = data.get(2 + i);
@@ -287,7 +284,7 @@ public class SessionHistoryService {
         return total;
     }
 
-    /** 组装 JSON-RPC result；四个键始终存在（null 也序列化），与 Python 侧 HistoryResult 一致 */
+    /** 组装 JSON-RPC result；四个键始终存在（null 也序列化） */
     static ObjectNode buildResult(ObjectMapper objectMapper, HistoryPage page) {
         ObjectNode result = objectMapper.createObjectNode();
         ArrayNode segments = result.putArray("segments");
@@ -305,7 +302,7 @@ public class SessionHistoryService {
     }
 
     /**
-     * 一页历史快照（core/history.py 的 HistoryPage 对应物）。
+     * 一页历史快照。
      *
      * @param segments           选中段的消息切片（段内为追加序）
      * @param firstSegmentIndex 选中第一个非空切片的段下标，无则为 null

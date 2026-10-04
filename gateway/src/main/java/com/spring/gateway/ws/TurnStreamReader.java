@@ -26,17 +26,17 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
 /**
- * 事件流推送器（阶段⑤数据面）：按订阅从 Redis Stream 阻塞读会话事件，推给浏览器 WS。
+ * 事件流推送器：按订阅从 Redis Stream 阻塞读会话事件，推给浏览器 WS。
  *
  * <p>键格式 stream:session:{sessionId}，条目字段 event 为事件 JSON。
- * 推送帧在 params 上多带一个 seq（Stream 条目 ID），前端记录它作为续读游标。
+ * 推送帧在 params 上多带一个 seq（Stream 条目 ID），作为续读游标。
  *
  * <p>起始位置两种语义：
  * <ul>
  *   <li>lastSeq 非 null（同页断线重连）：从该条目之后精确续读，零重放；
  *   <li>lastSeq 为 null（整页刷新，内存游标丢失）：反向扫描找到最近一条
  *   turn_finished，从其之后重放——当前未完成的 turn 从它自己的开头完整重放，
- *   已完成的 turn 不会重放（历史由 MySQL 负责）。
+ *   已完成的 turn 不会重放（历史由数据库负责）。
  * </ul>
  *
  * @author hanbing
@@ -46,6 +46,7 @@ import java.util.concurrent.Future;
 @Component
 public class TurnStreamReader {
 
+    /** Stream 键前缀 */
     private static final String KEY_PREFIX = "stream:session:";
     private static final int READ_BATCH = 500;
     private static final Duration READ_BLOCK = Duration.ofSeconds(2);
@@ -186,7 +187,7 @@ public class TurnStreamReader {
             frame.put("jsonrpc", "2.0");
             frame.put("method", "session/event");
             frame.set("params", params);
-            // 与 EngineRelayHandler 共用同一会话监视器，避免与 relay 方向的帧交错
+            // 同一浏览器会话存在多个发送方，发送必须串行，避免帧交错
             synchronized (browserSession) {
                 if (browserSession.isOpen()) {
                     browserSession.sendMessage(new TextMessage(objectMapper.writeValueAsString(frame)));

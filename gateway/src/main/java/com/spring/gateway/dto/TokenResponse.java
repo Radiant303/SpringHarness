@@ -3,7 +3,7 @@ package com.spring.gateway.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 /**
- * 登录成功返回体。user_id 字段保持蛇形命名，与 Python 侧响应结构一致。
+ * 登录成功返回体，user_id 为蛇形命名。
  *
  * @author hanbing
  * @since 2026-09-26
