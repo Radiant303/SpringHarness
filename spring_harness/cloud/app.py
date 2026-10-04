@@ -6,7 +6,6 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from spring_harness.cloud.api import router as api_router
 from spring_harness.cloud.mq import TurnDispatcher, set_dispatcher
 from spring_harness.cloud.registry import CloudSessionRegistry, set_registry
 from spring_harness.cloud.ws import ws_endpoint
@@ -44,7 +43,6 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 def create_app() -> FastAPI:
     app = FastAPI(title="spring-harness cloud", version="0.1.0", lifespan=lifespan)
-    app.include_router(api_router)
     app.add_api_websocket_route("/ws", ws_endpoint)
     app.mount("/static", StaticFiles(directory=DEFAULT_FRONTEND_DIR), name="static")
 

@@ -65,7 +65,7 @@ class SubAgentConfig(ConfigBase):
 
 
 class Cloud(ConfigBase):
-    """云端部署（springcloud）配置：MySQL 存储 + JWT 认证 + 监听地址。"""
+    """云端部署（springcloud）配置：会话存储收敛网关 + JWT 认证 + 监听地址。"""
 
     database_url: str = "mysql+pymysql://root:root@127.0.0.1:3307/springharness?charset=utf8mb4"
     data_root: str = str(Path.home() / ".springharness" / "cloud")
@@ -78,6 +78,10 @@ class Cloud(ConfigBase):
     rabbitmq_url: str = "amqp://guest:guest@127.0.0.1:5672/"
     # 事件流数据面（阶段⑤）：会话事件写 Redis Stream，网关按 offset 续读
     redis_url: str = "redis://127.0.0.1:6380/0"
+    # 网关内部 API 基址（阶段⑥：MySQL 操作收敛到网关）
+    gateway_base_url: str = "http://127.0.0.1:8080"
+    # 与网关 app.internal-token 同值
+    internal_token: str = "springharness-internal-dev-token-0123456789"
 
 
 class Config(ConfigBase):

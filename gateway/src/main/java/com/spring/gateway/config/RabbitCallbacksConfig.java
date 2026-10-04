@@ -7,8 +7,7 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * publisher confirm / returns 回调装配：broker 显式拒收或路由失败时留下错误日志。
- * 逐条同步确认（含失败回退）在 TurnDispatchService 的 invoke 里做，这里兜住异步漏网的。
+ * RabbitMQ 发布确认与路由失败回调的装配配置
  *
  * @author hanbing
  * @since 2026-10-02

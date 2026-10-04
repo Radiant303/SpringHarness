@@ -1,6 +1,7 @@
 package com.spring.gateway.config;
 
 import com.spring.gateway.common.AuthInterceptor;
+import com.spring.gateway.common.InternalAuthInterceptor;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
@@ -18,10 +19,13 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 public class WebConfig implements WebMvcConfigurer {
 
     private final AuthInterceptor authInterceptor;
+    private final InternalAuthInterceptor internalAuthInterceptor;
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(authInterceptor).addPathPatterns("/api/sessions/**", "/api/admin/**");
+        // 内部数据面接口：Python 引擎持共享静态令牌访问
+        registry.addInterceptor(internalAuthInterceptor).addPathPatterns("/internal/**");
     }
 
     @Override

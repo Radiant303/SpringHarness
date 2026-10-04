@@ -37,6 +37,8 @@ def get_session_factory() -> sessionmaker[Session]:
     return get_sessionmaker()
 
 
+# MySQL 操作收敛网关后，get_current_user 是 Python 侧唯一保留的数据库读取路径（鉴权）；
+# sessions/messages 两表已全部改走网关内部 API（见 cloud/gateway_store.py）
 def get_current_user(
     factory: Annotated[sessionmaker[Session], Depends(get_session_factory)],
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer_scheme)],

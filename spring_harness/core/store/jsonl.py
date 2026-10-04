@@ -168,7 +168,7 @@ class JsonlSessionStore:
         """一次解析返回当前完整模型历史与按消息数分页的历史快照。
 
         介质读取之后的分页语义（游标快照、去重、切片）在 store/paging.py 统一实现，
-        与云端 MySQL 实现共用，保证游标格式与行为一致。
+        与云端实现（gateway_store）共用，保证游标格式与行为一致。
         """
         raw_segments = self._load_segments() if self.path.exists() else []
         return page_history(raw_segments, self.session_id, cursor, limit, direction)

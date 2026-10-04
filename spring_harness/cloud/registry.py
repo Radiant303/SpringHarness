@@ -35,7 +35,7 @@ if TYPE_CHECKING:
 STREAM_KEY_PREFIX = "stream:session:"
 # 滑动过期：每条事件写入都续期，活跃会话的流不会中途消失
 STREAM_TTL_SECONDS = 3600
-# turn 结束后缩短保留期：续传窗口已过，历史兜底在 MySQL
+# turn 结束后缩短保留期：续传窗口已过，历史兜底在网关
 STREAM_TTL_AFTER_FINISH = 600
 
 
@@ -122,7 +122,7 @@ class CloudSessionHandle:
             await self._redis.xadd(key, {"event": json.dumps(event.model_dump(), ensure_ascii=False)})
             ttl = STREAM_TTL_AFTER_FINISH if isinstance(event, TurnFinished) else STREAM_TTL_SECONDS
             await self._redis.expire(key, ttl)
-        except Exception:  # noqa: BLE001 流写入失败不阻断 turn；事件仍经 MySQL 落库
+        except Exception:  # noqa: BLE001 流写入失败不阻断 turn；事件仍经网关落库
             logger.exception("事件写 Redis Stream 失败: session={}", self.session_id)
 
     async def _publish_lifecycle(self, event: TurnFinished) -> None:
@@ -174,6 +174,8 @@ class CloudSessionRegistry:
         handle = self._handles.get(session_id)
         if handle is not None:
             return handle
+        # 工作区目录惰性创建：sessions 行可能由网关 REST 建的（本进程还没建过目录）
+        workspace.mkdir(parents=True, exist_ok=True)
         session = await asyncio.to_thread(HarnessSession, workspace, store=store)
         handle = CloudSessionHandle(session, self._redis)
         self._handles[session_id] = handle

@@ -72,3 +72,7 @@ port = 8001
 rabbitmq_url = "amqp://guest:guest@127.0.0.1:5672/"
 # 事件流数据面（阶段⑤）：会话事件写 Redis Stream，网关按 offset 续读
 redis_url = "redis://127.0.0.1:6380/0"
+# 网关内部 API 基址（阶段⑥：sessions/messages 的 MySQL 操作收敛到网关，经此调用）
+# gateway_base_url = "http://127.0.0.1:8080"
+# 内部 API 鉴权头 X-Internal-Token 的值，需与网关 app.internal-token 同值
+# internal_token = "springharness-internal-dev-token-0123456789"

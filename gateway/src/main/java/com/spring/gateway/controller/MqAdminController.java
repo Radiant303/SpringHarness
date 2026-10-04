@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.Map;
 
 /**
- * MQ 运维查询接口（鉴权由 AuthInterceptor 对 /api/admin/** 生效）。
+ * MQ 运维查询接口
  *
  * @author hanbing
  * @since 2026-10-02

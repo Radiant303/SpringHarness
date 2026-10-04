@@ -5,24 +5,35 @@ import com.spring.gateway.common.BizException;
 import com.spring.gateway.dto.SessionSummary;
 import com.spring.gateway.entity.Session;
 import com.spring.gateway.mapper.SessionMapper;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import tools.jackson.databind.JsonNode;
 
 import java.util.List;
+import java.util.UUID;
 
 /**
- * 会话业务：列表、详情、新建、删除、历史分页。
+ * 会话业务：列表、详情、新建、删除。
+ *
+ * <p>MySQL 会话存储收敛后，写操作（新建、软删除）由网关本地落库，
+ * 读操作（列表、详情）本来就是本地直查。
  *
  * @author hanbing
  * @since 2026-09-26
  */
 @Service
-@RequiredArgsConstructor
 public class SessionService {
 
     private final SessionMapper sessionMapper;
-    private final EngineClient engineClient;
+    private final InternalStoreService internalStoreService;
+    private final String dataRoot;
+
+    public SessionService(SessionMapper sessionMapper,
+                          InternalStoreService internalStoreService,
+                          @Value("${app.data-root}") String dataRoot) {
+        this.sessionMapper = sessionMapper;
+        this.internalStoreService = internalStoreService;
+        this.dataRoot = dataRoot;
+    }
 
     /**
      * 查询当前用户未删除的会话列表，按更新时间倒序
@@ -59,38 +70,29 @@ public class SessionService {
     }
 
     /**
-     * 新建会话
+     * 新建会话：本地生成 UUID 与工作区路径后插入 sessions 行
      *
-     * @param authorization 原始 Authorization 头
+     * @param userId 当前用户 ID
      * @return 会话摘要
      */
-    public JsonNode create(String authorization) {
-        return engineClient.createSession(authorization);
+    public SessionSummary create(Long userId) {
+        String sessionId = UUID.randomUUID().toString();
+        String workspacePath = dataRoot + "/workspaces/" + userId + "/" + sessionId;
+        Session row = internalStoreService.createSession(sessionId, userId, workspacePath);
+        return toSummary(row);
     }
 
     /**
-     * 删除会话
+     * 软删除会话（带归属校验）
      *
-     * @param sessionId     会话 ID
-     * @param authorization 原始 Authorization 头
+     * @param userId    当前用户 ID
+     * @param sessionId 会话 ID
+     * @throws BizException 会话不存在、不属于当前用户或已删除（统一 404）
      */
-    public void delete(String sessionId, String authorization) {
-        engineClient.deleteSession(sessionId, authorization);
-    }
-
-    /**
-     * 查询会话历史分页
-     *
-     * @param sessionId     会话 ID
-     * @param cursor        分页游标，可为 null
-     * @param limit         每页消息数
-     * @param direction     翻页方向
-     * @param authorization 原始 Authorization 头
-     * @return 历史分页
-     */
-    public JsonNode history(String sessionId, String cursor, int limit, String direction,
-                            String authorization) {
-        return engineClient.history(sessionId, cursor, limit, direction, authorization);
+    public void delete(Long userId, String sessionId) {
+        if (!internalStoreService.softDeleteSession(sessionId, userId)) {
+            throw new BizException(404, "会话不存在");
+        }
     }
 
     private static SessionSummary toSummary(Session row) {

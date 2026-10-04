@@ -1,5 +1,10 @@
 package com.spring.gateway.ws;
 
+import com.spring.gateway.common.TimeFormat;
+import com.spring.gateway.common.UnknownSessionException;
+import com.spring.gateway.entity.Session;
+import com.spring.gateway.service.InternalStoreService;
+import com.spring.gateway.service.SessionHistoryService;
 import com.spring.gateway.service.TurnDispatchService;
 import jakarta.websocket.WebSocketContainer;
 import lombok.extern.slf4j.Slf4j;
@@ -13,6 +18,7 @@ import org.springframework.web.socket.client.standard.StandardWebSocketClient;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ArrayNode;
 import tools.jackson.databind.node.ObjectNode;
 
 import java.io.IOException;
@@ -31,6 +37,9 @@ import java.util.concurrent.TimeUnit;
  * （turn.dispatch / turn.cancel），网关本地合成 JSON-RPC 应答；token 流仍由
  * 引擎经既有 WS 泵推回。MQ 发布失败时回退为透传，由引擎 RPC 路由兜底。
  *
+ * <p>只读会话查询（session/list、session/history）：MySQL 存储收敛到网关后，
+ * 这两个方法由网关本地查库合成应答，不再透传引擎，消除回环。
+ *
  * @author hanbing
  * @since 2026-10-02
  */
@@ -43,22 +52,34 @@ public class EngineRelayHandler extends TextWebSocketHandler {
 
     private static final long ENGINE_CONNECT_TIMEOUT_SECONDS = 10;
 
+    /** JSON-RPC 标准错误码：参数不合法 */
+    private static final int INVALID_PARAMS = -32602;
+
+    /** JSON-RPC 标准错误码：内部错误 */
+    private static final int INTERNAL_ERROR = -32603;
+
     private final String engineWsBase;
     private final ObjectMapper objectMapper;
     private final TurnDispatchService turnDispatchService;
     private final TurnStreamReader turnStreamReader;
+    private final InternalStoreService internalStoreService;
+    private final SessionHistoryService sessionHistoryService;
     private final WebSocketContainer webSocketContainer;
 
     public EngineRelayHandler(@Value("${app.engine-base-url}") String engineBaseUrl,
                               ObjectMapper objectMapper,
                               TurnDispatchService turnDispatchService,
                               TurnStreamReader turnStreamReader,
+                              InternalStoreService internalStoreService,
+                              SessionHistoryService sessionHistoryService,
                               WebSocketContainer webSocketContainer) {
         // http(s)://host:port → ws(s)://host:port
         this.engineWsBase = engineBaseUrl.replaceFirst("^http", "ws");
         this.objectMapper = objectMapper;
         this.turnDispatchService = turnDispatchService;
         this.turnStreamReader = turnStreamReader;
+        this.internalStoreService = internalStoreService;
+        this.sessionHistoryService = sessionHistoryService;
         this.webSocketContainer = webSocketContainer;
     }
 
@@ -117,6 +138,7 @@ public class EngineRelayHandler extends TextWebSocketHandler {
 
     /**
      * 拦截网关本地处理的请求帧，返回 true 表示已处理，不再透传：
+     * - session/list、session/history：只读查询，网关本地查 MySQL 合成应答
      * - turn/start、turn/cancel：控制面转 MQ（阶段④）；MQ 发布失败回退透传
      * - stream/subscribe：数据面订阅 Redis Stream（阶段⑤），由 TurnStreamReader 推送
      * 其余方法、响应帧（无 method）、解析失败的帧一律透传。
@@ -134,6 +156,11 @@ public class EngineRelayHandler extends TextWebSocketHandler {
             return false;
         }
         String method = methodNode.asText();
+        if ("session/list".equals(method) || "session/history".equals(method)) {
+            Long userId = (Long) browserSession.getAttributes().get(AuthHandshakeInterceptor.ATTR_USER_ID);
+            handleSessionQuery(browserSession, idNode, method, frame.get("params"), userId);
+            return true;
+        }
         if (!"turn/start".equals(method) && !"turn/cancel".equals(method)
                 && !"stream/subscribe".equals(method)) {
             return false;
@@ -143,7 +170,7 @@ public class EngineRelayHandler extends TextWebSocketHandler {
         JsonNode params = frame.get("params");
         JsonNode sessionIdNode = params == null ? null : params.get("sessionId");
         if (sessionIdNode == null || !sessionIdNode.isTextual() || sessionIdNode.asText().isBlank()) {
-            sendRpcError(browserSession, idNode, -32602, "缺少 sessionId");
+            sendRpcError(browserSession, idNode, INVALID_PARAMS, "缺少 sessionId");
             return true;
         }
         String sessionId = sessionIdNode.asText();
@@ -174,12 +201,98 @@ public class EngineRelayHandler extends TextWebSocketHandler {
         return true;
     }
 
+    /**
+     * 本地应答只读会话查询：session/list 按用户列出未删除会话，session/history
+     * 归属校验后分页。字段与 Python 引擎的 WS 应答逐字段一致（驼峰 + naive UTC 补 "Z"）。
+     */
+    private void handleSessionQuery(WebSocketSession session, JsonNode idNode, String method, JsonNode params,
+                                    Long userId) throws IOException {
+        try {
+            if ("session/list".equals(method)) {
+                sendRpcResult(session, idNode, listSessions(userId));
+                return;
+            }
+            JsonNode sessionIdNode = params == null ? null : params.get("sessionId");
+            if (sessionIdNode == null || !sessionIdNode.isTextual() || sessionIdNode.asText().isBlank()) {
+                sendRpcError(session, idNode, INVALID_PARAMS, "缺少 sessionId");
+                return;
+            }
+            // 参数读取顺序与 Python 的 page_history 校验顺序一致：direction → limit → cursor
+            String direction = readDirection(params);
+            Integer limit = readLimit(params);
+            String cursor = readCursor(params);
+            ObjectNode result = sessionHistoryService.queryHistory(
+                    sessionIdNode.asText(), userId, cursor, limit, direction);
+            sendRpcResult(session, idNode, result);
+        } catch (UnknownSessionException e) {
+            sendRpcError(session, idNode, SessionHistoryService.SESSION_NOT_FOUND, e.getMessage());
+        } catch (IllegalArgumentException e) {
+            sendRpcError(session, idNode, INVALID_PARAMS, e.getMessage());
+        } catch (Exception e) {
+            log.warn("会话查询失败: method={} error={}", method, e.toString());
+            sendRpcError(session, idNode, INTERNAL_ERROR, "会话查询失败");
+        }
+    }
+
+    /** session/list 的 result：字段与 Python SessionSummary 线格式一致（驼峰、时间补 "Z"） */
+    private ObjectNode listSessions(Long userId) {
+        ObjectNode result = objectMapper.createObjectNode();
+        ArrayNode sessions = result.putArray("sessions");
+        for (Session row : internalStoreService.listUserSessions(userId)) {
+            ObjectNode item = sessions.addObject();
+            item.put("sessionId", row.getId());
+            item.put("title", row.getTitle());
+            item.put("createdAt", TimeFormat.isoUtc(row.getCreatedAt()));
+            item.put("updatedAt", TimeFormat.isoUtc(row.getUpdatedAt()));
+        }
+        return result;
+    }
+
+    private static String readCursor(JsonNode params) {
+        JsonNode node = params.get("cursor");
+        if (node == null || node.isNull()) {
+            return null;
+        }
+        if (!node.isTextual()) {
+            throw new IllegalArgumentException("invalid history cursor");
+        }
+        return node.asText();
+    }
+
+    /** limit 非整数或缺失（null）分别按 Python 的 strict 校验与"完整历史"语义处理；0/负数由分页核心拒绝 */
+    private static Integer readLimit(JsonNode params) {
+        JsonNode node = params.get("limit");
+        if (node == null || node.isNull()) {
+            return null;
+        }
+        if (!node.isIntegralNumber() || !node.canConvertToExactIntegral()) {
+            throw new IllegalArgumentException("invalid history limit");
+        }
+        long value = node.asLong();
+        return value > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) value;
+    }
+
+    private static String readDirection(JsonNode params) {
+        JsonNode node = params.get("direction");
+        if (node == null || node.isNull()) {
+            return "forward";
+        }
+        if (!node.isTextual()) {
+            throw new IllegalArgumentException("invalid history direction");
+        }
+        return node.asText();
+    }
+
     /** 网关本地合成 JSON-RPC 成功应答（turn 提交语义：受理即返回，结果经事件流下发） */
     private void sendRpcResult(WebSocketSession session, JsonNode idNode) throws IOException {
+        sendRpcResult(session, idNode, objectMapper.createObjectNode());
+    }
+
+    private void sendRpcResult(WebSocketSession session, JsonNode idNode, ObjectNode result) throws IOException {
         ObjectNode response = objectMapper.createObjectNode();
         response.put("jsonrpc", "2.0");
         response.set("id", idNode);
-        response.putObject("result");
+        response.set("result", result);
         sendSafely(session, objectMapper.writeValueAsString(response));
     }
 
@@ -236,9 +349,6 @@ public class EngineRelayHandler extends TextWebSocketHandler {
         @Override
         public void handleTransportError(WebSocketSession engineSession, Throwable exception) throws Exception {
             log.warn("引擎 WS 传输错误: engine={} error={}", engineSession.getId(), exception.getMessage());
-            if (browserSession.isOpen()) {
-                browserSession.close(CloseStatus.SERVER_ERROR);
-            }
         }
     }
 }

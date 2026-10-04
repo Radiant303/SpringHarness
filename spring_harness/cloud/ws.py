@@ -7,10 +7,13 @@ from pathlib import Path
 from typing import ClassVar
 
 from fastapi import WebSocket, WebSocketDisconnect
-from sqlalchemy.orm import Session, sessionmaker
 
 from spring_harness.cloud.auth import decode_user_id
-from spring_harness.cloud.db import get_sessionmaker
+from spring_harness.cloud.gateway_store import (
+    GatewaySessionStore,
+    find_active_session,
+    list_sessions_for_user,
+)
 from spring_harness.cloud.registry import CloudSessionHandle, get_registry
 from spring_harness.core.config.settings import config
 from spring_harness.core.log import logger
@@ -28,11 +31,6 @@ from spring_harness.core.rpc.server import (
     AppServer,
 )
 from spring_harness.core.services.web_server import WebInitializeResult, _model_infos
-from spring_harness.core.store.mysql import (
-    MysqlSessionStore,
-    find_active_session,
-    list_sessions_for_user,
-)
 
 # 会话已被其他连接占用（同会话串行的进程内拒绝码）
 SESSION_OCCUPIED = -32003
@@ -41,7 +39,7 @@ WS_UNAUTHORIZED_CLOSE_CODE = 4401
 
 
 class CloudAppServer(AppServer):
-    """按 user_id 隔离的 JSON-RPC 协议面：会话归属 MySQL，工作区由服务端分配。
+    """按 user_id 隔离的 JSON-RPC 协议面：会话归属网关（内部 HTTP API），工作区由服务端分配。
 
     阶段⑤起会话本体由进程级注册表（cloud.registry）持有：本连接只做挂载/卸载，
     断开不销毁会话、不取消 turn（断线续传的前提）；事件流经扇出任务写 Redis
@@ -57,12 +55,10 @@ class CloudAppServer(AppServer):
         connection: JsonRpcConnection,
         *,
         user_id: int,
-        session_factory: sessionmaker[Session],
         data_root: Path,
     ) -> None:
         super().__init__(connection)
         self._user_id = user_id
-        self._db = session_factory
         self._data_root = data_root
         # 本连接登记的会话：连接关闭时统一卸载
         self._owned_sessions: set[str] = set()
@@ -96,7 +92,7 @@ class CloudAppServer(AppServer):
             handle.session.set_model(model)
         self._sessions[handle.session_id] = handle.session
 
-    # ---- 方法实现：全部改按 user_id 操作 MySQL ----
+    # ---- 方法实现：全部改按 user_id 操作网关内部 API ----
 
     async def _initialize(self, _: None) -> WebInitializeResult:
         # workspace 上报用户云端根目录：前端只拿它做展示与请求参数，服务端忽略
@@ -113,7 +109,7 @@ class CloudAppServer(AppServer):
         workspace = self._user_root / session_id
         await asyncio.to_thread(workspace.mkdir, parents=True, exist_ok=True)
         store = await asyncio.to_thread(
-            MysqlSessionStore.create, self._db, self._user_id, workspace, session_id,
+            GatewaySessionStore.create, self._user_id, workspace, session_id,
         )
         registry = get_registry()
         assert registry is not None  # lifespan 已装配
@@ -122,7 +118,7 @@ class CloudAppServer(AppServer):
         return SessionResult(session_id=session_id)
 
     async def _session_resume_last(self, p: WorkspaceParams) -> SessionResult:
-        rows = await asyncio.to_thread(list_sessions_for_user, self._db, self._user_id)
+        rows = await asyncio.to_thread(list_sessions_for_user, self._user_id)
         if not rows:
             return SessionResult(session_id=None)
         target = rows[0]
@@ -134,7 +130,7 @@ class CloudAppServer(AppServer):
             return SessionResult(session_id=handle.session_id)
         self._acquire(target.id)
         try:
-            store = await asyncio.to_thread(MysqlSessionStore.open, self._db, target.id)
+            store = await asyncio.to_thread(GatewaySessionStore.open, target.id)
             if store is None:  # 理论不可达：刚才还在列表里
                 raise JsonRpcError(SESSION_NOT_FOUND, f"未知会话: {target.id}")
             handle = await registry.get_or_create(
@@ -147,7 +143,7 @@ class CloudAppServer(AppServer):
         return SessionResult(session_id=handle.session_id)
 
     async def _session_list(self, p: WorkspaceParams) -> SessionListResult:
-        rows = await asyncio.to_thread(list_sessions_for_user, self._db, self._user_id)
+        rows = await asyncio.to_thread(list_sessions_for_user, self._user_id)
         return SessionListResult(sessions=[
             SessionSummary(
                 session_id=row.id,
@@ -167,14 +163,14 @@ class CloudAppServer(AppServer):
             self._adopt(handle, p.model)
             return SessionResult(session_id=handle.session_id)
         row = await asyncio.to_thread(
-            find_active_session, self._db, p.session_id, self._user_id,
+            find_active_session, p.session_id, self._user_id,
         )
         if row is None:
             raise JsonRpcError(SESSION_NOT_FOUND, f"未知会话: {p.session_id}")
         # 先占位再建会话：抢失败直接拒绝，不会留下半建的 HarnessSession
         self._acquire(p.session_id)
         try:
-            store = await asyncio.to_thread(MysqlSessionStore.open, self._db, p.session_id)
+            store = await asyncio.to_thread(GatewaySessionStore.open, p.session_id)
             if store is None:  # 理论不可达：find_active_session 已确认存在
                 raise JsonRpcError(SESSION_NOT_FOUND, f"未知会话: {p.session_id}")
             handle = await registry.get_or_create(
@@ -236,7 +232,6 @@ async def ws_endpoint(websocket: WebSocket) -> None:
     server = CloudAppServer(
         connection,
         user_id=user_id,
-        session_factory=get_sessionmaker(),
         data_root=Path(config.cloud.data_root).expanduser(),
     )
     logger.info("云端客户端已连接: user_id={} client={}", user_id, websocket.client)

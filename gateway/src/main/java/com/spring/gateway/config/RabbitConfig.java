@@ -15,16 +15,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * MQ 控制面拓扑：turn 派发/取消/完成事件。
- *
- * <p>exchange 与队列全部 durable，消费端 manual ack；消息体统一 JSON，
- * turnId 为雪花 ID，消费端按 turnId 幂等。
- *
- * <p>可靠性（加固）：每个业务队列挂死信交换机 harness.turn.dlx，被拒
- * （nack 不 requeue）的消息进同名 .dlq 队列，由 DlqListener 告警而不是静默丢失。
- *
- * <p>注意：Python 侧（cloud/mq.py）声明的同名队列参数必须与这里完全一致，
- * 否则 RabbitMQ 报 406 PRECONDITION_FAILED。
+ * 定义 turn 派发、取消、完成事件所用的 MQ 控制面拓扑。
  *
  * @author hanbing
  * @since 2026-10-02

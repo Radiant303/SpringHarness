@@ -5,17 +5,13 @@ import com.spring.gateway.common.Result;
 import com.spring.gateway.dto.SessionSummary;
 import com.spring.gateway.service.SessionService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpHeaders;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestAttribute;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import tools.jackson.databind.JsonNode;
 
 import java.util.List;
 
@@ -57,46 +53,27 @@ public class SessionController {
     }
 
     /**
-     * 新建会话（转发引擎）
+     * 新建会话（网关本地落库）
      *
-     * @param authorization Authorization 头
-     * @return 引擎返回的会话摘要
+     * @param userId 当前用户 ID（拦截器注入）
+     * @return 会话摘要
      */
     @PostMapping
-    public Result<JsonNode> create(@RequestHeader(HttpHeaders.AUTHORIZATION) String authorization) {
-        return Result.ok(sessionService.create(authorization));
+    public Result<SessionSummary> create(@RequestAttribute(AuthInterceptor.ATTR_USER_ID) Long userId) {
+        return Result.ok(sessionService.create(userId));
     }
 
     /**
-     * 删除会话（转发引擎）
+     * 删除会话（网关本地软删除）
      *
-     * @param sessionId     会话 ID
-     * @param authorization Authorization 头
+     * @param sessionId 会话 ID
+     * @param userId    当前用户 ID（拦截器注入）
      * @return 空数据返回体
      */
     @DeleteMapping("/{sessionId}")
     public Result<Void> delete(@PathVariable String sessionId,
-                               @RequestHeader(HttpHeaders.AUTHORIZATION) String authorization) {
-        sessionService.delete(sessionId, authorization);
+                               @RequestAttribute(AuthInterceptor.ATTR_USER_ID) Long userId) {
+        sessionService.delete(userId, sessionId);
         return Result.ok(null);
-    }
-
-    /**
-     * 会话历史分页（转发引擎）
-     *
-     * @param sessionId     会话 ID
-     * @param cursor        分页游标
-     * @param limit         每页消息数
-     * @param direction     翻页方向：forward / backward
-     * @param authorization Authorization 头
-     * @return 引擎返回的历史分页
-     */
-    @GetMapping("/{sessionId}/history")
-    public Result<JsonNode> history(@PathVariable String sessionId,
-                                    @RequestParam(required = false) String cursor,
-                                    @RequestParam(defaultValue = "50") int limit,
-                                    @RequestParam(defaultValue = "backward") String direction,
-                                    @RequestHeader(HttpHeaders.AUTHORIZATION) String authorization) {
-        return Result.ok(sessionService.history(sessionId, cursor, limit, direction, authorization));
     }
 }

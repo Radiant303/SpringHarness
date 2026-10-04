@@ -9,7 +9,8 @@ class SessionStore(Protocol):
     """会话消息存储：一个会话一个 store 对象。
 
     追加原则：只增不改；历史被压缩/合并改写时追加新段，旧段保留备查。
-    本地实现见 jsonl.py（每会话一个 JSONL 文件），云端实现见 mysql.py。
+    本地实现见 jsonl.py（每会话一个 JSONL 文件），云端实现见
+    cloud/gateway_store.py（阶段⑥起经网关内部 HTTP API 读写）。
     """
 
     @property

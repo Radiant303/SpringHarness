@@ -39,5 +39,10 @@ app:
   # RFC 7518 要求 HS256 密钥 ≥32 字节（jjwt 强制执行），所以开发默认值也要够长
   jwt-secret: ${JWT_SECRET:springharness-dev-secret-0123456789abcd}
   jwt-expire-minutes: 10080
-  # Python 引擎地址，会话删除/历史等请求会转发到这里
+  # /internal/** 内部数据面接口的共享静态令牌：Python 引擎经网关切库时带在 X-Internal-Token 头，
+  # 与用户 JWT 无关；生产用环境变量 INTERNAL_TOKEN 覆盖
+  internal-token: ${INTERNAL_TOKEN:springharness-internal-dev-token-0123456789}
+  # 云端数据根目录：新建会话的工作区路径 = {data-root}/workspaces/{userId}/{sessionId}（只写字符串，不建目录）
+  data-root: ${user.home}/.springharness/cloud
+  # Python 引擎地址，WS 中继（turn/start 回退透传、token 流）仍然需要
   engine-base-url: ${ENGINE_BASE_URL:http://127.0.0.1:8001}
