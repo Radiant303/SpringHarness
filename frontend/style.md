@@ -179,8 +179,9 @@ font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-s
 body.login-page { display: flex; flex-direction: column; min-height: 100vh; background: var(--bg); }
 .login-topbar { display: flex; flex: 0 0 auto; align-items: center; gap: 10px; padding: 20px 24px; }
 /* 表单从顶部固定距离开始往下排，不垂直居中：居中时登录 2 个字段、注册 3 个字段，
-   切换模式标题会上下跳；固定上边距后标题稳定在页面高度 14% 左右 */
-.login-wrap { flex: 1; padding: 56px 24px 80px; }
+   切换模式标题会上下跳。17vh 让标题落在页面高度约 24% 处（参考图的比例），
+   矮屏 64px 保底、高屏 200px 封顶 */
+.login-wrap { flex: 1; padding: clamp(64px, 17vh, 200px) 24px 80px; }
 .login-form { width: 100%; max-width: 380px; margin: 0 auto; text-align: left; }
 ```
 
