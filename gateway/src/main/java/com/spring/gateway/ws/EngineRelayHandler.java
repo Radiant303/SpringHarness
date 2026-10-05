@@ -48,7 +48,6 @@ public class EngineRelayHandler extends TextWebSocketHandler {
     /** 浏览器会话属性键：对应的引擎 WS 会话 */
     private static final String ATTR_ENGINE_SESSION = "engineSession";
 
-    /** 连接引擎 WS 的超时时间（秒） */
     private static final long ENGINE_CONNECT_TIMEOUT_SECONDS = 10;
 
     /** JSON-RPC 标准错误码：参数不合法 */

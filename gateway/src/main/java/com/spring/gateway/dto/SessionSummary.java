@@ -6,7 +6,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import java.time.LocalDateTime;
 
 /**
- * 会话摘要。时间戳序列化时补 Z 后缀标明时区。
+ * 会话摘要。
  *
  * @author hanbing
  * @since 2026-09-26

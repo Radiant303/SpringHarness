@@ -28,8 +28,7 @@ import java.util.concurrent.Future;
 /**
  * 事件流推送器：按订阅从 Redis Stream 阻塞读会话事件，推给浏览器 WS。
  *
- * <p>键格式 stream:session:{sessionId}，条目字段 event 为事件 JSON。
- * 推送帧在 params 上多带一个 seq（Stream 条目 ID），作为续读游标。
+ * <p>条目字段 event 为事件 JSON，推送帧在 params 上多带一个 seq（Stream 条目 ID）作为续读游标。
  *
  * <p>起始位置两种语义：
  * <ul>
@@ -46,7 +45,6 @@ import java.util.concurrent.Future;
 @Component
 public class TurnStreamReader {
 
-    /** Stream 键前缀 */
     private static final String KEY_PREFIX = "stream:session:";
     private static final int READ_BATCH = 500;
     private static final Duration READ_BLOCK = Duration.ofSeconds(2);
