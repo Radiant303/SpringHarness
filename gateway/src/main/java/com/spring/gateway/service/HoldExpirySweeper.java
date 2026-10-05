@@ -30,7 +30,7 @@ public class HoldExpirySweeper {
     /** 在途超过该时长视为悬挂（一轮对话的正常时长远低于此）。 */
     private static final long EXPIRE_MINUTES = 10;
 
-    /** 单轮扫描处理上限，防 backlog 时长尾。 */
+    /** 单轮扫描处理上限，防积压长尾。 */
     private static final int BATCH_LIMIT = 100;
 
     private final PointsHoldMapper pointsHoldMapper;

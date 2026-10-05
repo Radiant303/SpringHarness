@@ -16,7 +16,7 @@ import java.util.List;
  *
  * <p>操作边界：站长（owner）可操作任何人但站长账号本身不可被禁用/变更角色；
  * 管理员（admin）只能操作普通用户（user）账号。owner 角色不可经 API 授予，
- * 唯一的站长来自首用户引导（或手动 SQL）。
+ * 唯一的站长来自首用户引导。
  *
  * @author hanbing
  * @since 2026-10-05

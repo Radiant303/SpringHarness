@@ -61,7 +61,7 @@ public class AuthService {
         user.setPasswordHash(passwordEncoder.encode(req.password()));
         user.setRole(bootstrap ? User.ROLE_OWNER : User.ROLE_USER);
         user.setStatus(User.STATUS_ACTIVE);
-        // 初始积分：站长 1000，其余 0（后续增减只经 points_ledger 流水，无直接 set 入口）
+        // 初始积分：站长 1000，其余 0（后续增减只经流水，无直接 set 入口）
         user.setPointsBalance(bootstrap ? new BigDecimal("1000") : BigDecimal.ZERO);
         try {
             userMapper.insert(user);

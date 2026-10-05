@@ -21,7 +21,7 @@ public class SystemSettingService {
     private final SystemSettingMapper systemSettingMapper;
 
     /**
-     * 读布尔设置；键不存在时返回默认值（迁移未播种或键被误删时按默认行为运行）
+     * 读布尔设置；键不存在时返回默认值
      *
      * @param key          设置键
      * @param defaultValue 键缺失时的默认值

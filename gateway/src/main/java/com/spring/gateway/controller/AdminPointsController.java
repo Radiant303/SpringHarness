@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 /**
- * 积分对账视图：流水与在途预扣查询（owner/admin，由 /api/admin/** 拦截器收口）。
+ * 积分对账视图：流水与在途预扣查询（owner/admin）。
  *
  * @author hanbing
  * @since 2026-10-05

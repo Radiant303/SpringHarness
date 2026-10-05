@@ -13,7 +13,7 @@ import java.math.BigDecimal;
  * @param userId        用户 ID（字符串：雪花 ID 超 2^53，JS 数字会丢精度）
  * @param username      用户名
  * @param role          角色：owner / admin / user
- * @param pointsBalance 积分余额（登录时刻快照，后续变动经 /api/billing/me 刷新）
+ * @param pointsBalance 积分余额（登录时刻快照）
  */
 public record TokenResponse(
         String token,
