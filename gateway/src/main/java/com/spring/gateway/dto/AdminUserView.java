@@ -2,6 +2,8 @@ package com.spring.gateway.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import java.math.BigDecimal;
+
 /**
  * 管理后台的用户列表行。
  *
@@ -13,6 +15,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  * @param status         账号状态（active/disabled）
  * @param quotaBytes     存储配额（字节）
  * @param workQuotaBytes 单工作区上限覆盖值（字节，null 跟随全局）
+ * @param pointsBalance  积分余额
  * @param createdAt      注册时间（ISO UTC）
  */
 public record AdminUserView(
@@ -22,6 +25,7 @@ public record AdminUserView(
         String status,
         @JsonProperty("quota_bytes") Long quotaBytes,
         @JsonProperty("work_quota_bytes") Long workQuotaBytes,
+        @JsonProperty("points_balance") BigDecimal pointsBalance,
         @JsonProperty("created_at") String createdAt
 ) {
 }

@@ -23,6 +23,15 @@ public class SystemSetting {
     /** 设置键：全局默认单 work 容量上限（字节，十进制数字串）。 */
     public static final String KEY_WORK_MAX_BYTES = "work_max_bytes";
 
+    /** 设置键：预扣预估的缓存命中输入 tokens。 */
+    public static final String KEY_BILLING_EST_CACHE_READ_TOKENS = "billing.est_cache_read_tokens";
+
+    /** 设置键：预扣预估的无缓存输入 tokens。 */
+    public static final String KEY_BILLING_EST_INPUT_TOKENS = "billing.est_input_tokens";
+
+    /** 设置键：预扣预估的输出 tokens。 */
+    public static final String KEY_BILLING_EST_OUTPUT_TOKENS = "billing.est_output_tokens";
+
     /** 设置键，主键（值由代码固定，手动赋值）。 */
     @TableId(type = IdType.INPUT)
     private String settingKey;

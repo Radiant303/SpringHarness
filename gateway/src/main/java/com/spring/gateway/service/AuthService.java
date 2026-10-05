@@ -16,6 +16,8 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+
 /**
  * 认证业务：用户注册与登录。
  *
@@ -59,6 +61,8 @@ public class AuthService {
         user.setPasswordHash(passwordEncoder.encode(req.password()));
         user.setRole(bootstrap ? User.ROLE_OWNER : User.ROLE_USER);
         user.setStatus(User.STATUS_ACTIVE);
+        // 初始积分：站长 1000，其余 0（后续增减只经 points_ledger 流水，无直接 set 入口）
+        user.setPointsBalance(bootstrap ? new BigDecimal("1000") : BigDecimal.ZERO);
         try {
             userMapper.insert(user);
         } catch (DuplicateKeyException e) {
@@ -86,6 +90,7 @@ public class AuthService {
             throw new BizException(403, "账号已被禁用");
         }
         String token = jwtUtils.createToken(user.getId(), user.getUsername());
-        return new TokenResponse(token, String.valueOf(user.getId()), user.getUsername(), user.getRole());
+        return new TokenResponse(token, String.valueOf(user.getId()), user.getUsername(), user.getRole(),
+                user.getPointsBalance() == null ? BigDecimal.ZERO : user.getPointsBalance());
     }
 }

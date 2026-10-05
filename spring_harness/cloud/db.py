@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import datetime
 import threading
+from decimal import Decimal
 
 from sqlalchemy import (
     CHAR,
+    DECIMAL,
     JSON,
     BigInteger,
     Boolean,
@@ -13,6 +15,7 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
+    UniqueConstraint,
     create_engine,
 )
 from sqlalchemy.engine import Engine
@@ -69,6 +72,8 @@ class UserRow(Base):
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
     # 单工作区上限的每用户覆盖值（NULL = 跟随全局默认）
     work_quota_bytes: Mapped[int | None] = mapped_column(_BigInt, nullable=True)
+    # 积分余额：一切变动经 points_ledger 流水 + 网关事务内更新完成
+    points_balance: Mapped[Decimal] = mapped_column(DECIMAL(20, 6), nullable=False, default=0)
     created_at: Mapped[datetime.datetime] = mapped_column(
         MicrosecondDateTime, nullable=False, default=utc_now,
     )
@@ -156,6 +161,68 @@ class UsageRecordRow(Base):
     output_tokens: Mapped[int] = mapped_column(_BigInt, nullable=False, default=0)
     status: Mapped[str] = mapped_column(String(16), nullable=False)  # finished/cancelled/error
     is_wake: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        MicrosecondDateTime, nullable=False, default=utc_now,
+    )
+
+
+class ModelRateRow(Base):
+    """模型资费卡：每项费率单位 = 积分/百万 tokens；default 行是兜底卡。"""
+
+    __tablename__ = "models"
+
+    id: Mapped[int] = mapped_column(_BigInt, primary_key=True, autoincrement=False)  # 雪花，网关侧生成
+    model_name: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
+    input_points: Mapped[Decimal] = mapped_column(DECIMAL(20, 6), nullable=False)
+    cache_read_points: Mapped[Decimal] = mapped_column(DECIMAL(20, 6), nullable=False)
+    cache_write_points: Mapped[Decimal] = mapped_column(DECIMAL(20, 6), nullable=False)
+    output_points: Mapped[Decimal] = mapped_column(DECIMAL(20, 6), nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        MicrosecondDateTime, nullable=False, default=utc_now,
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        MicrosecondDateTime, nullable=False, default=utc_now,
+    )
+
+
+class PointsHoldRow(Base):
+    """积分预扣：turn 派发时建立，结算（SETTLED）/释放（RELEASED）二选一收口。"""
+
+    __tablename__ = "points_holds"
+    __table_args__ = (Index("ix_holds_status_created", "status", "created_at"),)
+
+    turn_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[int] = mapped_column(_BigInt, ForeignKey("users.id"), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(DECIMAL(20, 6), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="HELD")
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        MicrosecondDateTime, nullable=False, default=utc_now,
+    )
+    settled_at: Mapped[datetime.datetime | None] = mapped_column(MicrosecondDateTime, nullable=True)
+
+
+class PointsLedgerRow(Base):
+    """积分流水（append-only）：余额永远可由流水推出；(type, ref_id) 唯一作幂等锚。"""
+
+    __tablename__ = "points_ledger"
+    __table_args__ = (
+        Index("ix_ledger_user", "user_id", "id"),
+        # ref_id 为 NULL 的行不受唯一约束（MySQL/SQLite 均视 NULL 互不相等）
+        UniqueConstraint("type", "ref_id"),
+    )
+
+    id: Mapped[int] = mapped_column(_BigInt, primary_key=True, autoincrement=False)  # 雪花，网关侧生成
+    user_id: Mapped[int] = mapped_column(_BigInt, ForeignKey("users.id"), nullable=False)
+    change_amount: Mapped[Decimal] = mapped_column(DECIMAL(20, 6), nullable=False)
+    balance_after: Mapped[Decimal] = mapped_column(DECIMAL(20, 6), nullable=False)
+    type: Mapped[str] = mapped_column(String(16), nullable=False)
+    ref_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    model_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    operator_id: Mapped[int | None] = mapped_column(
+        _BigInt, ForeignKey("users.id"), nullable=True,
+    )
+    reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime.datetime] = mapped_column(
         MicrosecondDateTime, nullable=False, default=utc_now,
     )

@@ -54,6 +54,9 @@ public class User {
     /** 单工作区上限覆盖值（字节）；null = 跟随全局设置。 */
     private Long workQuotaBytes;
 
+    /** 积分余额；一切变动经 points_ledger 流水 + 事务内更新完成。 */
+    private java.math.BigDecimal pointsBalance;
+
     /** 创建时间（UTC）。 */
     private LocalDateTime createdAt;
 }

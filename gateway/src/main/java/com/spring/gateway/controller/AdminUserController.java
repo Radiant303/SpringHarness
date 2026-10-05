@@ -1,15 +1,19 @@
 package com.spring.gateway.controller;
 
 import com.spring.gateway.common.AuthInterceptor;
+import com.spring.gateway.common.BizException;
 import com.spring.gateway.common.Result;
 import com.spring.gateway.common.TimeFormat;
 import com.spring.gateway.dto.AdminPasswordRequest;
+import com.spring.gateway.dto.AdminPointsAdjustRequest;
 import com.spring.gateway.dto.AdminQuotaRequest;
 import com.spring.gateway.dto.AdminRoleRequest;
 import com.spring.gateway.dto.AdminStatusRequest;
 import com.spring.gateway.dto.AdminUserView;
 import com.spring.gateway.dto.AdminWorkQuotaRequest;
+import com.spring.gateway.entity.User;
 import com.spring.gateway.service.AdminUserService;
+import com.spring.gateway.service.BillingService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -34,6 +38,7 @@ import java.util.List;
 public class AdminUserController {
 
     private final AdminUserService adminUserService;
+    private final BillingService billingService;
 
     /**
      * 用户列表
@@ -125,6 +130,27 @@ public class AdminUserController {
         return Result.ok(null);
     }
 
+    /**
+     * 调账（充值/扣减积分）：写 ADJUST 流水，仅站长；不提供直接 set 余额的入口
+     *
+     * @param actorRole 当前用户角色（拦截器注入）
+     * @param actorId   当前用户 ID（拦截器注入，记账为操作人）
+     * @param id        目标用户 ID
+     * @param req       变动额与事由
+     * @return 空数据返回体
+     */
+    @PostMapping("/{id}/points")
+    public Result<Void> adjustPoints(@RequestAttribute(AuthInterceptor.ATTR_USER_ROLE) String actorRole,
+                                     @RequestAttribute(AuthInterceptor.ATTR_USER_ID) Long actorId,
+                                     @PathVariable Long id,
+                                     @Valid @RequestBody AdminPointsAdjustRequest req) {
+        if (!User.ROLE_OWNER.equals(actorRole)) {
+            throw new BizException(403, "仅站长可调账");
+        }
+        billingService.adjust(actorId, id, req.delta(), req.reason());
+        return Result.ok(null);
+    }
+
     private static AdminUserView toView(com.spring.gateway.entity.User user) {
         return new AdminUserView(
                 String.valueOf(user.getId()),  // 字符串下发：雪花 ID 超 2^53，JS 数字会丢精度
@@ -133,6 +159,7 @@ public class AdminUserController {
                 user.getStatus(),
                 user.getQuotaBytes(),
                 user.getWorkQuotaBytes(),
+                user.getPointsBalance(),
                 TimeFormat.isoUtc(user.getCreatedAt()));
     }
 }

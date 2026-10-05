@@ -1,5 +1,6 @@
 package com.spring.gateway.ws;
 
+import com.spring.gateway.common.BizException;
 import com.spring.gateway.common.TimeFormat;
 import com.spring.gateway.common.UnknownSessionException;
 import com.spring.gateway.entity.Session;
@@ -55,6 +56,9 @@ public class EngineRelayHandler extends TextWebSocketHandler {
 
     /** JSON-RPC 标准错误码：内部错误 */
     private static final int INTERNAL_ERROR = -32603;
+
+    /** 业务拒绝（积分不足等）：-32000 属 JSON-RPC 保留的服务端错误段 */
+    private static final int BIZ_REJECTED = -32000;
 
     private final String engineWsBase;
     private final ObjectMapper objectMapper;
@@ -143,7 +147,8 @@ public class EngineRelayHandler extends TextWebSocketHandler {
     /**
      * 拦截网关本地处理的请求帧，返回 true 表示已处理，不再透传：
      * - session/list、session/history：只读查询，网关本地查库合成应答
-     * - turn/start、turn/cancel：转 MQ 消息；发布失败回退透传
+     * - turn/start、turn/cancel：转 MQ 消息；发布失败回退透传，
+     *   业务拒绝（积分不足等）直接应答错误，不回退
      * - stream/subscribe：订阅事件流推送
      * 其余方法、响应帧（无 method）、解析失败的帧一律透传。
      */
@@ -197,6 +202,10 @@ public class EngineRelayHandler extends TextWebSocketHandler {
                 turnDispatchService.cancel(userId, sessionId);
                 log.info("turn 取消已派发 MQ: sessionId={} userId={}", sessionId, userId);
             }
+        } catch (BizException e) {
+            // 业务拒绝（如积分不足）：直接应答用户，不回退透传——透传会绕过派发侧控制
+            sendRpcError(browserSession, idNode, BIZ_REJECTED, e.getMessage());
+            return true;
         } catch (Exception e) {
             log.warn("MQ 发布失败，回退 WS 透传: method={} error={}", method, e.getMessage());
             return false;
