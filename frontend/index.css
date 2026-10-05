@@ -228,6 +228,17 @@ html, body {
   padding: 2px 8px;
   border-radius: 999px;
 }
+.user-badge:empty { display: none; }
+#admin-link {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--text-dim);
+  text-decoration: none;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+#admin-link:hover { color: var(--text); background: var(--hover-bg); }
 #logout-btn {
   display: inline-flex;
   align-items: center;

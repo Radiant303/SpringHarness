@@ -1,0 +1,106 @@
+/* 管理后台布局：复用 index.css 的设计令牌 */
+
+#admin-app { min-height: 100vh; background: #fbfaf9; }
+
+#admin-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 20px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border-soft);
+}
+#admin-header h1 { font-size: 17px; margin: 0; font-weight: 600; }
+#admin-header .spacer { flex: 1; }
+#back-link {
+  color: var(--text-dim);
+  text-decoration: none;
+  font-size: 18px;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+#back-link:hover { color: var(--text); background: var(--hover-bg); }
+#admin-who { color: var(--text-dim); font-size: 13px; }
+
+#admin-main {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+#admin-error {
+  background: var(--diff-del-bg);
+  color: var(--diff-del-text);
+  border: 1px solid var(--notice-border);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+}
+
+.admin-section {
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+}
+.admin-section h2 { font-size: 15px; margin: 0 0 12px; font-weight: 600; }
+
+.admin-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.admin-table th, .admin-table td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-soft);
+  white-space: nowrap;
+}
+.admin-table th { color: var(--text-dim); font-weight: 500; }
+.admin-table tr:last-child td { border-bottom: none; }
+.admin-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.admin-table .empty-row td { color: var(--text-faint); text-align: center; padding: 18px; }
+
+.role-badge {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+.role-badge.owner { background: var(--accent); color: #fff; border-color: var(--accent); }
+.role-badge.admin { color: var(--warn); border-color: var(--notice-border); background: var(--notice-bg); }
+.status-disabled { color: var(--danger); }
+.status-active { color: var(--success); }
+
+.row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.admin-btn {
+  font-size: 13px;
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+}
+.admin-btn:hover { background: var(--hover-bg); }
+.admin-btn.danger { color: var(--danger); border-color: var(--diff-del-text); }
+.admin-btn:disabled { opacity: 0.5; cursor: default; }
+
+.usage-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.usage-filter select, .usage-filter input {
+  font-size: 14px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+}
+.usage-sep { color: var(--text-faint); }
+
+.settings-row { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.settings-tip { margin-left: 10px; color: var(--text-dim); font-size: 13px; }

@@ -240,11 +240,15 @@ const state = {
 
 const TOKEN_KEY = "sh.token";
 const USER_KEY = "sh.username";
+const ROLE_KEY = "sh.role";
 // 页面与聊天 WS 都走网关（8080）：WS 由网关鉴权后 relay 到 Python 引擎（阶段④）
 const WS_BASE = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}`;
 
+const ROLE_LABELS = { owner: "站长", admin: "管理员", user: "用户" };
+
 function getToken() { return localStorage.getItem(TOKEN_KEY); }
 function clearToken() { localStorage.removeItem(TOKEN_KEY); }
+function getRole() { return localStorage.getItem(ROLE_KEY) || "user"; }
 
 function showUserChip() {
   const name = localStorage.getItem(USER_KEY);
@@ -253,6 +257,9 @@ function showUserChip() {
     /* 昵称最多显示 4 个字符，超出以 … 代替，完整名留在悬浮提示 */
     el.textContent = name.length > 4 ? name.slice(0, 4) + "…" : name;
     el.title = name;
+    $("user-badge").textContent = ROLE_LABELS[getRole()] || "用户";
+    // 管理入口仅站长/管理员可见
+    $("admin-link").classList.toggle("hidden", getRole() === "user");
     $("user-chip").classList.remove("hidden");
   }
 }
@@ -290,6 +297,7 @@ async function doAuth(mode) {
     const data = (await r.json()).data;
     localStorage.setItem(TOKEN_KEY, data.token);
     localStorage.setItem(USER_KEY, data.username);
+    localStorage.setItem(ROLE_KEY, data.role || "user");
     localStorage.removeItem("sh.sessionId");  // 换账号不复用旧会话
     hideLogin();
     showUserChip();
@@ -319,6 +327,7 @@ function bindAuth() {
   $("logout-btn").onclick = () => {
     clearToken();
     localStorage.removeItem(USER_KEY);
+    localStorage.removeItem(ROLE_KEY);
     localStorage.removeItem("sh.sessionId");
     location.reload();
   };
@@ -370,6 +379,11 @@ rpc.onClose = (code) => {
   if (code === 4401) {           // 未认证/令牌过期：回登录页，不重连
     clearToken();
     showLogin("登录已过期，请重新登录");
+    return;
+  }
+  if (code === 4403) {           // 账号被禁用：回登录页并说明原因，不重连
+    clearToken();
+    showLogin("账号已被禁用，请联系管理员");
     return;
   }
   if (!reconnectTimer) {

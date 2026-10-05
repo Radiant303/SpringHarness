@@ -17,6 +17,21 @@ import java.time.LocalDateTime;
 @TableName("users")
 public class User {
 
+    /** 角色：站长。 */
+    public static final String ROLE_OWNER = "owner";
+
+    /** 角色：管理员。 */
+    public static final String ROLE_ADMIN = "admin";
+
+    /** 角色：普通用户。 */
+    public static final String ROLE_USER = "user";
+
+    /** 账号状态：正常。 */
+    public static final String STATUS_ACTIVE = "active";
+
+    /** 账号状态：已禁用。 */
+    public static final String STATUS_DISABLED = "disabled";
+
     /** 用户 ID，雪花 ID。 */
     @TableId(type = IdType.INPUT)
     private Long id;
@@ -24,12 +39,18 @@ public class User {
     /** 用户名，唯一。 */
     private String username;
 
-    /** 密码的 BCrypt 哈希。 */
+    /** 密码哈希（BCrypt）。 */
     private String passwordHash;
 
-    /** 存储配额，单位字节。 */
+    /** 存储配额（字节）：用户全部 work 目录占用合计的上限。 */
     private Long quotaBytes;
 
-    /** 创建时间。 */
+    /** 角色：owner / admin / user。 */
+    private String role;
+
+    /** 账号状态：active / disabled。 */
+    private String status;
+
+    /** 创建时间（UTC）。 */
     private LocalDateTime createdAt;
 }

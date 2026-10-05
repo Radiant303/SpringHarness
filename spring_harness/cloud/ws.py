@@ -38,12 +38,20 @@ from spring_harness.core.services.web_server import WebInitializeResult, _model_
 SESSION_OCCUPIED = -32003
 
 WS_UNAUTHORIZED_CLOSE_CODE = 4401
+# 账号被禁用：与 token 无效（4401）区分开
+WS_DISABLED_CLOSE_CODE = 4403
 
 
-def _user_exists(user_id: int) -> bool:
-    """令牌是无状态的：签名有效不代表用户仍在库中（库重建/账号删除后旧 token 即幽灵），握手时复核。"""
+def _user_close_code(user_id: int) -> int | None:
+    """握手时按用户行复核（token 无状态，签名有效不代表账号仍可用）：
+    用户不存在 → 4401（幽灵用户）；已禁用 → 4403；正常 → None。"""
     with get_sessionmaker()() as s:
-        return s.get(UserRow, user_id) is not None
+        user = s.get(UserRow, user_id)
+        if user is None:
+            return WS_UNAUTHORIZED_CLOSE_CODE
+        if user.status != "active":
+            return WS_DISABLED_CLOSE_CODE
+        return None
 
 
 class CloudAppServer(AppServer):
@@ -243,12 +251,13 @@ async def ws_endpoint(websocket: WebSocket) -> None:
     await websocket.accept()
     token = websocket.query_params.get("token")
     user_id = decode_user_id(token) if token else None
-    if user_id is not None:
-        exists = await asyncio.to_thread(_user_exists, user_id)
-        if not exists:
-            user_id = None
-    if user_id is None:
-        await websocket.close(code=WS_UNAUTHORIZED_CLOSE_CODE)
+    close_code = (
+        WS_UNAUTHORIZED_CLOSE_CODE
+        if user_id is None
+        else await asyncio.to_thread(_user_close_code, user_id)
+    )
+    if close_code is not None:
+        await websocket.close(code=close_code)
         return
 
     async def read_line() -> str | None:

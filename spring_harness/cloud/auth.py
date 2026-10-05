@@ -43,7 +43,7 @@ def get_current_user(
     factory: Annotated[sessionmaker[Session], Depends(get_session_factory)],
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer_scheme)],
 ) -> UserRow:
-    """解析 Bearer 令牌并加载用户；失败一律 401（不带 WWW-Authenticate 之外的细节）。"""
+    """解析 Bearer 令牌并加载用户；失败一律 401（不带 WWW-Authenticate 之外的细节），禁用 403。"""
     unauthorized = HTTPException(
         status.HTTP_401_UNAUTHORIZED, "未认证", headers={"WWW-Authenticate": "Bearer"},
     )
@@ -56,4 +56,6 @@ def get_current_user(
         user = s.get(UserRow, user_id)
     if user is None:
         raise unauthorized
+    if user.status != "active":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "账号已被禁用")
     return user

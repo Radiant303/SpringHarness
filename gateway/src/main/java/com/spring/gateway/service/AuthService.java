@@ -14,9 +14,12 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 认证业务：用户注册与登录。
+ *
+ * <p>首个注册用户自动成为站长（owner），此后注册受 registration_open 系统设置约束。
  *
  * @author hanbing
  * @since 2026-09-26
@@ -29,31 +32,40 @@ public class AuthService {
     private final SnowflakeIdGenerator idGenerator;
     private final JwtUtils jwtUtils;
     private final BCryptPasswordEncoder passwordEncoder;
+    private final SystemSettingService systemSettingService;
 
     /**
-     * 注册新用户
+     * 注册新用户；系统无用户时首个注册者成为站长（不受注册开关限制）
      *
      * @param req 注册请求
      * @return 用户信息
-     * @throws BizException 用户名已存在（409）
+     * @throws BizException 用户名已存在（409）；注册已关闭（403）
      */
+    @Transactional
     public UserResponse register(RegisterRequest req) {
         boolean exists = userMapper.exists(
                 new LambdaQueryWrapper<User>().eq(User::getUsername, req.username()));
         if (exists) {
             throw new BizException(409, "用户名已存在");
         }
+        // 首用户引导：count==0 → owner；并发双注册理论可产生两个 owner，风险可忽略
+        boolean bootstrap = userMapper.selectCount(null) == 0;
+        if (!bootstrap && !systemSettingService.isRegistrationOpen()) {
+            throw new BizException(403, "当前未开放注册");
+        }
         User user = new User();
         user.setId(idGenerator.nextId());
         user.setUsername(req.username());
         user.setPasswordHash(passwordEncoder.encode(req.password()));
+        user.setRole(bootstrap ? User.ROLE_OWNER : User.ROLE_USER);
+        user.setStatus(User.STATUS_ACTIVE);
         try {
             userMapper.insert(user);
         } catch (DuplicateKeyException e) {
             // 先查后插存在并发窗口，由 username 唯一索引兜底；并发冲突时同样按用户名已存在处理
             throw new BizException(409, "用户名已存在");
         }
-        return new UserResponse(user.getId(), user.getUsername());
+        return new UserResponse(String.valueOf(user.getId()), user.getUsername());
     }
 
     /**
@@ -61,7 +73,8 @@ public class AuthService {
      *
      * @param req 登录请求
      * @return token 与用户信息
-     * @throws BizException 用户名不存在或密码错误（401，两种情况返回相同信息以避免用户名枚举）
+     * @throws BizException 用户名不存在或密码错误（401，两种情况返回相同信息以避免用户名枚举）；
+     *                      账号被禁用（403）
      */
     public TokenResponse login(LoginRequest req) {
         User user = userMapper.selectOne(
@@ -69,7 +82,10 @@ public class AuthService {
         if (user == null || !passwordEncoder.matches(req.password(), user.getPasswordHash())) {
             throw new BizException(401, "用户名或密码错误");
         }
+        if (User.STATUS_DISABLED.equals(user.getStatus())) {
+            throw new BizException(403, "账号已被禁用");
+        }
         String token = jwtUtils.createToken(user.getId(), user.getUsername());
-        return new TokenResponse(token, user.getId(), user.getUsername());
+        return new TokenResponse(token, String.valueOf(user.getId()), user.getUsername(), user.getRole());
     }
 }

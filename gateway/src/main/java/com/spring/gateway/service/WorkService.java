@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.spring.gateway.common.BizException;
 import com.spring.gateway.entity.Message;
 import com.spring.gateway.entity.Session;
+import com.spring.gateway.entity.User;
 import com.spring.gateway.entity.Work;
 import com.spring.gateway.mapper.MessageMapper;
 import com.spring.gateway.mapper.SessionMapper;
@@ -69,18 +70,26 @@ public class WorkService {
     }
 
     /**
-     * 新建 work；用户已有 work 数量达到上限时抛 409，须先删除
+     * 新建 work；用户已有 work 数量达到上限、或全部 work 占用合计达到其存储配额时抛 409
      *
      * @param userId 用户 ID
      * @param name   项目名
      * @return 新建的 work
-     * @throws BizException 超出数量上限（409）
+     * @throws BizException 超出数量上限或存储配额（409）
      */
     public Work create(Long userId, String name) {
-        requireUser(userId);
+        User user = requireUser(userId);
         Long count = workMapper.selectCount(new LambdaQueryWrapper<Work>().eq(Work::getUserId, userId));
         if (count >= maxWorks) {
             throw new BizException(409, "项目数量已达上限（" + maxWorks + "个），请先删除");
+        }
+        long used = workMapper.selectList(new LambdaQueryWrapper<Work>().eq(Work::getUserId, userId))
+                .stream()
+                .mapToLong(row -> row.getSizeBytes() == null ? 0L : row.getSizeBytes())
+                .sum();
+        long quota = user.getQuotaBytes() == null ? Long.MAX_VALUE : user.getQuotaBytes();
+        if (used >= quota) {
+            throw new BizException(409, "存储配额已用尽（" + used + "/" + quota + " 字节），请联系管理员调整");
         }
         return insert(userId, name, false);
     }
@@ -214,10 +223,12 @@ public class WorkService {
     }
 
     /** 用户不存在（库重建后旧 token 的幽灵用户）时拒绝，避免外键异常冒成 500 */
-    private void requireUser(Long userId) {
-        if (userMapper.selectById(userId) == null) {
+    private User requireUser(Long userId) {
+        User user = userMapper.selectById(userId);
+        if (user == null) {
             throw new BizException(404, "用户不存在");
         }
+        return user;
     }
 
     private Work insert(Long userId, String name, boolean isDefault) {        LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
