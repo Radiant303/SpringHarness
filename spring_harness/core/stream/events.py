@@ -41,6 +41,16 @@ class UsageUpdated(BaseModel):
     kind: Literal["usage"] = "usage"
     context_tokens: int
 
+class TurnUsage(BaseModel):
+    """一轮对话的模型用量合计（input_tokens 含缓存命中与缓存写入）。"""
+
+    model_name: str | None = None  # 本轮最后一次模型请求的模型
+    requests: int = 0
+    input_tokens: int = 0
+    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
+    output_tokens: int = 0
+
 class PlanUpdated(BaseModel):
     kind: Literal["plan_updated"] = "plan_updated"
     items: list[dict]
@@ -58,6 +68,9 @@ class TurnFinished(BaseModel):
     cancelled: bool = False
     error: str | None = None
     wake: bool = False  # True = 后台任务催醒轮
+    turn_id: str | None = None  # 轮次 ID（wake 轮为本地生成的 wake-xxx）
+    user_id: int | None = None  # 计费归属的用户 ID
+    usage: TurnUsage | None = None  # 本轮 token 用量合计
 
 class BackgroundTaskStarted(BaseModel):
     kind: Literal["background_task_started"] = "background_task_started"

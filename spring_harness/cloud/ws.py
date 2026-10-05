@@ -98,6 +98,7 @@ class CloudAppServer(AppServer):
         if previous is not None and previous != handle.session_id:
             self._unmount(previous)
         self._acquire(handle.session_id)
+        handle.remember_user(self._user_id)
         handle.set_approval_target(self)
         if model:
             handle.session.set_model(model)

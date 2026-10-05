@@ -350,7 +350,7 @@ class ConsoleClient(CliApp):
                             await self.show_system(f"⚙\ufe0f 后台任务 {i}（{n}）已取消\n")
                         elif is_err:
                             await self.show_system(f"⚙\ufe0f 后台任务 {i}（{n}）出错，详情见后续汇报\n")
-                    case TurnFinished(cancelled=cancelled, error=error, wake=wake):
+                    case TurnFinished(cancelled=cancelled, error=error, wake=wake, usage=usage):
                         if sink is not None:
                             await sink.finish()
                             sink = None
@@ -361,6 +361,12 @@ class ConsoleClient(CliApp):
                             await self.show_system("已中断（Esc），可继续输入")
                         elif error is not None:
                             await self.show_system(f"❌ 运行出错：{error}")
+                        if not wake and usage is not None and usage.requests:
+                            cache = f"，其中缓存命中 {usage.cache_read_tokens:,}" if usage.cache_read_tokens else ""
+                            await self.show_system(
+                                f"本轮消耗：{usage.model_name or '未知模型'} "
+                                f"输入 {usage.input_tokens:,}{cache}，输出 {usage.output_tokens:,}\n"
+                            )
                         if not wake:
                             # 只有用户轮占用 _busy、有人等收尾；催醒轮的收尾不动输入状态
                             self._busy = False

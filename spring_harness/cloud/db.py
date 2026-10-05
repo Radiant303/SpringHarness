@@ -122,6 +122,39 @@ class MessageRow(Base):
     )
 
 
+class UsageRecordRow(Base):
+    """一轮对话的模型 token 消耗（计费底账）。
+
+    turn_id 全局唯一：MQ 重投/DLQ 重放导致重复消费时撞唯一键即视为已入账。
+    只存原始 token 量与 model_name，不存金额。
+    """
+
+    __tablename__ = "usage_records"
+    __table_args__ = (
+        Index("ix_usage_user_time", "user_id", "created_at"),
+        Index("ix_usage_session", "session_id"),
+    )
+
+    id: Mapped[int] = mapped_column(_BigInt, primary_key=True, autoincrement=True)
+    # 雪花 ID 或 wake-xxx（催醒轮本地生成）
+    turn_id: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
+    session_id: Mapped[str] = mapped_column(CHAR(36), ForeignKey("sessions.id"), nullable=False)
+    user_id: Mapped[int] = mapped_column(_BigInt, ForeignKey("users.id"), nullable=False)
+    # 本轮最后一次模型请求的模型；纯错误轮可能没有任何模型请求
+    model_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    requests: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # 含 cache_read/cache_write（inclusive 桶）
+    input_tokens: Mapped[int] = mapped_column(_BigInt, nullable=False, default=0)
+    cache_read_tokens: Mapped[int] = mapped_column(_BigInt, nullable=False, default=0)
+    cache_write_tokens: Mapped[int] = mapped_column(_BigInt, nullable=False, default=0)
+    output_tokens: Mapped[int] = mapped_column(_BigInt, nullable=False, default=0)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)  # finished/cancelled/error
+    is_wake: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        MicrosecondDateTime, nullable=False, default=utc_now,
+    )
+
+
 # ---- engine / sessionmaker 工厂（懒初始化，双检锁）----
 
 _engine: Engine | None = None

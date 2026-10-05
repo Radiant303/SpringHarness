@@ -97,8 +97,11 @@ class TurnDispatcher:
     async def _on_dispatch(self, message: AbstractIncomingMessage) -> None:
         try:
             payload = json.loads(message.body.decode())
-            turn_id = payload.get("turnId")
+            raw_turn_id = payload.get("turnId")
+            # 统一成字符串：64 位整数经 JSON 传输有精度丢失风险
+            turn_id = str(raw_turn_id) if raw_turn_id is not None else None
             session_id = payload.get("sessionId")
+            user_id = payload.get("userId")
             text = payload.get("input", "")
             logger.info("收到 turn 派发: turnId={} sessionId={}", turn_id, session_id)
 
@@ -113,15 +116,15 @@ class TurnDispatcher:
             handle = registry.get(session_id) if registry is not None else None
             if handle is None:
                 await self.publish_lifecycle({
-                    "turnId": turn_id, "sessionId": session_id,
+                    "turnId": turn_id, "sessionId": session_id, "userId": user_id,
                     "status": "error", "error": "会话未挂载（客户端未连接）",
                 })
             else:
                 try:
-                    handle.start_turn(text)
+                    handle.start_turn(text, turn_id=turn_id, user_id=user_id)
                 except JsonRpcError as e:
                     await self.publish_lifecycle({
-                        "turnId": turn_id, "sessionId": session_id,
+                        "turnId": turn_id, "sessionId": session_id, "userId": user_id,
                         "status": "error", "error": e.message,
                     })
         except Exception:

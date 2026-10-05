@@ -64,8 +64,8 @@ class AgentEventAdapter:
             if handler is not None:
                 await handler(event)
             if _ctx is not None and isinstance(_ctx.deps, CodingAgentDeps) and _ctx.deps.usage_log:
-                usage = _ctx.deps.usage_log[-1]
-                tokens = usage.input_tokens + usage.output_tokens
+                entry = _ctx.deps.usage_log[-1]
+                tokens = entry.usage.input_tokens + entry.usage.output_tokens
                 if tokens != self._last_usage:
                     self._last_usage = tokens
                     await self._sink.update_context(tokens)

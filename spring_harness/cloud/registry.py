@@ -25,6 +25,7 @@ from spring_harness.core.stream.events import (
     ApprovalRequest,
     QuestionRequest,
     TurnFinished,
+    TurnUsage,
 )
 
 if TYPE_CHECKING:
@@ -42,6 +43,20 @@ STREAM_TTL_SECONDS = 3600
 STREAM_TTL_AFTER_FINISH = 600
 
 
+def _usage_payload(usage: TurnUsage | None) -> dict | None:
+    """TurnUsage 转 lifecycle 消息里的用量块。"""
+    if usage is None:
+        return None
+    return {
+        "modelName": usage.model_name,
+        "requests": usage.requests,
+        "inputTokens": usage.input_tokens,
+        "cacheReadTokens": usage.cache_read_tokens,
+        "cacheWriteTokens": usage.cache_write_tokens,
+        "outputTokens": usage.output_tokens,
+    }
+
+
 class CloudSessionHandle:
     """一个云端会话的运行时：会话本体 + 事件扇出 + 审批路由。"""
 
@@ -54,6 +69,8 @@ class CloudSessionHandle:
         self._approval_target: AppServer | None = None
         self._parked_requests: list[ApprovalRequest | QuestionRequest] = []
         self._tasks: set[asyncio.Task] = set()
+        # 最近见到该会话的用户 ID：wake 轮没有派发消息，以此归属计费用户
+        self._last_user_id: int | None = None
         self._fanout_task = self._track(asyncio.create_task(self._fanout_loop()))
         if work_id:
             quota.register_workspace(session.workspace, work_id)
@@ -77,19 +94,32 @@ class CloudSessionHandle:
                             self.session_id, type(event).__name__)
                 self._track(asyncio.create_task(self._route_request(event)))
 
+    def remember_user(self, user_id: int | None) -> None:
+        """记下该会话的用户 ID（挂载/派发时调用），供 wake 轮归属与 lifecycle 兜底。"""
+        if user_id is not None:
+            self._last_user_id = user_id
+            self.session.cloud_user_id = user_id
+
     # ---- turn 驱动（MQ 派发器调用） ----
 
-    def start_turn(self, text: str) -> None:
+    def start_turn(
+        self,
+        text: str,
+        *,
+        turn_id: str | None = None,
+        user_id: int | None = None,
+    ) -> None:
         if self.session.busy:
             raise JsonRpcError(BUSY, "上一轮还没结束")
-        self._track(asyncio.create_task(self._run(text)))
+        self.remember_user(user_id)
+        self._track(asyncio.create_task(self._run(text, turn_id=turn_id, user_id=user_id)))
 
     def cancel_turn(self) -> None:
         self.session.cancel()
 
-    async def _run(self, text: str) -> None:
+    async def _run(self, text: str, *, turn_id: str | None = None, user_id: int | None = None) -> None:
         try:
-            await self.session.run_turn(text)
+            await self.session.run_turn(text, turn_id=turn_id, user_id=user_id)
         except Exception:  # noqa: BLE001 run_turn 正常路径已自收口，到这属于意外
             logger.exception("会话 {} 的轮次异常", self.session_id)
 
@@ -157,10 +187,13 @@ class CloudSessionHandle:
             status = "finished"
         try:
             await dispatcher.publish_lifecycle({
+                "turnId": event.turn_id,
                 "sessionId": self.session_id,
+                "userId": event.user_id if event.user_id is not None else self._last_user_id,
                 "status": status,
                 "error": event.error,
                 "wake": event.wake,
+                "usage": _usage_payload(event.usage),
             })
         except Exception:  # noqa: BLE001 生命周期回传失败不影响事件流
             logger.exception("turn 生命周期事件发布失败: session={}", self.session_id)

@@ -11,7 +11,7 @@ from pydantic_ai import (
 )
 from pydantic_ai.capabilities import Hooks
 
-from spring_harness.core.agent.deps import CodingAgentDeps
+from spring_harness.core.agent.deps import CodingAgentDeps, RequestUsageEntry
 
 hooks = Hooks()
 
@@ -68,5 +68,5 @@ async def log_request_usage(
     request_context: ModelRequestContext,
     response: ModelResponse,
 ) -> ModelResponse:
-    ctx.deps.usage_log.append(response.usage)
+    ctx.deps.usage_log.append(RequestUsageEntry(model_name=response.model_name, usage=response.usage))
     return response

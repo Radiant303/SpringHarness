@@ -1,4 +1,5 @@
 import asyncio
+import uuid
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
@@ -17,7 +18,7 @@ from pydantic_ai import (
 )
 from pydantic_ai.messages import INTERRUPTED_TOOL_RETURN_CONTENT
 
-from spring_harness.core.agent.deps import CodingAgentDeps
+from spring_harness.core.agent.deps import CodingAgentDeps, RequestUsageEntry
 from spring_harness.core.approval import run_with_approval
 from spring_harness.core.background import format_notice
 from spring_harness.core.history import HistoryDirection, HistoryPage
@@ -33,12 +34,26 @@ from spring_harness.core.stream.events import (
     ServerEvent,
     TeachingUpdated,
     TurnFinished,
+    TurnUsage,
 )
 
 BACKGROUND_WAKE_PROMPT = (
     "（系统催醒：有后台任务刚刚结束，通知见下方消息。"
     "请用 job_output 工具获取结果。）\n"
 )
+
+
+def _sum_usage(entries: list[RequestUsageEntry]) -> TurnUsage:
+    """汇总一轮内的模型请求用量；model_name 取最后一次非空请求的模型。"""
+    total = TurnUsage(requests=len(entries))
+    for entry in entries:
+        if entry.model_name:
+            total.model_name = entry.model_name
+        total.input_tokens += entry.usage.input_tokens
+        total.cache_read_tokens += entry.usage.cache_read_tokens
+        total.cache_write_tokens += entry.usage.cache_write_tokens
+        total.output_tokens += entry.usage.output_tokens
+    return total
 
 
 def _settle_interrupted_tool_calls(messages: list[ModelMessage]) -> list[ModelMessage]:
@@ -100,6 +115,8 @@ class HarnessSession:
         self._closed = False
         self._turn_task: asyncio.Task | None = None
         self._wake_task: asyncio.Task | None = None
+        # 计费归属的用户 ID；wake 轮没有派发消息，以此归属
+        self.cloud_user_id: int | None = None
 
     async def events(self) -> AsyncIterator[ServerEvent]:
         while True:
@@ -111,6 +128,8 @@ class HarnessSession:
         *,
         prompt_source: str | None = None,
         wake: bool = False,
+        turn_id: str | None = None,
+        user_id: int | None = None,
     ) -> None:
         if self._closed:
             raise RuntimeError("会话已关闭")
@@ -118,7 +137,9 @@ class HarnessSession:
             raise RuntimeError("上一轮还没结束")
         self._busy = True
         self._turn_task = asyncio.current_task()
-        finished = TurnFinished(wake=wake)
+        finished = TurnFinished(wake=wake, turn_id=turn_id, user_id=user_id)
+        # 本轮用量切点：usage_log 为会话级累积，finally 里对增量切片求和
+        usage_mark = len(self._deps.usage_log)
         messages: list[ModelMessage] | None = None
         allow_rewrite = False
         try:
@@ -174,6 +195,8 @@ class HarnessSession:
                 self._cancel_token = None
                 self._busy = False
                 self._turn_task = None
+                # 取消/出错的轮次也可能已发出模型请求：用量照常汇总，计费不能丢
+                finished.usage = _sum_usage(self._deps.usage_log[usage_mark:])
                 self._queue.put_nowait(finished)
                 # 催醒轮收尾：把自己从 _wake_task 摘掉，否则收尾期间结束的任务通知
                 # 会被 _maybe_wake_background 的"催醒轮还在跑"判断漏掉
@@ -204,6 +227,8 @@ class HarnessSession:
                 BACKGROUND_WAKE_PROMPT,
                 prompt_source=BACKGROUND_WAKE_SOURCE,
                 wake=True,
+                turn_id=f"wake-{uuid.uuid4().hex[:16]}",
+                user_id=self.cloud_user_id,
             )
         except RuntimeError:
             pass
