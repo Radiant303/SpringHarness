@@ -8,43 +8,54 @@
   <link rel="stylesheet" href="/static/login.css">
 </head>
 <body class="login-page">
-  <main class="login-wrap">
-    <form id="login-form" class="login-card" novalidate>
-      <img class="login-logo" src="/static/assets/images/log.png" alt="Spring Harness">
-      <h1 id="login-title" class="login-title">登录 Spring Harness</h1>
-      <p id="login-sub" class="login-sub">登录后即可开始与 Agent 协作</p>
+  <!-- 品牌标固定在页面左上角（页面式布局，不套卡片） -->
+  <header class="login-topbar">
+    <img class="login-logo" src="/static/assets/images/log.png" alt="">
+    <span class="login-brand">SPRING HARNESS</span>
+  </header>
 
+  <main class="login-wrap">
+    <form id="login-form" class="login-form" novalidate>
+      <h1 id="login-title" class="login-title">登录</h1>
+      <p class="login-switch">
+        <span id="login-switch-text">没有账号？</span>
+        <a id="login-switch-link" href="#register">注册</a>
+      </p>
       <!-- 从主站被动跳转过来时（登录过期 / 账号禁用）说明原因 -->
       <div id="login-notice" class="login-notice hidden" role="status"></div>
 
-      <label class="login-field">
-        <span class="sr-only">用户名</span>
-        <input id="login-username" name="username" type="text" placeholder="用户名"
-               autocomplete="username" autocapitalize="off" spellcheck="false" maxlength="64">
-      </label>
-      <label class="login-field">
-        <span class="sr-only">密码</span>
-        <input id="login-password" name="password" type="password" placeholder="密码"
-               autocomplete="current-password">
-      </label>
-      <label class="login-field register-only">
-        <span class="sr-only">确认密码</span>
-        <input id="login-password2" name="password2" type="password" placeholder="再次输入密码"
-               autocomplete="new-password">
-      </label>
-      <div class="login-hint register-only">用户名 2~64 个字符，密码至少 6 位</div>
+      <div class="login-field">
+        <label class="login-label" for="login-username">用户名</label>
+        <div class="login-control">
+          <input id="login-username" name="username" type="text" placeholder="请输入用户名（2~64 个字符）"
+                 autocomplete="username" autocapitalize="off" spellcheck="false" maxlength="64">
+        </div>
+      </div>
+
+      <div class="login-field">
+        <label class="login-label" for="login-password">密码</label>
+        <div class="login-control has-eye">
+          <input id="login-password" name="password" type="password" placeholder="请输入密码（至少 6 位）"
+                 autocomplete="current-password">
+          <button type="button" class="login-eye" data-eye="login-password"
+                  aria-label="显示密码" aria-pressed="false"></button>
+        </div>
+      </div>
+
+      <div class="login-field register-only">
+        <label class="login-label" for="login-password2">确认密码</label>
+        <div class="login-control has-eye">
+          <input id="login-password2" name="password2" type="password" placeholder="请再次输入密码"
+                 autocomplete="new-password">
+          <button type="button" class="login-eye" data-eye="login-password2"
+                  aria-label="显示密码" aria-pressed="false"></button>
+        </div>
+      </div>
 
       <div id="login-error" class="login-error" role="alert"></div>
 
       <button id="login-submit" type="submit" class="login-primary">登录</button>
-
-      <div class="login-switch">
-        <span id="login-switch-text">没有账号？</span>
-        <a id="login-switch-link" href="#register">注册新账号</a>
-      </div>
     </form>
-
-    <div class="login-foot">Spring Harness</div>
   </main>
 
   <script src="/static/login.js"></script>

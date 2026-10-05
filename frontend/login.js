@@ -43,24 +43,42 @@
   } catch { /* 存储不可用时留在登录页，提交时会提示 */ }
 
   const form = $("login-form");
-  const card = form;
   const inputs = { username: $("login-username"), password: $("login-password"), password2: $("login-password2") };
   let mode = "login";
   let busy = false;
 
+  // 提交按钮文案：忙碌时要写"登录中…"，统一从这里取，避免两处写法不一致
+  const submitLabel = () => (mode === "register" ? "注册并登录" : "登录");
+
   function setMode(m) {
     mode = m === "register" ? "register" : "login";
     const reg = mode === "register";
-    card.classList.toggle("is-register", reg);
-    $("login-title").textContent = reg ? "注册新账号" : "登录 Spring Harness";
-    $("login-sub").textContent = reg ? "注册后将自动登录" : "登录后即可开始与 Agent 协作";
-    $("login-submit").textContent = reg ? "注册并登录" : "登录";
+    form.classList.toggle("is-register", reg);
+    $("login-title").textContent = reg ? "注册" : "登录";
     $("login-switch-text").textContent = reg ? "已有账号？" : "没有账号？";
-    $("login-switch-link").textContent = reg ? "返回登录" : "注册新账号";
+    $("login-switch-link").textContent = reg ? "登录" : "注册";
     $("login-switch-link").setAttribute("href", reg ? "#login" : "#register");
+    $("login-submit").textContent = submitLabel();
     inputs.password.autocomplete = reg ? "new-password" : "current-password";
     document.title = (reg ? "注册" : "登录") + " - Spring Harness";
+    // 切换模式时把已显示的密码收回隐藏状态，避免明文留在屏幕上
+    form.querySelectorAll(".login-eye").forEach((btn) => setRevealed(btn, false));
     showError("");
+  }
+
+  /* ---- 显示/隐藏密码：隐藏时画带斜杠的眼睛，点一下变明文 ---- */
+  const EYE_SVG = (slashed) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+    stroke-linecap="round" stroke-linejoin="round">${slashed
+      ? '<path d="M4 4.5l15.5 15.5"/><path d="M9.8 6A9.9 9.9 0 0 1 12 5.7c5.9 0 9.5 6.3 9.5 6.3a17.5 17.5 0 0 1-3.6 4.2M6.6 7.8A17.6 17.6 0 0 0 2.5 12s3.6 6.3 9.5 6.3c1 0 1.9-.2 2.7-.5"/><path d="M9.7 9.9a2.9 2.9 0 0 0 3.9 3.9"/>'
+      : '<path d="M2.5 12S6.1 5.7 12 5.7 21.5 12 21.5 12 17.9 18.3 12 18.3 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.9"/>'}</svg>`;
+
+  function setRevealed(btn, show) {
+    const input = $(btn.dataset.eye);
+    if (!input) return;
+    input.type = show ? "text" : "password";
+    btn.innerHTML = EYE_SVG(!show);
+    btn.setAttribute("aria-pressed", String(show));
+    btn.setAttribute("aria-label", show ? "隐藏密码" : "显示密码");
   }
 
   function showError(msg, field) {
@@ -76,8 +94,7 @@
     busy = on;
     const btn = $("login-submit");
     btn.disabled = on;
-    if (on) btn.textContent = mode === "register" ? "注册中…" : "登录中…";
-    else btn.textContent = mode === "register" ? "注册并登录" : "登录";
+    btn.textContent = on ? (mode === "register" ? "注册中…" : "登录中…") : submitLabel();
   }
 
   /** POST 认证接口；网关统一返回 {code, message, data}，错误详情在 message 里 */
@@ -149,6 +166,12 @@
 
   form.addEventListener("submit", onSubmit);
   form.addEventListener("input", () => { if ($("login-error").textContent) showError(""); });
+  // 显示/隐藏密码（事件委托：按钮是静态的，但图标在切换时会重画）
+  form.addEventListener("click", (e) => {
+    const btn = e.target.closest(".login-eye");
+    if (btn) setRevealed(btn, btn.getAttribute("aria-pressed") !== "true");
+  });
+  form.querySelectorAll(".login-eye").forEach((btn) => setRevealed(btn, false));
   // 用户名回车：密码还空着时只跳到密码框，不急着报错
   inputs.username.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !inputs.password.value) {

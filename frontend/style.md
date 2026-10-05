@@ -42,7 +42,7 @@
 
 | 用途 | 值 | 变量 |
 |---|---|---|
-| 页面底（侧栏、登录页背景） | `#f9f8f6` 暖白 | `--ground` |
+| 页面底（应用外壳的侧栏与主区背景） | `#f9f8f6` 暖白 | `--ground` |
 | 主卡片、对话框、菜单 | `#ffffff` | `--bg` / `--panel` |
 | 输入框、次按钮 | `#f2f2f2`（hover `#ebebeb`） | — |
 | 分组卡片（设置页） | `#f7f7f7`（hover `#efefef`） | `--admin-card` |
@@ -89,7 +89,8 @@ font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-s
 | 字号 | 字重 | 用于 |
 |---|---|---|
 | 46px | 800 | 只用于首页字标 `SPRING HARNESS`（`#hero`），别处不用 |
-| 20px / 28px 行高 | 600 | 页面标题（`.page-title`）、登录卡片标题、账号名 |
+| 24px / 32px 行高 | 600 | 独立页面（登录/注册）的主标题：页面上唯一的大标题，用了它就别再加别的层级 |
+| 20px / 28px 行高 | 600 | 页面标题（`.page-title`）、账号名 |
 | 17px / 24px | 600 | 对话框标题 |
 | 16px | 400 | 聊天正文、聊天输入框（`--fs-*` 变量） |
 | 15px | 400 | 大号主按钮（登录按钮） |
@@ -125,7 +126,7 @@ font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-s
 | 12px | 主卡片、分组卡片、表格卡片、积分卡、大号输入框 |
 | 16px | 对话框、底部用户菜单、提问卡 |
 | 18px | 用户消息气泡 |
-| 20px | 登录卡片、计划面板 |
+| 20px | 计划面板 |
 | 24px | 聊天输入卡片 |
 | 999px | 胶囊：快捷提示、"最新消息"按钮、骨架条 |
 
@@ -137,13 +138,13 @@ font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-s
 | 600px | 设置类页面（账号、积分、系统设置） |
 | 1080px | 宽表格页（`.admin-page.wide`） |
 | 420px | 对话框 |
-| 400px | 登录卡片 |
+| 380px | 登录/注册这类独立页面的表单栏 |
 | 240px | 侧栏 / 左侧导航 |
 
 ### 间距
 
 - 基本按 4px 递增：列表内 2px，控件内间距 8–10px，组件之间 14–18px，分组之间 28px。
-- 主卡片内边距：设置页 `48px 32px 72px`；对话框 `24px 24px 20px`；登录卡片 `36px 32px 24px`。
+- 主卡片内边距：设置页 `48px 32px 72px`；对话框 `24px 24px 20px`。
 - 宁可多留白，不要用分隔线把东西隔开。
 
 ## 6. 组件
@@ -169,6 +170,28 @@ font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-s
 - 侧栏列表行：36px 高、圆角 10px、hover `.04`、选中 `.06`。次要信息（大小、时间、删除按钮）**只在悬停时出现**，平时一行干净的名称。
 - 侧栏可滚动区底部用 `mask-image` 渐隐 40px，不加分隔线。
 - 设置类页面：主卡片内居中 600px 窄栏，依次是页面标题 → 分组小标题（`.section-caption`）→ 灰色分组卡片。
+
+**独立页面**（登录/注册这类不在应用外壳里的页面）：**不套主卡片，直接是"页面"**——白底一整页，
+品牌标钉在**左上角**当页头，表单是页面中间一条 380px 窄栏（只做水平居中），栏内全部**左对齐**；
+没有白底面板、没有圆角、没有阴影。
+
+```css
+body.login-page { display: flex; flex-direction: column; min-height: 100vh; background: var(--bg); }
+.login-topbar { display: flex; flex: 0 0 auto; align-items: center; gap: 10px; padding: 20px 24px; }
+/* 表单从顶部固定距离开始往下排，不垂直居中：居中时登录 2 个字段、注册 3 个字段，
+   切换模式标题会上下跳；固定上边距后标题稳定在页面高度 14% 左右 */
+.login-wrap { flex: 1; padding: 56px 24px 80px; }
+.login-form { width: 100%; max-width: 380px; margin: 0 auto; text-align: left; }
+```
+
+顺序固定：页头（Logo 28px + 品牌名 16px/600）→ 24px 主标题 → "没有账号？注册"一行（弱文字 + 蓝色链接）→
+字段（13px 标签在输入框**上方**）→ 错误位（预留高度，出错时按钮不跳）→ 整宽黑色主按钮。
+
+- 字段的格式要求直接写进 placeholder（如"请输入用户名（2~64 个字符）"），不要另外加一行提示文字。
+
+- 密码框右侧放显示/隐藏按钮（`.login-eye`，30px 方形图标按钮，隐藏时画带斜杠的眼睛）；
+  切换登录/注册时把已显示的密码收回隐藏态。
+- 表单独占一栏，主按钮 `display: block; width: 100%` —— 把表单从 flex 改回块级时容易漏掉这条。
 
 ### 6.2 按钮
 
@@ -205,7 +228,10 @@ font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-s
 .input.invalid { border-color: rgba(192, 57, 43, 0.45); background: #fff; }
 ```
 
-- 灰底、无边框；聚焦时变白底加浅描边。**不要**用蓝色聚焦环或发光阴影。
+- 灰底、无边框。聚焦态按所在底色分两种写法，**两者不叠加**：
+  - 输入框直接放在暖白/灰色背景上（登录页、对话框）：聚焦把灰底**加深一档**（`#f2f2f2` → `#ebebeb`），不画线。
+  - 输入框放在灰色分组卡片里（设置页）：卡片内本来就是白底，聚焦改成白底 + `1px solid rgba(0,0,0,0.16)` 描边。
+- **不要**用蓝色聚焦环或发光阴影。
 - 放在灰色分组卡片里的输入框反过来用白底（`.group-card .settings-number { background: #fff }`）。
 - 有单位的输入框在右侧放单位文字（MB、tokens），13px 弱文字。
 - 开关用 `input.switch`：关闭时灰底 `rgba(0,0,0,0.15)`，打开时 `#111`。不要用绿色开关。

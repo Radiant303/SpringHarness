@@ -1,79 +1,113 @@
-/* 独立登录/注册页：暖白底 + 居中白色卡片，灰底输入框，整宽黑色主按钮（依赖 index.css 的颜色变量） */
+/* 独立登录/注册页：不是卡片，而是"页面"——品牌标在左上角，表单在剩余空间里居中成一条窄栏，
+   栏内左对齐（依赖 index.css 的颜色变量）。 */
 
-body.login-page { min-height: 100%; height: auto; background: var(--ground); }
-
-.login-wrap {
+body.login-page {
   display: flex;
+  flex-direction: column;
   min-height: 100vh;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 40px 16px 24px;
+  background: var(--bg);   /* 白底页面（不是卡片），输入框的灰底靠底色差区分 */
 }
 
-.login-card {
+/* ---- 页头：品牌标固定在左上角 ---- */
+.login-topbar {
   display: flex;
-  width: min(400px, 100%);
-  flex-direction: column;
-  padding: 36px 32px 24px;
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  border-radius: 20px;
-  background: #fff;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.05);
-  text-align: center;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 10px;
+  padding: 20px 24px;
 }
-
 .login-logo {
   display: block;
-  width: 56px;
-  height: 56px;
-  margin: 0 auto 16px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   object-fit: cover;
   user-select: none;
   -webkit-user-drag: none;
 }
-.login-title { margin: 0; font-size: 20px; line-height: 28px; font-weight: 600; color: var(--text); }
-.login-sub { margin: 6px 0 24px; font-size: 14px; line-height: 20px; color: var(--text-faint); }
+.login-brand { font-size: 16px; font-weight: 600; letter-spacing: 0.02em; color: var(--text); }
+
+/* ---- 表单：从顶部固定距离开始往下排（不垂直居中）----
+   居中的话，登录 2 个字段、注册 3 个字段，切换模式时标题会上下跳；
+   固定上边距后标题位置稳定。17vh 让标题大致落在页面高度 24% 处（与参考图一致），
+   矮屏有 64px 保底，高屏封顶 200px 免得飘得太靠下。 */
+.login-wrap { flex: 1; padding: clamp(64px, 17vh, 200px) 24px 80px; }
+.login-form {
+  width: 100%;
+  max-width: 380px;
+  margin: 0 auto;      /* 只做水平居中 */
+  text-align: left;
+}
+
+.login-title { margin: 0; font-size: 24px; line-height: 32px; font-weight: 600; color: var(--text); }
+.login-switch { margin: 6px 0 32px; font-size: 14px; line-height: 22px; color: var(--text-dim); }
+.login-switch a { color: var(--link); text-decoration: none; }
+.login-switch a:hover { text-decoration: underline; }
 
 /* 跳转原因：浅暖色提示条（与灰底输入框区分开），不用红绿色块 */
 .login-notice {
-  margin: -8px 0 16px;
-  padding: 9px 12px;
+  margin: -16px 0 24px;
+  padding: 10px 12px;
   border-radius: 10px;
   background: var(--notice-bg);
   font-size: 13px;
   line-height: 20px;
   color: var(--warn);
-  text-align: left;
 }
 
-.login-field { display: block; margin-bottom: 10px; }
-.login-field input {
+/* ---- 字段：标签在输入框上方 ---- */
+.login-field { margin-bottom: 18px; }
+.login-label { display: block; margin-bottom: 8px; font-size: 13px; line-height: 18px; color: var(--text-dim); }
+.login-control { position: relative; display: block; }
+.login-control input {
   width: 100%;
   height: 44px;
   padding: 0 14px;
-  border: 1px solid transparent;
+  border: none;                       /* 无边框：聚焦只变底色（与页面其它输入框一致） */
   border-radius: 12px;
   outline: none;
   background: #f2f2f2;
   font: inherit;
   font-size: 14px;
   color: var(--text);
-  transition: border-color 0.15s, background-color 0.15s;
+  transition: background-color 0.15s;
 }
-.login-field input::placeholder { color: var(--text-faint); }
-.login-field input:focus { border-color: rgba(0, 0, 0, 0.16); background: #fff; }
-.login-field input.invalid { border-color: rgba(192, 57, 43, 0.45); background: #fff; }
+.login-control input::placeholder { color: var(--text-faint); }
+.login-control input:focus { background: #ebebeb; }
+/* 校验失败：无边框设计下用浅红底提示，配合下方红字 */
+.login-control input.invalid { background: #fdecea; }
+.login-control.has-eye input { padding-right: 46px; }
 
-.login-hint { margin: 2px 2px 0; font-size: 12px; line-height: 18px; color: var(--text-faint); text-align: left; }
+/* 显示/隐藏密码 */
+.login-eye {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-faint);
+  transform: translateY(-50%);
+  transition: background-color 0.15s, color 0.15s;
+}
+.login-eye:hover { background: var(--hover-bg); color: var(--text-dim); }
+.login-eye svg { display: block; width: 18px; height: 18px; }
 
-/* 注册专属字段：仅注册模式显示 */
-.login-card:not(.is-register) .register-only { display: none; }
+/* ---- 注册专属字段：仅注册模式显示 ---- */
+.login-form:not(.is-register) .register-only { display: none; }
 
-.login-error { min-height: 20px; margin: 8px 2px 8px; font-size: 13px; line-height: 20px; color: var(--danger); text-align: left; }
+/* 预留一行错误位，出错时按钮不跳；负外边距抵消字段自身的外边距，避免留白过大 */
+.login-error { min-height: 18px; margin: -6px 0 10px; font-size: 13px; line-height: 20px; color: var(--danger); }
 
 .login-primary {
+  display: block;
+  width: 100%;                        /* 表单独占一栏，主按钮整宽 */
   height: 44px;
   border: none;
   border-radius: 12px;
@@ -82,25 +116,11 @@ body.login-page { min-height: 100%; height: auto; background: var(--ground); }
   font-size: 15px;
   transition: background-color 0.15s, opacity 0.15s;
 }
-.login-primary:hover { background: #000; }
+.login-primary:hover:not(:disabled) { background: #000; }
 .login-primary:disabled { opacity: 0.55; cursor: progress; }
 
-.login-switch { margin-top: 18px; font-size: 13px; color: var(--text-faint); }
-.login-switch a { color: var(--link); text-decoration: none; }
-.login-switch a:hover { text-decoration: underline; }
-
-.login-foot { margin-top: 24px; font-size: 12px; color: rgba(0, 0, 0, 0.3); }
-
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-}
-
 @media (max-width: 480px) {
-  .login-wrap { justify-content: flex-start; padding-top: 12vh; }
-  .login-card { padding: 28px 20px 20px; border-radius: 16px; }
+  .login-topbar { padding: 16px 20px; }
+  .login-wrap { padding: 32px 20px 48px; }   /* 窄屏往上收，少滚一点 */
+  .login-title { font-size: 22px; }
 }
