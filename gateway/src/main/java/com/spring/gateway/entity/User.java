@@ -51,6 +51,9 @@ public class User {
     /** 账号状态：active / disabled。 */
     private String status;
 
+    /** 单工作区上限覆盖值（字节）；null = 跟随全局设置。 */
+    private Long workQuotaBytes;
+
     /** 创建时间（UTC）。 */
     private LocalDateTime createdAt;
 }

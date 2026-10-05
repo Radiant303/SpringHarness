@@ -45,6 +45,7 @@ public class WorkService {
     private final MessageMapper messageMapper;
     private final UserMapper userMapper;
     private final EngineClient engineClient;
+    private final SystemSettingService systemSettingService;
 
     @Value("${app.data-root}")
     private String dataRoot;
@@ -194,6 +195,20 @@ public class WorkService {
      */
     public String workspacePath(String workId) {
         return dataRoot + "/works/" + workId;
+    }
+
+    /**
+     * 该 work 生效的单工作区上限（字节）：所属用户有覆盖值用覆盖值，否则用全局设置
+     *
+     * @param row work 行
+     * @return 生效的上限字节数
+     */
+    public long effectiveWorkMaxBytes(Work row) {
+        User user = userMapper.selectById(row.getUserId());
+        if (user != null && user.getWorkQuotaBytes() != null) {
+            return user.getWorkQuotaBytes();
+        }
+        return systemSettingService.getWorkMaxBytes();
     }
 
     /** 遍历目录求字节和；目录不存在视为 0 */

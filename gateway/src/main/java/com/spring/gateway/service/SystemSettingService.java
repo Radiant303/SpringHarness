@@ -45,6 +45,34 @@ public class SystemSettingService {
     }
 
     /**
+     * 读长整型设置；键不存在或值无法解析时返回默认值
+     *
+     * @param key          设置键
+     * @param defaultValue 键缺失或值非法时的默认值
+     * @return 设置值
+     */
+    public long getLong(String key, long defaultValue) {
+        SystemSetting row = systemSettingMapper.selectById(key);
+        if (row == null) {
+            return defaultValue;
+        }
+        try {
+            return Long.parseLong(row.getSettingValue().trim());
+        } catch (NumberFormatException e) {
+            return defaultValue;
+        }
+    }
+
+    /**
+     * 全局单工作区上限（字节）；默认 20MB
+     *
+     * @return 上限字节数
+     */
+    public long getWorkMaxBytes() {
+        return getLong(SystemSetting.KEY_WORK_MAX_BYTES, 20971520L);
+    }
+
+    /**
      * 写设置（upsert：存在更新值与 updated_at，不存在插入）
      *
      * @param key   设置键

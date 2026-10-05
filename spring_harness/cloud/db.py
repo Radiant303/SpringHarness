@@ -67,6 +67,8 @@ class UserRow(Base):
     role: Mapped[str] = mapped_column(String(16), nullable=False, default="user")
     # 账号状态：active / disabled
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
+    # 单工作区上限的每用户覆盖值（NULL = 跟随全局默认）
+    work_quota_bytes: Mapped[int | None] = mapped_column(_BigInt, nullable=True)
     created_at: Mapped[datetime.datetime] = mapped_column(
         MicrosecondDateTime, nullable=False, default=utc_now,
     )

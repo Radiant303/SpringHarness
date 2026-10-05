@@ -10,7 +10,7 @@
 - POST /internal/sessions/{id}/messages           追加（newSegment 控制开新段；段自增、title IS NULL
                                                    时写入、updated_at 推进在服务端单事务内完成）
 - POST /internal/sessions/{id}/delete             软删除（404 → False）
-- GET  /internal/works/{workId}                   work 详情（含派生 workspacePath）
+- GET  /internal/works/{workId}                   work 详情（含派生 workspacePath 与生效上限 workMaxBytes）
 - POST /internal/works/default                    ensure-default（幂等，返回默认 work）
 - POST /internal/works/{workId}/size              上报 work 目录占用字节数
 """
@@ -79,6 +79,7 @@ class GatewayWorkRow:
     size_bytes: int
     is_default: bool
     workspace_path: str
+    work_max_bytes: int
 
     @classmethod
     def from_payload(cls, payload: dict) -> GatewayWorkRow:
@@ -89,6 +90,7 @@ class GatewayWorkRow:
             size_bytes=payload.get("sizeBytes", 0),
             is_default=payload.get("defaultWork", False),
             workspace_path=payload.get("workspacePath", ""),
+            work_max_bytes=int(payload.get("workMaxBytes") or 0),
         )
 
 

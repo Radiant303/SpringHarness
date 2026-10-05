@@ -14,6 +14,7 @@ import com.spring.gateway.entity.Work;
  * @param sizeBytes     目录当前占用字节数
  * @param defaultWork   是否默认项目
  * @param workspacePath 派生的工作区目录路径
+ * @param workMaxBytes  生效的单工作区上限字节数
  * @param createdAt     创建时间
  * @param updatedAt     更新时间
  */
@@ -24,6 +25,7 @@ public record InternalWorkSummary(
         long sizeBytes,
         boolean defaultWork,
         String workspacePath,
+        long workMaxBytes,
         String createdAt,
         String updatedAt
 ) {
@@ -33,9 +35,10 @@ public record InternalWorkSummary(
      *
      * @param row           works 行
      * @param workspacePath 网关派生的工作区目录路径
+     * @param workMaxBytes  生效的单工作区上限字节数
      * @return work 摘要
      */
-    public static InternalWorkSummary from(Work row, String workspacePath) {
+    public static InternalWorkSummary from(Work row, String workspacePath, long workMaxBytes) {
         return new InternalWorkSummary(
                 row.getId(),
                 row.getUserId(),
@@ -43,6 +46,7 @@ public record InternalWorkSummary(
                 row.getSizeBytes() == null ? 0L : row.getSizeBytes(),
                 Boolean.TRUE.equals(row.getIsDefault()),
                 workspacePath,
+                workMaxBytes,
                 TimeFormat.isoUtc(row.getCreatedAt()),
                 TimeFormat.isoUtc(row.getUpdatedAt()));
     }

@@ -23,7 +23,7 @@
         <h2>用户管理</h2>
         <table class="admin-table" id="user-table">
           <thead>
-            <tr><th>用户名</th><th>角色</th><th>状态</th><th>存储配额</th><th>注册时间</th><th>操作</th></tr>
+            <tr><th>用户名</th><th>角色</th><th>状态</th><th>存储配额</th><th>work 上限</th><th>注册时间</th><th>操作</th></tr>
           </thead>
           <tbody id="user-tbody"></tbody>
         </table>
@@ -51,6 +51,11 @@
         <label class="settings-row">
           <input type="checkbox" id="registration-open">
           开放注册（关闭后新用户无法自行注册）
+        </label>
+        <label class="settings-row">
+          单工作区上限（MB）：
+          <input type="number" id="work-max-mb" min="1" step="1" class="settings-number">
+          <span class="settings-hint">单个项目目录允许占用的最大空间，用户可被单独覆盖</span>
         </label>
         <button id="settings-save" class="admin-btn">保存</button>
         <span id="settings-tip" class="settings-tip"></span>

@@ -66,7 +66,7 @@ function renderUsers() {
   const tbody = $("user-tbody");
   tbody.innerHTML = "";
   if (!users.length) {
-    tbody.innerHTML = `<tr class="empty-row"><td colspan="6">暂无用户</td></tr>`;
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="7">暂无用户</td></tr>`;
     return;
   }
   for (const u of users) {
@@ -83,6 +83,7 @@ function renderUsers() {
     if (operable) {
       actions.push(`<button class="admin-btn" data-act="password" data-id="${u.user_id}" data-name="${u.username}">重置密码</button>`);
       actions.push(`<button class="admin-btn" data-act="quota" data-id="${u.user_id}" data-name="${u.username}" data-quota="${u.quota_bytes}">设配额</button>`);
+      actions.push(`<button class="admin-btn" data-act="workquota" data-id="${u.user_id}" data-name="${u.username}" data-quota="${u.work_quota_bytes == null ? "" : u.work_quota_bytes}">work上限</button>`);
     }
     if (myRole === "owner" && !isOwnerRow) {
       const toAdmin = u.role !== "admin";
@@ -94,6 +95,7 @@ function renderUsers() {
       <td><span class="role-badge ${u.role}">${ROLE_LABELS[u.role] || u.role}</span></td>
       <td class="${disabled ? "status-disabled" : "status-active"}">${disabled ? "已禁用" : "正常"}</td>
       <td>${fmtBytes(u.quota_bytes)}</td>
+      <td>${u.work_quota_bytes == null ? '<span class="quota-inherit">跟随全局</span>' : fmtBytes(u.work_quota_bytes)}</td>
       <td>${fmtTime(u.created_at)}</td>
       <td><div class="row-actions">${actions.join("")}</div></td>`;
     tr.cells[0].textContent = u.username;
@@ -125,6 +127,18 @@ async function onUserAction(btn) {
       const mb = Number(input);
       if (!Number.isFinite(mb) || mb < 0) { alert("请输入非负数字"); return; }
       await api(`/api/admin/users/${id}/quota`, { method: "POST", body: { quotaBytes: Math.round(mb * (1 << 20)) } });
+    } else if (act === "workquota") {
+      const current = btn.dataset.quota === "" ? "" : String(Math.round(Number(btn.dataset.quota) / (1 << 20)));
+      const input = prompt(`为 ${btn.dataset.name} 设置单工作区上限（MB），留空恢复跟随全局：`, current);
+      if (input == null) return;
+      const trimmed = input.trim();
+      if (trimmed === "") {
+        await api(`/api/admin/users/${id}/work-quota`, { method: "POST", body: { quotaBytes: null } });
+      } else {
+        const mb = Number(trimmed);
+        if (!Number.isFinite(mb) || mb < 0) { alert("请输入非负数字"); return; }
+        await api(`/api/admin/users/${id}/work-quota`, { method: "POST", body: { quotaBytes: Math.round(mb * (1 << 20)) } });
+      }
     }
     await loadUsers();
   } catch (e) {
@@ -187,14 +201,23 @@ async function loadSettings() {
   $("settings-section").classList.remove("hidden");
   const data = await api("/api/admin/settings");
   $("registration-open").checked = !data || data.registrationOpen !== false;
+  $("work-max-mb").value = data && data.workMaxBytes != null
+    ? Math.round(Number(data.workMaxBytes) / (1 << 20))
+    : 20;
 }
 
 async function saveSettings() {
+  const mb = Number($("work-max-mb").value);
+  if (!Number.isFinite(mb) || mb < 1) { showError("单工作区上限至少 1 MB"); return; }
   $("settings-save").disabled = true;
   try {
     await api("/api/admin/settings/registration", {
       method: "POST",
       body: { open: $("registration-open").checked },
+    });
+    await api("/api/admin/settings/work-max-bytes", {
+      method: "POST",
+      body: { bytes: Math.round(mb * (1 << 20)) },
     });
     $("settings-tip").textContent = "已保存";
     setTimeout(() => { $("settings-tip").textContent = ""; }, 2000);

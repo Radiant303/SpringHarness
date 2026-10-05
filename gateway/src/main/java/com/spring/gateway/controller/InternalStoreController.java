@@ -130,7 +130,8 @@ public class InternalStoreController {
     @GetMapping("/works/{workId}")
     public InternalWorkSummary getWork(@PathVariable String workId) {
         Work row = workService.getForInternal(workId);
-        return InternalWorkSummary.from(row, workService.workspacePath(workId));
+        return InternalWorkSummary.from(row, workService.workspacePath(workId),
+                workService.effectiveWorkMaxBytes(row));
     }
 
     /**
@@ -142,7 +143,8 @@ public class InternalStoreController {
     @PostMapping("/works/default")
     public InternalWorkSummary ensureDefaultWork(@Valid @RequestBody InternalEnsureDefaultWorkRequest request) {
         Work row = workService.ensureDefault(request.userId());
-        return InternalWorkSummary.from(row, workService.workspacePath(row.getId()));
+        return InternalWorkSummary.from(row, workService.workspacePath(row.getId()),
+                workService.effectiveWorkMaxBytes(row));
     }
 
     /**

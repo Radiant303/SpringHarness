@@ -8,6 +8,7 @@ import com.spring.gateway.dto.AdminQuotaRequest;
 import com.spring.gateway.dto.AdminRoleRequest;
 import com.spring.gateway.dto.AdminStatusRequest;
 import com.spring.gateway.dto.AdminUserView;
+import com.spring.gateway.dto.AdminWorkQuotaRequest;
 import com.spring.gateway.service.AdminUserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -108,6 +109,22 @@ public class AdminUserController {
         return Result.ok(null);
     }
 
+    /**
+     * 调整单工作区上限覆盖值；quotaBytes 为 null 时恢复跟随全局设置
+     *
+     * @param actorRole 当前用户角色（拦截器注入）
+     * @param id        目标用户 ID
+     * @param req       覆盖值或 null
+     * @return 空数据返回体
+     */
+    @PostMapping("/{id}/work-quota")
+    public Result<Void> setWorkQuota(@RequestAttribute(AuthInterceptor.ATTR_USER_ROLE) String actorRole,
+                                     @PathVariable Long id,
+                                     @Valid @RequestBody AdminWorkQuotaRequest req) {
+        adminUserService.setWorkQuota(actorRole, id, req.quotaBytes());
+        return Result.ok(null);
+    }
+
     private static AdminUserView toView(com.spring.gateway.entity.User user) {
         return new AdminUserView(
                 String.valueOf(user.getId()),  // 字符串下发：雪花 ID 超 2^53，JS 数字会丢精度
@@ -115,6 +132,7 @@ public class AdminUserController {
                 user.getRole(),
                 user.getStatus(),
                 user.getQuotaBytes(),
+                user.getWorkQuotaBytes(),
                 TimeFormat.isoUtc(user.getCreatedAt()));
     }
 }

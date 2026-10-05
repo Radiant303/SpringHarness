@@ -1,6 +1,7 @@
 package com.spring.gateway.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.spring.gateway.common.BizException;
 import com.spring.gateway.entity.User;
 import com.spring.gateway.mapper.UserMapper;
@@ -110,6 +111,22 @@ public class AdminUserService {
         row.setId(targetId);
         row.setQuotaBytes(quotaBytes);
         userMapper.updateById(row);
+    }
+
+    /**
+     * 调整单工作区上限覆盖值（字节）；null 表示恢复跟随全局设置
+     *
+     * @param actorRole  操作者角色
+     * @param targetId   目标用户 ID
+     * @param quotaBytes 覆盖值或 null
+     * @throws BizException 目标不存在（404）；越权（403）
+     */
+    public void setWorkQuota(String actorRole, Long targetId, Long quotaBytes) {
+        requireOperable(actorRole, requireTarget(targetId));
+        // updateById 默认忽略 null 字段，写 NULL（恢复跟随全局）必须显式 set
+        userMapper.update(null, new LambdaUpdateWrapper<User>()
+                .eq(User::getId, targetId)
+                .set(User::getWorkQuotaBytes, quotaBytes));
     }
 
     private User requireTarget(Long targetId) {

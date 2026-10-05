@@ -4,6 +4,7 @@ import com.spring.gateway.common.AuthInterceptor;
 import com.spring.gateway.common.BizException;
 import com.spring.gateway.common.Result;
 import com.spring.gateway.dto.AdminRegistrationRequest;
+import com.spring.gateway.dto.AdminWorkMaxBytesRequest;
 import com.spring.gateway.entity.SystemSetting;
 import com.spring.gateway.entity.User;
 import com.spring.gateway.service.SystemSettingService;
@@ -34,11 +35,13 @@ public class AdminSettingsController {
     /**
      * 当前系统设置
      *
-     * @return 设置快照（registrationOpen）
+     * @return 设置快照（registrationOpen、workMaxBytes）
      */
     @GetMapping
     public Result<Map<String, Object>> get() {
-        return Result.ok(Map.of("registrationOpen", systemSettingService.isRegistrationOpen()));
+        return Result.ok(Map.of(
+                "registrationOpen", systemSettingService.isRegistrationOpen(),
+                "workMaxBytes", systemSettingService.getWorkMaxBytes()));
     }
 
     /**
@@ -55,6 +58,23 @@ public class AdminSettingsController {
             throw new BizException(403, "仅站长可修改系统设置");
         }
         systemSettingService.set(SystemSetting.KEY_REGISTRATION_OPEN, String.valueOf(req.open()));
+        return Result.ok(null);
+    }
+
+    /**
+     * 设置全局单工作区上限（仅站长）
+     *
+     * @param actorRole 当前用户角色（拦截器注入）
+     * @param req       上限字节数
+     * @return 空数据返回体
+     */
+    @PostMapping("/work-max-bytes")
+    public Result<Void> setWorkMaxBytes(@RequestAttribute(AuthInterceptor.ATTR_USER_ROLE) String actorRole,
+                                        @Valid @RequestBody AdminWorkMaxBytesRequest req) {
+        if (!User.ROLE_OWNER.equals(actorRole)) {
+            throw new BizException(403, "仅站长可修改系统设置");
+        }
+        systemSettingService.set(SystemSetting.KEY_WORK_MAX_BYTES, String.valueOf(req.bytes()));
         return Result.ok(null);
     }
 }

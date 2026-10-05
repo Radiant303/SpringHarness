@@ -82,8 +82,6 @@ class Cloud(ConfigBase):
     gateway_base_url: str = "http://127.0.0.1:8080"
     # 内部接口的共享静态令牌
     internal_token: str = "springharness-internal-dev-token-0123456789"
-    # 每个 work 的目录容量上限（字节），写工具调用前校验
-    work_max_bytes: int = 20971520
 
 
 class Config(ConfigBase):

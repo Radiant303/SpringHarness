@@ -103,4 +103,15 @@
 .usage-sep { color: var(--text-faint); }
 
 .settings-row { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.settings-number {
+  width: 90px;
+  font-size: 14px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+}
+.settings-hint { color: var(--text-faint); font-size: 12px; }
 .settings-tip { margin-left: 10px; color: var(--text-dim); font-size: 13px; }
+.quota-inherit { color: var(--text-faint); }
