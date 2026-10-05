@@ -610,6 +610,9 @@ function init() {
     el.onclick = () => switchPage(el.dataset.page);
   });
 
+  // 下拉框与日期框换成自绘控件（原生元素仍在 DOM 里，读写 .value、监听 change 都不变）
+  UI.enhance();
+
   // 账号页静态信息
   $("account-name").textContent = myName;
   $("account-username").textContent = myName;

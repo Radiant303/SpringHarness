@@ -450,7 +450,12 @@
       list.tabIndex = -1;
       const opts = [...select.options];
       const items = [];
+      // 当前选中项若被禁用（或没有选中项），把键盘起点挪到第一个可选项
       let active = Math.max(0, select.selectedIndex);
+      if (!opts[active] || opts[active].disabled) {
+        const first = opts.findIndex((o) => !o.disabled);
+        active = first >= 0 ? first : 0;
+      }
 
       const setActive = (i, scroll) => {
         items[active]?.classList.remove("active");
@@ -473,7 +478,10 @@
         item.setAttribute("aria-selected", String(i === select.selectedIndex));
         if (i === select.selectedIndex) item.classList.add("selected");
         if (o.disabled) { item.classList.add("disabled"); item.setAttribute("aria-disabled", "true"); }
-        item.append(h("span", "ui-option-label", o.textContent), icon("check", "ui-option-check"));
+        // 对勾在左侧、位置固定保留（与模型菜单的 .model-check 一致），选中项不靠色块区分
+        const check = h("span", "ui-option-check");
+        if (i === select.selectedIndex) check.appendChild(icon("check"));
+        item.append(check, h("span", "ui-option-label", o.textContent));
         item.addEventListener("mousemove", () => { if (!o.disabled && active !== i) setActive(i); });
         item.addEventListener("click", () => { if (!o.disabled) choose(i); });
         items.push(item);
@@ -502,10 +510,10 @@
           typed += e.key.toLowerCase();
           clearTimeout(typedTimer);
           typedTimer = setTimeout(() => { typed = ""; }, 600);
-          const hit = opts.findIndex((o, i) => !o.disabled && i !== active && o.textContent.toLowerCase().startsWith(typed))
-            ?? -1;
-          const again = opts.findIndex((o) => !o.disabled && o.textContent.toLowerCase().startsWith(typed));
-          const target = hit >= 0 ? hit : again;
+          // 先找当前项之后的（连续按同一字母可轮换），没有再从头找
+          const after = opts.findIndex((o, i) => !o.disabled && i > active && o.textContent.toLowerCase().startsWith(typed));
+          const fromTop = opts.findIndex((o) => !o.disabled && o.textContent.toLowerCase().startsWith(typed));
+          const target = after >= 0 ? after : fromTop;
           if (target >= 0) setActive(target, true);
         }
       });
@@ -550,7 +558,7 @@
     btn.setAttribute("aria-haspopup", "dialog");
     btn.setAttribute("aria-expanded", "false");
     const label = h("span", "ui-date-label");
-    btn.append(icon("calendar", "ui-date-icon"), label);
+    btn.append(label, icon("calendar", "ui-date-icon"));
     wrapNative(input, "ui-date", btn);
 
     const sync = () => {
@@ -633,13 +641,18 @@
         if (focus) grid.querySelector(`[data-date="${focusISO}"]`)?.focus();
       };
 
+      // 移到某天并把焦点落进网格。越出 min/max 就夹到边界那天：既不把焦点丢在禁用格上，
+      // 也不会因为整月都不可选而一路翻到很远的地方
       const moveTo = (d) => {
+        const iso = toISO(d);
+        if (input.min && iso < input.min) d = fromISO(input.min) || d;
+        else if (input.max && iso > input.max) d = fromISO(input.max) || d;
         focusDate = d;
         render(true);
       };
 
-      prev.addEventListener("click", () => { focusDate = addMonths(focusDate, -1); render(false); });
-      next.addEventListener("click", () => { focusDate = addMonths(focusDate, 1); render(false); });
+      prev.addEventListener("click", () => moveTo(addMonths(focusDate, -1)));
+      next.addEventListener("click", () => moveTo(addMonths(focusDate, 1)));
       grid.addEventListener("click", (e) => {
         const day = e.target.closest(".ui-cal-day");
         if (day && !day.disabled) choose(day.dataset.date);
@@ -667,6 +680,7 @@
           Home: () => addDays(focusDate, -((focusDate.getDay() + 6) % 7)),
           End: () => addDays(focusDate, 6 - ((focusDate.getDay() + 6) % 7)),
         };
+        // 回车/空格不在这里处理：日期是 <button>，浏览器会自己触发 click，走上面的选择逻辑
         if (moves[e.key]) {
           e.preventDefault();
           moveTo(moves[e.key]());
@@ -681,6 +695,7 @@
       render(false);
       btn.setAttribute("aria-expanded", "true");
       openPopover(btn, cal, () => btn.setAttribute("aria-expanded", "false"));
+      // 焦点落在当前选中日；没有选中（或该日不可选）时落到今天，让方向键立刻可用
       const target = grid.querySelector(".ui-cal-day.selected") || grid.querySelector('.ui-cal-day[tabindex="0"]');
       (target && !target.disabled ? target : todayBtn).focus();
     };

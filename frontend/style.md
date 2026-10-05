@@ -21,6 +21,9 @@
 | 发光阴影、彩色阴影、大面积投影 | 只用很淡的黑色阴影，且只用于浮层（菜单、对话框） |
 | 处处加边框、卡片套卡片 | 分组用灰底卡片 `#f7f7f7`，不加边框；只有表格卡片和主卡片有 1px 极淡描边 |
 | 大色块提示条（蓝底白字、绿底白字） | 浅色底 + 深色字：错误 `#fdecea` + 红字，提醒 `--notice-bg` + `--warn` |
+| **双层框**：同一个元素上既有边框/内圈又有焦点轮廓 | 焦点只留一圈：要么"换边框色 + 白底"，要么"一圈 outline"，两者不同时出现 |
+| 在密集网格（日历格）上画轮廓表示光标/选中 | 用底色：悬停 `--hover-bg`、光标 `--sb-active`、选中 `#111` 白字，不画线 |
+| 用浏览器原生控件外观（原生下拉弹层、日期面板、数字步进箭头） | 用 §6.12 的自绘控件 |
 | UI 里放 emoji 当图标 | 内联 SVG 线性图标（见 §6.10） |
 | 浏览器 `alert / confirm / prompt` | `UI.dialog / UI.confirm / UI.prompt / UI.toast`（见 §6.6） |
 | 登录用弹窗盖在页面上 | 独立页面 `login.html` |
@@ -178,7 +181,11 @@ font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-s
 | 危险实心按钮 | 底 `--danger`、白字 | **只用在**删除/禁用确认对话框的确认键 |
 | 图标按钮 | 透明底、32×32、圆角 8px、`--text-dim`，hover 底 `.04` | 收起侧栏、关闭 |
 
-按钮没有边框，没有阴影，没有渐变。禁用状态 `opacity: 0.5 ~ 0.55`。
+- **按钮不加边框**（`button { border: 1px solid transparent }`，任何状态都不要把它显出来）、没有阴影、没有渐变。
+  悬停/选中只变底色；"已打开"这类状态也用底色表达（如 `[aria-expanded="true"]`）。
+- 键盘焦点给按钮画**一圈** `:focus-visible` outline（`2px solid rgba(23,131,255,0.4)`，`outline-offset: 1px`，与 `input.switch` 一致）；
+  鼠标点击不显示焦点样式。不要用"边框变色 + 底变白"来表示按钮焦点——那是输入框的做法，会叠成双层框。
+- 禁用状态 `opacity: 0.5 ~ 0.55`。
 
 ### 6.3 输入框
 
@@ -202,6 +209,8 @@ font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-s
 - 放在灰色分组卡片里的输入框反过来用白底（`.group-card .settings-number { background: #fff }`）。
 - 有单位的输入框在右侧放单位文字（MB、tokens），13px 弱文字。
 - 开关用 `input.switch`：关闭时灰底 `rgba(0,0,0,0.15)`，打开时 `#111`。不要用绿色开关。
+- 数字输入框不要原生步进箭头（`index.css` 里已全局去掉）。
+- 下拉框和日期框不要用原生控件，见 §6.12。
 
 ### 6.4 卡片与列表
 
@@ -277,9 +286,15 @@ const v = await UI.dialog({
   box-shadow: 0 10px 32px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.04);
   animation: pop-in 0.14s ease-out;
 }
-.menu-item { height: 40px; padding: 0 10px; gap: 10px; border-radius: 10px; font-size: 14px; }
 .menu-item:hover { background: rgba(0, 0, 0, 0.04); }
 ```
+
+行高按用途分两档：
+
+| 行高 | 圆角 | 用于 |
+|---|---|---|
+| 40px | 10px | 账号菜单（导航性质的几个入口） |
+| 34px | 8px | 选项列表：模型菜单、下拉框选项（`.ui-option`） |
 
 点击外部关闭；选中项前面用对勾图标，不用高亮色块。
 
@@ -364,6 +379,32 @@ loader().catch((e) => { UI.settleSkeletons(section); showError(e.message); });
 
 动效要短（≤ 0.3s）、位移小（≤ 6px），不要弹跳、旋转入场或视差。唯一的装饰性动效是"新建会话"按钮悬停时加号转 90°，不要再加别的。
 
+### 6.12 下拉框与日期框（自绘，`UI.enhance`）
+
+**不要直接用原生 `<select>` 和 `<input type="date">`**：它们的弹层由浏览器绘制，风格和页面完全对不上。
+在 HTML 里照常写原生元素，然后在页面初始化时调一次 `UI.enhance()`，`ui.js` 会把它们换成自绘控件：
+
+```html
+<select id="usage-user" title="按用户筛选"><option value="">全部用户</option></select>
+<input type="date" id="usage-from" title="起始日期（含）" data-placeholder="起始日期">
+```
+
+```js
+UI.enhance();                      // 换成 root 内所有 select 与 input[type=date]，可重复调用
+UI.enhanceSelect(sel);             // 只换一个下拉
+UI.enhanceDate(inp);               // 只换一个日期框
+```
+
+- **原生元素留在 DOM 里，并且始终是唯一的值来源**：`el.value` 可读可写、`change` / `input` 事件照常触发、`innerHTML` 重建 `<option>` 后界面自动同步。所以页面代码不用改，也不会有两份状态。
+- 下拉：点按钮或按 ↑/↓ 打开；方向键移动、Home/End 到首尾、输入字符定位、回车/空格选中、Esc 关闭并把焦点还给按钮。选中项在**左侧**用对勾标记，位置固定保留 16px，文字不会左右跳。
+- 日期：遵守 `min` / `max`（越界的格子禁用，键盘和翻月会夹到边界那天），每周一开头、固定 6 行（翻月时高度不跳），底部「清除 / 今天」。方向键按天/周、PageUp/PageDown 按月、Home/End 到本周首尾，回车选中。
+  日历格**只用底色**表达状态，不画轮廓线：悬停 `--hover-bg`、键盘光标 `--sb-active`、今天加粗、选中 `#111` 白字；禁用格子用 `--text-faint` + `opacity: .5`。
+- 未选日期时显示 `data-placeholder`，否则显示 `YYYY-MM-DD`；未选状态文字压暗一档（`--text-faint`）。
+- 浮层挂在 body 上用 `fixed` 定位，不会被滚动容器裁切；下方放不下时自动翻到上方；点外部、滚动页面、改变窗口大小都会关闭。
+- 浮层里按 Esc 和方向键不会冒泡到页面（不会触发"中断运行"等快捷键）。
+- 层级：页面浮层 10–60 < `.modal` 100 < 下拉/日历浮层 250 < 对话框 300 < 轻提示 400。
+- 新增别的原生控件（多选、时间选择等）时，按同样的方式在 `ui.js` 里加增强函数并挂到 `window.UI`，不要在页面脚本里各写一份。
+
 ## 7. 交互约定
 
 - **登录**：独立页面 `login.html`（`#register` 进入注册模式）。需要登录的页面在 `<head>` 里先检查 token，没有就 `location.replace` 到登录页，避免先闪出页面内容（见 §9 模板）。
@@ -379,7 +420,8 @@ loader().catch((e) => { UI.settleSkeletons(section); showError(e.message); });
 - **技术栈**：原生 HTML / CSS / JS，不引入框架和构建工具。页面由网关以 `/static/` 路径提供，所有资源用绝对路径 `/static/...`。
 - **样式文件**：
   - `index.css`：设计变量 + 主站样式，**所有页面都要引入**
-  - `ui.css` + `ui.js`：通用组件（对话框、轻提示、骨架屏样式与 `UI.*` 辅助函数），所有页面都要引入；新的通用逻辑也放这里，不要在页面脚本里各写一份
+  - `ui.css` + `ui.js`：通用组件（对话框、轻提示、骨架屏、自绘下拉与日期），所有页面都要引入；
+    新页面调一次 `UI.enhance()` 就能去掉原生控件外观；新的通用逻辑也放这里，不要在页面脚本里各写一份
   - `admin.css`、`login.css`：各页面专属样式
   - 新页面新建自己的 `xxx.css`，不要往 `index.css` 里堆页面专属样式
 - **颜色**：优先用变量；必须写死时只用 §3 表里的值。
@@ -420,6 +462,8 @@ loader().catch((e) => { UI.settleSkeletons(section); showError(e.message); });
 ## 10. 交付前自检
 
 - [ ] 没有彩色圆点、渐变、发光阴影、emoji 图标
+- [ ] 没有双层框：焦点态要么只有一圈 outline，要么只有边框变色 + 白底，不叠加
+- [ ] 没有浏览器原生控件外观：下拉/日期走 `UI.enhance`，数字框没有步进箭头
 - [ ] 颜色都来自 §3；转成黑白截图后层级依然清楚
 - [ ] 每个区域最多一个黑色主按钮
 - [ ] 没有 `alert / confirm / prompt`，确认和输入都走 `UI.*`，请求放在 `submit` 里

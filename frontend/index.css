@@ -1148,6 +1148,11 @@ button {
   color: var(--text);
   padding: 7px 16px;
 }
+
+/* 数字输入框去掉原生步进箭头：与自绘的下拉/日期控件一致，不露浏览器原生外观 */
+input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 button:hover { background: #ebebeb; }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
 

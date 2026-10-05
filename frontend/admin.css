@@ -299,7 +299,8 @@ label.row { cursor: pointer; }
   flex-wrap: wrap;
   margin: -8px 0 16px;
 }
-.usage-filter select, .usage-filter input,
+/* 筛选栏里的下拉框与日期框由 ui.css 的自绘控件样式接管（.ui-select-btn / .ui-date-btn），
+   这里只保留页面自己的数字输入框 */
 .settings-number, .model-form input[type="text"], .model-form input[type="number"] {
   height: 34px;
   padding: 0 10px;
@@ -312,8 +313,6 @@ label.row { cursor: pointer; }
   font-size: 14px;
   transition: border-color 0.15s, background-color 0.15s;
 }
-.usage-filter select { padding-right: 6px; }
-.usage-filter select:focus, .usage-filter input:focus,
 .settings-number:focus, .model-form input:focus { border-color: rgba(0, 0, 0, 0.16); background: #fff; }
 .group-card .settings-number { width: 110px; background: #fff; text-align: right; }
 .group-card .settings-number:focus { border-color: rgba(0, 0, 0, 0.16); }

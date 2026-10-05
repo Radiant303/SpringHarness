@@ -56,9 +56,6 @@
 .ui-input::placeholder { color: var(--text-faint); }
 .ui-input:focus { border-color: rgba(0, 0, 0, 0.16); background: #fff; }
 .ui-input.invalid { border-color: rgba(192, 57, 43, 0.45); background: #fff; }
-.ui-input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
-.ui-input[type="number"]::-webkit-inner-spin-button,
-.ui-input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 .ui-control.has-suffix .ui-input { padding-right: 52px; }
 .ui-suffix { position: absolute; right: 12px; font-size: 13px; color: var(--text-faint); pointer-events: none; }
 .ui-field-hint { font-size: 12px; line-height: 18px; color: var(--text-faint); }
@@ -135,3 +132,130 @@
 
 /* 上下叠放的两根骨架条（标题 + 副标题） */
 .sk-stack { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 8px; }
+
+/* ================= 自绘表单控件 =================
+   原生 <select> / <input type="date"> 被 UI.enhance 换成下面的按钮，原生元素只留在 DOM 里存值。
+   按钮外观与页面上的输入框保持一致：34px 高、圆角 10px、灰底、聚焦时白底加浅描边。 */
+
+.ui-native { display: none !important; }
+.ui-select, .ui-date { display: inline-flex; min-width: 0; }
+
+.ui-select-btn, .ui-date-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 10px;
+  border: none;              /* 按钮不加边框：悬停/聚焦只变底色 */
+  border-radius: 10px;
+  outline: none;
+  background: #f2f2f2;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  transition: background-color 0.15s;
+}
+.ui-select-btn:hover:not(:disabled), .ui-date-btn:hover:not(:disabled) { background: #ebebeb; }
+/* 展开时保持灰底，作为"已打开"的提示（不加边框、不加描边） */
+.ui-select-btn[aria-expanded="true"], .ui-date-btn[aria-expanded="true"] { background: #ebebeb; }
+/* 键盘焦点只画一圈轮廓，鼠标点击不显示（与 .switch:focus-visible 一致） */
+.ui-select-btn:focus-visible, .ui-date-btn:focus-visible { outline: 2px solid rgba(23, 131, 255, 0.4); outline-offset: 1px; }
+.ui-select-btn:disabled, .ui-date-btn:disabled { opacity: 0.5; cursor: default; }
+.ui-select-caret, .ui-date-icon { display: inline-flex; flex-shrink: 0; color: var(--text-faint); }
+.ui-select-caret svg, .ui-date-icon svg { display: block; width: 16px; height: 16px; }
+.ui-select-caret { margin-left: auto; }
+
+.ui-select-label, .ui-date-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 日期未选时是提示文字，压暗一档；选了以后正常色 */
+.ui-date-btn { justify-content: space-between; min-width: 148px; }
+.ui-date-btn:not(.has-value) .ui-date-label { color: var(--text-faint); }
+
+/* ---- 浮层：下拉列表与日历共用，挂在 body 上（fixed），不会被滚动容器裁切 ---- */
+.ui-popover {
+  position: fixed;
+  z-index: 250;   /* 高于 .modal（100），低于对话框（300）与轻提示（400） */
+  padding: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.04);
+  animation: ui-pop 0.14s ease both;
+}
+
+.ui-listbox { max-height: 280px; overflow-y: auto; outline: none; }
+.ui-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 14px;
+  color: var(--text);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.ui-option-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* 对勾位固定保留 16px，未选中时留空，切换选项文字不会左右跳 */
+.ui-option-check { display: inline-flex; flex-shrink: 0; width: 16px; color: var(--text); }
+.ui-option-check svg { display: block; width: 16px; height: 16px; }
+.ui-option.active { background: var(--hover-bg); }
+.ui-option.disabled { color: var(--text-faint); cursor: default; }
+.ui-option.disabled.active { background: transparent; }
+
+/* ---- 日历 ---- */
+.ui-cal { min-width: 236px; padding: 8px 8px 4px; user-select: none; }
+.ui-cal-head { display: flex; align-items: center; gap: 4px; padding: 0 0 6px; }
+.ui-cal-title { flex: 1; padding-left: 4px; font-size: 14px; font-weight: 500; color: var(--text); }
+.ui-cal-nav {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-dim);
+}
+.ui-cal-nav:hover { background: var(--hover-bg); color: var(--text); }
+.ui-cal-nav svg { width: 16px; height: 16px; }
+.ui-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.ui-cal-wd { height: 28px; font-size: 12px; line-height: 28px; color: var(--text-faint); text-align: center; }
+.ui-cal-day {
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.ui-cal-day:hover:not(:disabled) { background: var(--hover-bg); }
+.ui-cal-day.out { color: var(--text-faint); }          /* 相邻月份补位的那几天 */
+.ui-cal-day.today { font-weight: 600; }                /* 今天只加粗，不画圈 */
+/* 键盘光标与选中都只用底色表示，不画任何轮廓线；.selected 写在后面，选中时压过光标色 */
+.ui-cal-day:focus { background: var(--sb-active); outline: none; }
+.ui-cal-day.selected { background: #111; color: #fff; font-weight: 400; }
+.ui-cal-day:disabled { color: var(--text-faint); opacity: 0.5; cursor: default; }
+.ui-cal-foot {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  padding: 6px 2px 0;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+}
+.ui-cal-link {
+  padding: 4px 6px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 13px;
+  color: var(--link);
+}
+.ui-cal-link:hover:not(:disabled) { background: rgba(23, 131, 255, 0.08); }
+.ui-cal-link:disabled { color: var(--text-faint); cursor: default; }
