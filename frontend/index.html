@@ -4,55 +4,138 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Spring Harness</title>
+  <script>
+    /* 未登录直接去登录页，避免先闪出聊天界面 */
+    try { if (!localStorage.getItem("sh.token")) location.replace("/static/login.html"); } catch (e) { /* 存储不可用时交给 index.js 处理 */ }
+  </script>
   <link rel="stylesheet" href="/static/index.css">
+  <link rel="stylesheet" href="/static/ui.css">
   <link rel="stylesheet" href="/static/sprout.css">
 </head>
 <body>
   <div id="app">
     <aside id="sidebar">
+      <div class="sidebar-head">
+        <img class="brand-logo" src="/static/assets/images/log.png" alt="Spring Harness" title="Spring Harness">
+        <button id="toggle-sidebar" class="sb-icon-btn" title="收起侧栏" aria-label="收起侧栏">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="3"/><path d="M9.5 4.5v15"/></svg>
+        </button>
+      </div>
       <div class="sidebar-top">
         <button id="new-session-btn" class="new-session-btn">
           <span class="icon"><svg viewBox="0 0 24 24"><path d="M 12 2.1 C 6.532 2.1 2.1 6.532 2.1 12 C 2.1 13.923 2.649 15.719 3.598 17.239 L 2.517 19.821 C 2.104 20.809 2.829 21.9 3.901 21.9 L 12 21.9 C 17.468 21.9 21.9 17.468 21.9 12 C 21.9 6.532 17.468 2.1 12 2.1 Z M 3.9 12 C 3.9 7.526 7.526 3.9 12 3.9 C 16.473 3.9 20.1 7.526 20.1 12 C 20.1 16.473 16.473 20.1 11.999 20.1 L 4.352 20.1 L 5.635 17.035 C 5.635 17.035 5.352 16.629 5.352 16.629 C 4.437 15.317 3.9 13.723 3.9 12 Z" fill="currentColor" fill-opacity="0.902" fill-rule="evenodd"/><g class="nb-plus"><path d="M 12 7.5 L 12 16.5 M 7.5 12 L 16.5 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></g></svg></span>
-          新建会话 <span class="kbd">Ctrl K</span>
+          <span class="nb-label">新建会话</span>
+          <span class="kbd"><kbd>Ctrl</kbd><kbd>K</kbd></span>
         </button>
       </div>
-      <div id="work-list">
-        <div class="work-list-header">
-          <span>项目</span>
-          <button id="new-work-btn" class="icon-btn" title="新建项目">＋</button>
+      <!-- 项目与对话共用一个滚动区，底部渐隐 -->
+      <div id="sidebar-scroll">
+        <div class="sb-section-title">项目</div>
+        <button id="new-work-btn" class="sb-item" type="button">
+          <svg class="sb-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 12.5V9a2 2 0 0 0-2-2h-6.6l-2-2.5H5.5a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h7"/><path d="M18 15v6M15 18h6"/></svg>
+          <span>新建项目</span>
+        </button>
+        <!-- 列表首屏为骨架行，数据到达后由 JS 整体替换（index.js 也会克隆它用于切换项目时的重新加载） -->
+        <div id="works">
+          <div class="sk-block sk-list sk-fade" aria-hidden="true">
+            <div class="sk-row"><span class="sk sk-ic"></span><span class="sk" style="--w:64%"></span></div>
+            <div class="sk-row"><span class="sk sk-ic"></span><span class="sk" style="--w:46%"></span></div>
+            <div class="sk-row"><span class="sk sk-ic"></span><span class="sk" style="--w:56%"></span></div>
+          </div>
         </div>
-        <div id="works"></div>
+        <div class="sb-section-title">对话</div>
+        <div id="session-list">
+          <div class="sk-block sk-list sk-fade" aria-hidden="true">
+            <div class="sk-row"><span class="sk" style="--w:72%"></span></div>
+            <div class="sk-row"><span class="sk" style="--w:58%"></span></div>
+            <div class="sk-row"><span class="sk" style="--w:80%"></span></div>
+            <div class="sk-row"><span class="sk" style="--w:50%"></span></div>
+            <div class="sk-row"><span class="sk" style="--w:66%"></span></div>
+            <div class="sk-row"><span class="sk" style="--w:44%"></span></div>
+          </div>
+        </div>
       </div>
-      <div id="session-list"></div>
       <div class="sidebar-footer">
-        <div id="user-chip" class="user-chip hidden">
+        <a id="points-card" class="points-card hidden" href="/static/admin.html#points">
+          <svg class="pc-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="7" rx="7.5" ry="3"/><path d="M4.5 7v5c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3V7"/><path d="M4.5 12v5c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3v-5"/></svg>
+          <span class="pc-text">
+            <span class="pc-title" id="points-value">积分 <span class="sk" style="--w:56px;--h:12px"></span></span>
+            <span class="pc-sub">查看账单与用量</span>
+          </span>
+          <svg class="pc-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+        </a>
+        <div id="user-menu" class="user-menu hidden" role="menu">
+          <a class="um-item" href="/static/admin.html#account" role="menuitem">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.8"/><path d="M4.8 20c1.3-3.4 4.1-5 7.2-5s5.9 1.6 7.2 5"/></svg>
+            <span>账号与安全</span>
+          </a>
+          <a class="um-item" href="/static/admin.html#points" role="menuitem">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h12a1 1 0 0 1 1 1v16l-3-2-2 2-2-2-2 2-2-2-3 2v-16a1 1 0 0 1 1-1z"/><path d="M9 8.5h6M9 12.5h6"/></svg>
+            <span>账单与用量</span>
+          </a>
+          <a class="um-item hidden" id="um-admin" href="/static/admin.html#users" role="menuitem">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="7" height="7" rx="1.8"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.8"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.8"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.8"/></svg>
+            <span>管理后台</span>
+            <svg class="um-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+          </a>
+          <a class="um-item hidden" id="um-settings" href="/static/admin.html#settings" role="menuitem">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+            <span>系统设置</span>
+          </a>
+          <button class="um-item" id="logout-btn" type="button" role="menuitem">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 20.5H6a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2h3.5"/><path d="M15.5 16.5L20 12l-4.5-4.5M20 12H9.5"/></svg>
+            <span>退出登录</span>
+          </button>
+        </div>
+        <div id="user-chip" class="user-chip hidden" title="账号与管理" aria-haspopup="menu">
           <img class="user-avatar" src="/static/assets/images/user_image.png" alt="头像">
           <span id="user-name"></span>
           <span class="user-badge" id="user-badge"></span>
-          <a id="admin-link" class="hidden" href="/static/admin.html" title="管理后台">管理</a>
-          <button id="logout-btn" class="icon-btn" title="退出登录"><svg viewBox="0 0 1024 1024"><path d="M880.47 484.864a38.4 38.4 0 0 1 0 54.272l-189.61 189.653a38.4 38.4 0 1 1-54.315-54.314l124.075-124.075H398.208a38.4 38.4 0 0 1 0-76.8h362.41L636.587 349.525a38.4 38.4 0 0 1 54.314-54.314l189.61 189.653zM436.608 170.667a38.4 38.4 0 0 1-38.4 38.4H246.528a37.461 37.461 0 0 0-37.461 37.461v530.944a37.461 37.461 0 0 0 37.461 37.461h151.68a38.4 38.4 0 1 1 0 76.8H246.528A114.261 114.261 0 0 1 132.267 777.472V246.528A114.261 114.261 0 0 1 246.528 132.267h151.68a38.4 38.4 0 0 1 38.4 38.4z" fill="currentColor"/></svg></button>
+          <svg class="uc-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 10l4-4 4 4M8 14l4 4 4-4"/></svg>
         </div>
       </div>
     </aside>
 
     <main id="main">
       <header id="topbar">
-        <button id="toggle-sidebar" class="icon-btn" title="侧栏">☰</button>
+        <button id="expand-sidebar" class="sb-icon-btn" title="展开侧栏" aria-label="展开侧栏">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="3"/><path d="M9.5 4.5v15"/></svg>
+        </button>
         <span id="breadcrumb"><span id="ws-name"></span><span class="crumb-sep">/</span><span id="session-title"></span></span>
         <span class="spacer"></span>
-        <span id="conn-status" class="conn-dot disconnected" title="未连接"></span>
       </header>
 
+      <!-- 首屏为对话骨架：历史加载完成前不判定“空会话”，避免先闪出首页字标再跳成消息列表 -->
       <div id="messages">
-        <div id="welcome" class="welcome">
-          <h2>Spring Harness</h2>
-          <p>输入消息开始对话。</p>
+        <div class="sk-block msg-skeleton" role="status" aria-busy="true" aria-label="正在加载对话">
+          <div class="sk-user"><span class="sk" style="--w:34%;--h:44px;--r:18px"></span></div>
+          <div class="sk-turn">
+            <span class="sk sk-avatar"></span>
+            <div class="sk-lines">
+              <span class="sk" style="--w:92%"></span>
+              <span class="sk" style="--w:86%"></span>
+              <span class="sk" style="--w:58%"></span>
+            </div>
+          </div>
+          <div class="sk-user"><span class="sk" style="--w:24%;--h:44px;--r:18px"></span></div>
+          <div class="sk-turn">
+            <span class="sk sk-avatar"></span>
+            <div class="sk-lines">
+              <span class="sk" style="--w:88%"></span>
+              <span class="sk" style="--w:94%"></span>
+              <span class="sk" style="--w:72%"></span>
+              <span class="sk" style="--w:40%"></span>
+            </div>
+          </div>
         </div>
       </div>
 
       <button id="scroll-bottom" class="hidden">↓ 最新消息</button>
 
       <footer id="input-area">
+        <!-- 空会话首页：字标 + 居中输入框（#main.is-empty 时显示） -->
+        <div id="hero" aria-hidden="true">SPRING HARNESS</div>
+
         <div id="plan-dock" class="hidden">
           <div id="plan-panel" class="hidden">
             <div id="plan-header" title="收起">
@@ -74,10 +157,6 @@
         <div id="input-card">
           <textarea id="input" rows="1" placeholder="输入消息，Enter 发送，Shift+Enter 换行，Esc 中断运行"></textarea>
           <div id="input-toolbar">
-            <span id="input-ws" class="ws-chip">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
-              <span id="input-ws-name"></span>
-            </span>
             <span class="spacer"></span>
             <span id="usage">
               <svg id="usage-ring" viewBox="0 0 24 24" aria-hidden="true">
@@ -100,6 +179,41 @@
               <svg viewBox="0 0 1024 1024"><path d="M331.946667 379.904c-11.946667 23.466667-11.946667 54.186667-11.946667 115.626667v32.938666c0 61.44 0 92.16 11.946667 115.626667 10.538667 20.650667 27.306667 37.418667 47.957333 47.957333 23.466667 11.946667 54.186667 11.946667 115.626667 11.946667h32.938666c61.44 0 92.16 0 115.626667-11.946667 20.650667-10.538667 37.418667-27.306667 47.957333-47.957333 11.946667-23.466667 11.946667-54.186667 11.946667-115.626667v-32.938666c0-61.44 0-92.16-11.946667-115.626667a109.696 109.696 0 0 0-47.957333-47.957333c-23.466667-11.946667-54.186667-11.946667-115.626667-11.946667h-32.938666c-61.44 0-92.16 0-115.626667 11.946667-20.650667 10.538667-37.418667 27.306667-47.957333 47.957333z" fill="currentColor"/></svg>
             </button>
           </div>
+        </div>
+
+        <!-- 输入框下方的托盘：当前项目 + 连接状态 -->
+        <div id="input-tray">
+          <span id="input-ws" class="tray-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7a2 2 0 0 1 2-2h3.8l2 2.2h7.2a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></svg>
+            <span id="input-ws-name"></span>
+          </span>
+          <span class="spacer"></span>
+          <span class="tray-item tray-conn">
+            <span id="conn-status" class="conn-dot connecting" title="连接中"></span>
+            <span id="conn-text">连接中…</span>
+          </span>
+        </div>
+
+        <!-- 空会话首页的快捷胶囊：点击把起手提示填进输入框 -->
+        <div id="quick-chips">
+          <button type="button" class="quick-chip" data-prompt="帮我梳理一下当前项目的目录结构和核心模块">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h6M4 12h6M4 19h6M14 5h6M14 12h6M14 19h6"/></svg>项目梳理
+          </button>
+          <button type="button" class="quick-chip" data-prompt="帮我排查这个问题：">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 8.5V7a3.5 3.5 0 0 1 7 0v1.5"/><rect x="6.5" y="8.5" width="11" height="11" rx="5.5"/><path d="M12 12v4M3.5 13h3M17.5 13h3M4.5 8.5l2 1.5M19.5 8.5l-2 1.5M4.5 19l2-1.5M19.5 19l-2-1.5"/></svg>排查 Bug
+          </button>
+          <button type="button" class="quick-chip" data-prompt="为以下代码编写单元测试：">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 3.5h5M10.5 3.5v5.2L5 18.2A1.5 1.5 0 0 0 6.3 20.5h11.4a1.5 1.5 0 0 0 1.3-2.3l-5.5-9.5V3.5"/><path d="M7.5 14.5h9"/></svg>编写测试
+          </button>
+          <button type="button" class="quick-chip" data-prompt="帮我审查最近的改动，指出潜在问题">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>代码审查
+          </button>
+          <button type="button" class="quick-chip" data-prompt="帮我重构这段代码，提升可读性：">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10z"/><path d="M13.5 7.5l3 3"/></svg>重构优化
+          </button>
+          <button type="button" class="quick-chip" data-prompt="为当前项目生成一份 README 文档">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3.5H7a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-10z"/><path d="M14 3.5v5h5M9 13h6M9 16.5h4"/></svg>生成文档
+          </button>
         </div>
 
         <!-- Agent 提问卡：到达时顶替输入卡片的位置，不再全屏遮罩 -->
@@ -138,22 +252,10 @@
     </div>
   </div>
 
-  <div id="login-overlay" class="modal hidden">
-    <div class="modal-box login-box">
-      <h3>登录 Spring Harness</h3>
-      <input id="login-username" type="text" placeholder="用户名" autocomplete="username">
-      <input id="login-password" type="password" placeholder="密码" autocomplete="current-password">
-      <div id="login-error" class="login-error"></div>
-      <div class="modal-actions">
-        <button id="login-register">注册新账号</button>
-        <button id="login-submit" class="btn-primary">登录</button>
-      </div>
-    </div>
-  </div>
-
   <script src="/static/vendor/marked.min.js"></script>
   <script src="/static/vendor/purify.min.js"></script>
   <script src="/static/sprout.js"></script>
+  <script src="/static/ui.js"></script>
   <script src="/static/index.js"></script>
 </body>
 </html>

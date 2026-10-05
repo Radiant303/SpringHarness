@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>登录 - Spring Harness</title>
+  <link rel="stylesheet" href="/static/index.css">
+  <link rel="stylesheet" href="/static/login.css">
+</head>
+<body class="login-page">
+  <main class="login-wrap">
+    <form id="login-form" class="login-card" novalidate>
+      <img class="login-logo" src="/static/assets/images/log.png" alt="Spring Harness">
+      <h1 id="login-title" class="login-title">登录 Spring Harness</h1>
+      <p id="login-sub" class="login-sub">登录后即可开始与 Agent 协作</p>
+
+      <!-- 从主站被动跳转过来时（登录过期 / 账号禁用）说明原因 -->
+      <div id="login-notice" class="login-notice hidden" role="status"></div>
+
+      <label class="login-field">
+        <span class="sr-only">用户名</span>
+        <input id="login-username" name="username" type="text" placeholder="用户名"
+               autocomplete="username" autocapitalize="off" spellcheck="false" maxlength="64">
+      </label>
+      <label class="login-field">
+        <span class="sr-only">密码</span>
+        <input id="login-password" name="password" type="password" placeholder="密码"
+               autocomplete="current-password">
+      </label>
+      <label class="login-field register-only">
+        <span class="sr-only">确认密码</span>
+        <input id="login-password2" name="password2" type="password" placeholder="再次输入密码"
+               autocomplete="new-password">
+      </label>
+      <div class="login-hint register-only">用户名 2~64 个字符，密码至少 6 位</div>
+
+      <div id="login-error" class="login-error" role="alert"></div>
+
+      <button id="login-submit" type="submit" class="login-primary">登录</button>
+
+      <div class="login-switch">
+        <span id="login-switch-text">没有账号？</span>
+        <a id="login-switch-link" href="#register">注册新账号</a>
+      </div>
+    </form>
+
+    <div class="login-foot">Spring Harness</div>
+  </main>
+
+  <script src="/static/login.js"></script>
+</body>
+</html>

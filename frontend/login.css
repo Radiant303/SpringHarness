@@ -1,0 +1,106 @@
+/* 独立登录/注册页：暖白底 + 居中白色卡片，灰底输入框，整宽黑色主按钮（依赖 index.css 的颜色变量） */
+
+body.login-page { min-height: 100%; height: auto; background: var(--ground); }
+
+.login-wrap {
+  display: flex;
+  min-height: 100vh;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 16px 24px;
+}
+
+.login-card {
+  display: flex;
+  width: min(400px, 100%);
+  flex-direction: column;
+  padding: 36px 32px 24px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.05);
+  text-align: center;
+}
+
+.login-logo {
+  display: block;
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 16px;
+  border-radius: 50%;
+  object-fit: cover;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+.login-title { margin: 0; font-size: 20px; line-height: 28px; font-weight: 600; color: var(--text); }
+.login-sub { margin: 6px 0 24px; font-size: 14px; line-height: 20px; color: var(--text-faint); }
+
+/* 跳转原因：浅暖色提示条（与灰底输入框区分开），不用红绿色块 */
+.login-notice {
+  margin: -8px 0 16px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: var(--notice-bg);
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--warn);
+  text-align: left;
+}
+
+.login-field { display: block; margin-bottom: 10px; }
+.login-field input {
+  width: 100%;
+  height: 44px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  outline: none;
+  background: #f2f2f2;
+  font: inherit;
+  font-size: 14px;
+  color: var(--text);
+  transition: border-color 0.15s, background-color 0.15s;
+}
+.login-field input::placeholder { color: var(--text-faint); }
+.login-field input:focus { border-color: rgba(0, 0, 0, 0.16); background: #fff; }
+.login-field input.invalid { border-color: rgba(192, 57, 43, 0.45); background: #fff; }
+
+.login-hint { margin: 2px 2px 0; font-size: 12px; line-height: 18px; color: var(--text-faint); text-align: left; }
+
+/* 注册专属字段：仅注册模式显示 */
+.login-card:not(.is-register) .register-only { display: none; }
+
+.login-error { min-height: 20px; margin: 8px 2px 8px; font-size: 13px; line-height: 20px; color: var(--danger); text-align: left; }
+
+.login-primary {
+  height: 44px;
+  border: none;
+  border-radius: 12px;
+  background: #111;
+  color: #fff;
+  font-size: 15px;
+  transition: background-color 0.15s, opacity 0.15s;
+}
+.login-primary:hover { background: #000; }
+.login-primary:disabled { opacity: 0.55; cursor: progress; }
+
+.login-switch { margin-top: 18px; font-size: 13px; color: var(--text-faint); }
+.login-switch a { color: var(--link); text-decoration: none; }
+.login-switch a:hover { text-decoration: underline; }
+
+.login-foot { margin-top: 24px; font-size: 12px; color: rgba(0, 0, 0, 0.3); }
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@media (max-width: 480px) {
+  .login-wrap { justify-content: flex-start; padding-top: 12vh; }
+  .login-card { padding: 28px 20px 20px; border-radius: 16px; }
+}

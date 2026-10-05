@@ -254,84 +254,76 @@ function showUserChip() {
   const name = localStorage.getItem(USER_KEY);
   if (name) {
     const el = $("user-name");
-    /* 昵称最多显示 4 个字符，超出以 … 代替，完整名留在悬浮提示 */
-    el.textContent = name.length > 4 ? name.slice(0, 4) + "…" : name;
+    /* 显示完整昵称；放不下时由 CSS 省略号截断，完整名留在悬浮提示 */
+    el.textContent = name;
     el.title = name;
-    $("user-badge").textContent = ROLE_LABELS[getRole()] || "用户";
-    // 管理入口仅站长/管理员可见
-    $("admin-link").classList.toggle("hidden", getRole() === "user");
+    const role = getRole();
+    $("user-badge").textContent = ROLE_LABELS[role] || "用户";
+    // 用户菜单：管理后台对站长/管理员开放，系统设置仅站长
+    $("um-admin").classList.toggle("hidden", role !== "owner" && role !== "admin");
+    $("um-settings").classList.toggle("hidden", role !== "owner");
     $("user-chip").classList.remove("hidden");
+    $("points-card").classList.remove("hidden");
+    refreshPoints();
   }
 }
 
-function showLogin(message) {
-  $("user-chip").classList.add("hidden");
-  $("login-error").textContent = message || "";
-  $("login-overlay").classList.remove("hidden");
-  setTimeout(() => $("login-username").focus(), 0);
-}
-
-function hideLogin() { $("login-overlay").classList.add("hidden"); }
-
-async function doAuth(mode) {
-  const username = $("login-username").value.trim();
-  const password = $("login-password").value;
-  const errBox = $("login-error");
-  if (!username || !password) { errBox.textContent = "请输入用户名和密码"; return; }
-  $("login-submit").disabled = true;
-  $("login-register").disabled = true;
+/* 积分余额：登录/打开用户菜单时从网关刷新（不缓存进 localStorage，避免展示过期值） */
+async function refreshPoints() {
+  const value = $("points-value");
+  if (!value || !getToken()) return;
+  // 首次加载失败时把骨架条换成占位符，避免骨架一直闪；已有数值则保持旧值
+  const settle = () => { if (value.querySelector(".sk")) value.textContent = "积分 -"; };
   try {
-    const r = await fetch(`/api/auth/${mode}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password }),
-    });
-    if (!r.ok) {
-      // 网关统一返回 {code, message, data}，错误详情在 message 里
-      let msg = null;
-      try { msg = (await r.json()).message; } catch { /* 非 JSON 响应 */ }
-      errBox.textContent = msg || `请求失败（${r.status}）`;
-      return;
-    }
-    if (mode === "register") { await doAuth("login"); return; }  // 注册成功直接登录
+    const r = await fetch("/api/billing/me", { headers: { Authorization: "Bearer " + getToken() } });
+    if (!r.ok) { settle(); return; }
     const data = (await r.json()).data;
-    localStorage.setItem(TOKEN_KEY, data.token);
-    localStorage.setItem(USER_KEY, data.username);
-    localStorage.setItem(ROLE_KEY, data.role || "user");
-    localStorage.removeItem("sh.sessionId");  // 换账号不复用旧会话
-    hideLogin();
-    showUserChip();
-    await connectAndSetup();
-  } catch (e) {
-    if (getToken()) {
-      addSystem("❌ 连接失败：" + (e && e.message || e), true);
-      scheduleReconnect();
-    } else {
-      errBox.textContent = "网络错误：" + (e && e.message || e);
-    }
-  } finally {
-    $("login-submit").disabled = false;
-    $("login-register").disabled = false;
-  }
+    const v = Number(data?.balance ?? 0);
+    value.textContent = "积分 " + parseFloat(v.toFixed(6)).toLocaleString(undefined, { maximumFractionDigits: 6 });
+    $("points-card").classList.toggle("negative", v < 0);
+  } catch (e) { settle(); /* 网络抖动时保持旧值 */ }
 }
 
-function bindAuth() {
-  $("login-submit").onclick = () => doAuth("login");
-  $("login-register").onclick = () => doAuth("register");
-  $("login-username").addEventListener("keydown", (e) => {
-    if (e.key === "Enter") $("login-password").focus();
-  });
-  $("login-password").addEventListener("keydown", (e) => {
-    if (e.key === "Enter") doAuth("login");
-  });
+function toggleUserMenu(open) {
+  const menu = $("user-menu");
+  const next = open ?? menu.classList.contains("hidden");
+  menu.classList.toggle("hidden", !next);
+  $("user-chip").classList.toggle("open", next);
+  if (next) refreshPoints();
+}
+
+/* 登录/注册是独立页面 login.html。reason 让登录页说明为什么回到这里
+   （expired = 登录过期，disabled = 账号被禁用）；登录成功后回到当前页 */
+function goLogin(reason) {
+  clearToken();
+  const q = reason ? "?reason=" + encodeURIComponent(reason) : "";
+  location.replace("/static/login.html" + q);
+}
+
+function bindAccountMenu() {
   $("logout-btn").onclick = () => {
     clearToken();
     localStorage.removeItem(USER_KEY);
     localStorage.removeItem(ROLE_KEY);
     localStorage.removeItem("sh.sessionId");
-    location.reload();
+    goLogin();
   };
+  // 点击用户行弹出账号菜单（账号/账单/管理/退出），点菜单外关闭
+  $("user-chip").onclick = (e) => {
+    e.stopPropagation();
+    toggleUserMenu();
+  };
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest("#user-menu") && !e.target.closest("#user-chip")) toggleUserMenu(false);
+  });
 }
+
+/* ================= 骨架屏 ================= */
+
+/* 记下 index.html 里的首屏骨架（脚本在 body 末尾执行，此时尚未被真实数据替换），
+   切换项目/会话需要重新加载时由 UI.showSkeleton 克隆复用，样式只维护一份 */
+UI.saveSkeleton("messages");
+UI.saveSkeleton("session-list");
 
 /* ================= 连接 / 会话引导 ================= */
 
@@ -343,6 +335,7 @@ function setConnected(ok) {
   const dot = $("conn-status");
   dot.className = "conn-dot " + (ok ? "connected" : "disconnected");
   dot.title = ok ? "已连接" : "未连接";
+  $("conn-text").textContent = ok ? "已连接" : "未连接";
   updateInputState();
 }
 
@@ -357,7 +350,7 @@ async function connectAndSetup() {
   $("ws-name").textContent = localStorage.getItem(USER_KEY) || wsName;
   $("input-ws").title = state.workspace;
   setConnected(true);
-  await loadWorks();   // 项目列表先可见；input-ws-name 未加载时由 :empty 兜底"工作区"
+  await loadWorks();   // 项目列表先可见；项目名未加载前托盘里显示骨架条
   await openSession(); // 可能触发默认 work 的自动创建
   await loadWorks();   // 刷新列表与项目名，让自动创建的默认 work 被选中
   reconnectDelay = 1000;
@@ -376,14 +369,12 @@ rpc.onClose = (code) => {
   state.tools.clear();
   hideApproval();
   hideQuestion();
-  if (code === 4401) {           // 未认证/令牌过期：回登录页，不重连
-    clearToken();
-    showLogin("登录已过期，请重新登录");
+  if (code === 4401) {           // 未认证/令牌过期：去登录页，不重连
+    goLogin("expired");
     return;
   }
-  if (code === 4403) {           // 账号被禁用：回登录页并说明原因，不重连
-    clearToken();
-    showLogin("账号已被禁用，请联系管理员");
+  if (code === 4403) {           // 账号被禁用：去登录页并说明原因，不重连
+    goLogin("disabled");
     return;
   }
   if (!reconnectTimer) {
@@ -398,7 +389,7 @@ function scheduleReconnect() {
     try {
       await connectAndSetup();
     } catch {
-      if (!getToken()) return;   // 4401 已弹登录框，停止重连
+      if (!getToken()) return;   // 4401/4403 已跳转登录页，停止重连
       reconnectDelay = Math.min(reconnectDelay * 2, 15000);
       scheduleReconnect();
     }
@@ -424,7 +415,7 @@ async function openSession() {
   }
   state.sessionId = sid;
   localStorage.setItem("sh.sessionId", sid);
-  clearMessages();
+  clearMessages(true);
   await loadHistory();
   await loadPlan();
   await refreshSessionList();
@@ -445,8 +436,7 @@ async function apiFetch(path, options = {}) {
   if (token) headers["Authorization"] = "Bearer " + token;
   const r = await fetch(path, { ...options, headers });
   if (r.status === 401) {
-    clearToken();
-    location.reload();
+    goLogin("expired");
     throw new Error("登录已过期");
   }
   return r;
@@ -465,6 +455,8 @@ async function loadWorks() {
     const body = await r.json();
     works = body.data || [];
   } catch (e) {
+    UI.clearSkeleton("works");
+    updateWorkName();  // 让托盘里的项目名从骨架条落到“未选择项目”
     addSystem("❌ 项目列表加载失败：" + e.message, true);
     return;
   }
@@ -481,6 +473,8 @@ async function loadWorks() {
   updateWorkName();
 }
 
+const FOLDER_SVG = '<svg class="sb-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7a2 2 0 0 1 2-2h3.8l2 2.2h7.2a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></svg>';
+
 function renderWorks() {
   const box = $("works");
   box.textContent = "";
@@ -488,6 +482,7 @@ function renderWorks() {
     const item = document.createElement("div");
     item.className = "work-item" + (w.work_id === state.workId ? " active" : "");
     item.title = w.name;
+    item.insertAdjacentHTML("beforeend", FOLDER_SVG);
 
     const name = document.createElement("span");
     name.className = "work-name";
@@ -509,7 +504,7 @@ function renderWorks() {
     const del = document.createElement("button");
     del.className = "work-del";
     del.title = "删除项目（连同目录与数据一起删除）";
-    del.textContent = "×";
+    del.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7l10 10M17 7L7 17"/></svg>';
     del.onclick = (e) => {
       e.stopPropagation();
       deleteWork(w);
@@ -528,39 +523,61 @@ async function selectWork(workId) {
   localStorage.setItem("sh.workId", workId);
   renderWorks();
   updateWorkName();
-  // 换项目后当前会话列表失效，清掉记忆重新落会话
+  // 换项目后当前会话列表失效，清掉记忆重新落会话；加载期间对话与会话列表显示骨架
   state.sessionId = null;
   localStorage.removeItem("sh.sessionId");
-  clearMessages();
-  await openSession();
+  UI.showSkeleton("session-list");
+  clearMessages(true);
+  try {
+    await openSession();
+  } catch (e) {
+    UI.clearSkeleton("session-list");
+    UI.clearSkeleton("messages");
+    addSystem("❌ 切换项目失败：" + e.message, true);
+    return;
+  }
   await refreshSessionList();
 }
 
 async function createWork() {
-  const name = prompt("新项目名称：");
-  if (!name || !name.trim()) return;
-  const r = await apiFetch("/api/works", {
-    method: "POST",
-    body: JSON.stringify({ name: name.trim() }),
+  let created = null;
+  const name = await UI.prompt({
+    title: "新建项目",
+    message: "每个项目拥有独立的工作区目录和会话记录。",
+    label: "项目名称",
+    placeholder: "例如：my-app",
+    okText: "创建",
+    validate: (v) => (v.trim() ? null : "请输入项目名称"),
+    // 提交在框内完成：失败时错误显示在对话框里，可直接修改重试
+    submit: async (v) => {
+      const r = await apiFetch("/api/works", {
+        method: "POST",
+        body: JSON.stringify({ name: v.trim() }),
+      });
+      const body = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(body.message || `新建失败（${r.status}）`);
+      created = body.data;
+    },
   });
-  const body = await r.json().catch(() => ({}));
-  if (!r.ok) {
-    addSystem("❌ 新建项目失败：" + (body.message || r.status), true);
-    return;
-  }
+  if (name === null || !created) return;
   await loadWorks();
-  await selectWork(body.data.work_id);
+  await selectWork(created.work_id);
 }
 
 async function deleteWork(work) {
-  if (!confirm(`删除项目「${work.name}」？\n其工作区目录与全部会话数据会被物理删除，不可恢复。`)) return;
-  const r = await apiFetch(`/api/works/${work.work_id}`, { method: "DELETE" });
-  const body = await r.json().catch(() => ({}));
-  if (!r.ok) {
-    addSystem("❌ 删除失败：" + (body.message || r.status), true);
-    return;
-  }
-  addSystem(`项目「${work.name}」已删除`);
+  const ok = await UI.confirm({
+    title: "删除项目",
+    message: `确定删除「${work.name}」吗？\n其工作区目录与全部会话数据会被物理删除，不可恢复。`,
+    okText: "删除",
+    danger: true,
+    submit: async () => {
+      const r = await apiFetch(`/api/works/${work.work_id}`, { method: "DELETE" });
+      const body = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(body.message || `删除失败（${r.status}）`);
+    },
+  });
+  if (!ok) return;
+  UI.toast(`项目「${work.name}」已删除`);
   await loadWorks();
   if (state.workId) {
     await openSession();
@@ -575,7 +592,7 @@ async function refreshSessionList() {
   try {
     const r = await rpc.request("session/list", { workspace: state.workspace, workId: state.workId });
     sessions = r.sessions || [];
-  } catch { return; }
+  } catch { UI.clearSkeleton("session-list"); return; }
   const list = $("session-list");
   list.textContent = "";
   const active = sessions.find((s) => s.sessionId === state.sessionId);
@@ -621,8 +638,12 @@ async function switchSession(sid) {
   }
   state.sessionId = sid;
   localStorage.setItem("sh.sessionId", sid);
-  clearMessages();
-  await loadHistory();
+  clearMessages(true);
+  try {
+    await loadHistory();
+  } catch (e) {
+    addSystem("❌ 加载历史失败：" + e.message, true);
+  }
   await loadPlan();
   await refreshSessionList();
   subscribeStream(sid);
@@ -644,9 +665,12 @@ async function newSession() {
 
 /* ================= 历史 ================= */
 
-function clearMessages() {
+/** 清空消息区。loading=true 表示紧接着要拉历史：先放对话骨架占位，
+    避免历史返回前被判定为空会话而闪出首页字标 */
+function clearMessages(loading = false) {
   const box = $("messages");
   box.textContent = "";
+  if (loading) UI.showSkeleton("messages");
   if (typeof SproutManager !== "undefined") {
     SproutManager.clear();
   }
@@ -700,7 +724,13 @@ function ensureTurn() {
 async function loadHistory(cursor) {
   const params = { sessionId: state.sessionId, limit: 30, direction: "backward" };
   if (cursor) params.cursor = cursor;
-  const page = await rpc.request("session/history", params);
+  let page;
+  try {
+    page = await rpc.request("session/history", params);
+  } finally {
+    // 首屏拉取：无论成功失败都撤掉骨架；与下面的渲染同步完成，空会话判定只看最终结果
+    if (!cursor) UI.clearSkeleton("messages");
+  }
   state.historyCursor = page.previousCursor || null;
   state.historyHasMore = !!page.hasMore;
   renderHistory(page.segments || [], !!cursor);
@@ -1600,6 +1630,8 @@ function finishTurn(event) {
     state.busy = false;
     updateInputState();
   }
+  // 结算经 MQ lifecycle 事件落库，比浏览器收到 turn_finished 略晚；稍 delay 再刷余额
+  setTimeout(refreshPoints, 1500);
   refreshSessionList();  // 标题/时间可能更新了
 }
 
@@ -1799,7 +1831,8 @@ function populateModelSelect() {
     menu.appendChild(item);
   }
   const cur = state.models.find((m) => m.id === state.model);
-  $("model-name").textContent = cur ? (cur.displayName || cur.id) : "";
+  // 没有匹配项时显示“默认模型”（由服务端决定），不留空，否则 :empty 骨架条会一直显示
+  $("model-name").textContent = cur ? (cur.displayName || cur.id) : "默认模型";
 }
 
 function closeModelMenu() {
@@ -1826,7 +1859,28 @@ function bind() {
   $("stop-btn").onclick = cancelTurn;
   $("new-session-btn").onclick = newSession;
   $("new-work-btn").onclick = createWork;
-  $("toggle-sidebar").onclick = () => $("sidebar").classList.toggle("collapsed");
+  const toggleSidebar = () => $("app").classList.toggle("sidebar-collapsed");
+  $("toggle-sidebar").onclick = toggleSidebar;
+  $("expand-sidebar").onclick = toggleSidebar;
+
+  /* 空会话首页：消息区里还没有用户/助手内容时，#main 进入 is-empty，
+     字标 + 输入框居中显示，并露出快捷胶囊；系统提示不算内容；
+     对话骨架显示期间（历史尚未返回）不算空，避免首页字标一闪而过 */
+  const syncEmpty = () => {
+    const hasContent = $("messages").querySelector(".msg-skeleton, .msg:not(.system), .assistant-turn, .work-group, .pending-indicator, .load-more");
+    $("main").classList.toggle("is-empty", !hasContent);
+  };
+  new MutationObserver(syncEmpty).observe($("messages"), { childList: true });
+  syncEmpty();
+  $("quick-chips").addEventListener("click", (e) => {
+    const chip = e.target.closest(".quick-chip");
+    if (!chip) return;
+    const input = $("input");
+    input.value = chip.dataset.prompt || "";
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+    input.dispatchEvent(new Event("input"));
+  });
   const togglePlan = () => {
     const collapsed = $("plan-panel").classList.toggle("hidden");
     $("plan-pill").setAttribute("aria-pressed", String(!collapsed));
@@ -1903,7 +1957,7 @@ function bind() {
       else if (n === btns.length + 1 && !$("question-custom-row").classList.contains("hidden")) $("question-custom").focus();
       return;
     }
-    if (e.key === "Escape") { closeModelMenu(); cancelTurn(); }
+    if (e.key === "Escape") { closeModelMenu(); toggleUserMenu(false); cancelTurn(); }
     if ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "K")) {
       e.preventDefault();
       newSession();
@@ -1947,13 +2001,14 @@ function bind() {
 window.addEventListener("DOMContentLoaded", async () => {
   bind();
   updateInputState();
-  bindAuth();
-  if (!getToken()) { showLogin(); return; }
+  bindAccountMenu();
+  if (!getToken()) { goLogin(); return; }  // 正常情况下 index.html 头部脚本已先行跳转
   showUserChip();
   try {
     await connectAndSetup();
   } catch (e) {
-    if (!getToken()) return;  // 4401：登录框已弹出，不再重连
+    if (!getToken()) return;  // 4401/4403：已跳转登录页，不再重连
+    UI.clearSkeleton("messages");
     addSystem("❌ 初始化失败：" + (e && e.message || e) + "，将自动重连", true);
     scheduleReconnect();
   }

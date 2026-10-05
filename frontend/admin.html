@@ -3,65 +3,270 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>管理后台 - Spring Harness</title>
+  <title>账户中心 - Spring Harness</title>
+  <script>
+    /* 未登录先去登录页，登录后带回当前页（含 #hash 分页） */
+    try {
+      if (!localStorage.getItem("sh.token")) {
+        location.replace("/static/login.html?next=" + encodeURIComponent(location.pathname + location.hash));
+      }
+    } catch (e) { /* 存储不可用时交给 admin.js 处理 */ }
+  </script>
   <link rel="stylesheet" href="/static/index.css">
+  <link rel="stylesheet" href="/static/ui.css">
   <link rel="stylesheet" href="/static/admin.css">
 </head>
 <body>
   <div id="admin-app">
-    <header id="admin-header">
-      <a id="back-link" href="/static/index.html" title="返回对话">←</a>
-      <h1>管理后台</h1>
-      <span class="spacer"></span>
-      <span id="admin-who"></span>
-    </header>
+    <aside id="admin-nav">
+      <a id="back-link" href="/static/index.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>
+        返回
+      </a>
+
+      <div class="nav-group">
+        <div class="nav-item" data-page="account">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.8"/><path d="M4.8 20c1.3-3.4 4.1-5 7.2-5s5.9 1.6 7.2 5"/></svg>
+          账号与安全
+        </div>
+        <div class="nav-item" data-page="points">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h12a1 1 0 0 1 1 1v16l-3-2-2 2-2-2-2 2-2-2-3 2v-16a1 1 0 0 1 1-1z"/><path d="M9 8.5h6M9 12.5h6"/></svg>
+          账单与用量
+        </div>
+      </div>
+
+      <div class="nav-group hidden" id="nav-group-admin">
+        <div class="nav-group-title">管理</div>
+        <div class="nav-item" data-page="users">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M3 19.5c1.1-3 3.4-4.2 6-4.2s4.9 1.2 6 4.2"/><path d="M16 5.2a3.5 3.5 0 0 1 0 5.9M17.8 15.6c1.9.6 3.2 1.8 3.9 3.9"/></svg>
+          用户管理
+        </div>
+        <div class="nav-item" data-page="usage">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 20h17"/><path d="M7 20v-6M12 20V6M17 20v-9"/></svg>
+          用量统计
+        </div>
+        <div class="nav-item" data-page="ledger">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1" fill="currentColor" stroke="none"/><circle cx="4.5" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="4.5" cy="18" r="1" fill="currentColor" stroke="none"/></svg>
+          积分流水
+        </div>
+        <div class="nav-item" data-page="models">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20.6 13.4L13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.4"/></svg>
+          模型资费
+        </div>
+      </div>
+
+      <div class="nav-group hidden" id="nav-group-system">
+        <div class="nav-group-title">系统</div>
+        <div class="nav-item" data-page="settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h9M17 8h3M4 16h3M11 16h9"/><circle cx="15" cy="8" r="2.2"/><circle cx="9" cy="16" r="2.2"/></svg>
+          系统设置
+        </div>
+      </div>
+    </aside>
 
     <main id="admin-main">
       <div id="admin-error" class="hidden"></div>
 
-      <section class="admin-section">
-        <h2>用户管理</h2>
-        <table class="admin-table" id="user-table">
-          <thead>
-            <tr><th>用户名</th><th>角色</th><th>状态</th><th>存储配额</th><th>work 上限</th><th>注册时间</th><th>操作</th></tr>
-          </thead>
-          <tbody id="user-tbody"></tbody>
-        </table>
+      <!-- 账号与安全：所有角色可见 -->
+      <section class="admin-page" data-page="account">
+        <div class="account-head">
+          <img class="account-avatar" src="/static/assets/images/user_image.png" alt="头像">
+          <div class="account-name" id="account-name"></div>
+          <span class="role-badge" id="account-role"></span>
+        </div>
+
+        <div class="section-caption">账户资料</div>
+        <div class="card group-card">
+          <div class="row">
+            <span class="row-label">用户名</span>
+            <span class="row-value" id="account-username"></span>
+          </div>
+          <div class="row">
+            <span class="row-label">角色</span>
+            <span class="row-value" id="account-role-text"></span>
+          </div>
+          <div class="row">
+            <span class="row-label">积分余额</span>
+            <span class="row-right">
+              <span class="row-value num" id="account-points"><span class="sk" style="--w:64px"></span></span>
+              <a class="row-link" href="#points">查看明细</a>
+            </span>
+          </div>
+        </div>
+
+        <div class="section-caption">账户安全</div>
+        <div class="card group-card">
+          <div class="row">
+            <span class="row-label">账户状态</span>
+            <span class="row-value">正常</span>
+          </div>
+          <div class="row">
+            <span class="row-label">登录凭证</span>
+            <span class="row-value">已登录，权限受保护</span>
+          </div>
+        </div>
+
+        <button id="account-logout" class="wide-btn">退出登录</button>
+        <div class="page-foot">Spring Harness · 账户中心</div>
       </section>
 
-      <section class="admin-section">
-        <h2>用量统计</h2>
+      <!-- 账单与用量：所有角色可见 -->
+      <section class="admin-page" data-page="points">
+        <h1 class="page-title">账单与用量</h1>
+        <div class="card group-card points-summary">
+          <div class="summary-label">可用积分</div>
+          <div class="points-big num" id="points-big"><span class="sk" style="--w:150px;--h:30px;--r:10px"></span></div>
+          <div class="points-sub">用于模型调用和工作台服务</div>
+        </div>
+
+        <div class="section-caption">最近明细</div>
+        <div class="card group-card ledger-card">
+          <div id="my-ledger">
+            <div class="sk-block sk-list sk-fade" aria-hidden="true">
+              <div class="ledger-row"><span class="sk-stack"><span class="sk" style="--w:48px"></span><span class="sk" style="--w:220px;--h:10px"></span></span><span class="sk" style="--w:64px"></span></div>
+              <div class="ledger-row"><span class="sk-stack"><span class="sk" style="--w:36px"></span><span class="sk" style="--w:180px;--h:10px"></span></span><span class="sk" style="--w:52px"></span></div>
+              <div class="ledger-row"><span class="sk-stack"><span class="sk" style="--w:48px"></span><span class="sk" style="--w:240px;--h:10px"></span></span><span class="sk" style="--w:70px"></span></div>
+              <div class="ledger-row"><span class="sk-stack"><span class="sk" style="--w:36px"></span><span class="sk" style="--w:160px;--h:10px"></span></span><span class="sk" style="--w:56px"></span></div>
+              <div class="ledger-row"><span class="sk-stack"><span class="sk" style="--w:48px"></span><span class="sk" style="--w:200px;--h:10px"></span></span><span class="sk" style="--w:60px"></span></div>
+            </div>
+          </div>
+        </div>
+        <div class="settings-hint ledger-hint">仅展示最近 10 条。发起对话先按档位预扣，结束后按实际 tokens 与模型费率结算，多退少补。</div>
+      </section>
+
+      <!-- 用户管理 -->
+      <section class="admin-page wide" data-page="users">
+        <h1 class="page-title">用户管理</h1>
+        <div class="table-card">
+          <table class="admin-table" id="user-table">
+            <thead>
+              <tr><th>用户名</th><th>角色</th><th>状态</th><th>存储配额</th><th>work 上限</th><th>积分</th><th>注册时间</th><th>操作</th></tr>
+            </thead>
+            <tbody id="user-tbody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 用量统计 -->
+      <section class="admin-page wide" data-page="usage">
+        <h1 class="page-title">用量统计</h1>
         <div class="usage-filter">
           <select id="usage-user"><option value="">全部用户</option></select>
           <input type="date" id="usage-from" title="起始日期（含）">
-          <span class="usage-sep">—</span>
-          <input type="date" id="usage-to" title="截止日期（不含）">
-          <button id="usage-query" class="admin-btn">查询</button>
+          <span class="usage-sep">至</span>
+          <input type="date" id="usage-to" title="截止日期（含当天）">
+          <button id="usage-query" class="admin-btn primary">查询</button>
         </div>
-        <table class="admin-table" id="usage-table">
-          <thead>
-            <tr><th>用户</th><th>模型</th><th>轮次</th><th>请求数</th><th>总输入</th><th>缓存命中</th><th>缓存写入</th><th>输出</th></tr>
-          </thead>
-          <tbody id="usage-tbody"></tbody>
-        </table>
+        <div class="table-card">
+          <table class="admin-table" id="usage-table">
+            <thead>
+              <tr><th>用户</th><th>模型</th><th class="num">轮次</th><th class="num">请求数</th><th class="num">总输入</th><th class="num">缓存命中</th><th class="num">缓存写入</th><th class="num">输出</th></tr>
+            </thead>
+            <tbody id="usage-tbody"></tbody>
+          </table>
+        </div>
       </section>
 
-      <section class="admin-section hidden" id="settings-section">
-        <h2>系统设置</h2>
-        <label class="settings-row">
-          <input type="checkbox" id="registration-open">
-          开放注册（关闭后新用户无法自行注册）
-        </label>
-        <label class="settings-row">
-          单工作区上限（MB）：
-          <input type="number" id="work-max-mb" min="1" step="1" class="settings-number">
-          <span class="settings-hint">单个项目目录允许占用的最大空间，用户可被单独覆盖</span>
-        </label>
-        <button id="settings-save" class="admin-btn">保存</button>
-        <span id="settings-tip" class="settings-tip"></span>
+      <!-- 积分流水（管理侧全量） -->
+      <section class="admin-page wide" data-page="ledger">
+        <h1 class="page-title">积分流水</h1>
+        <div class="usage-filter">
+          <select id="ledger-user"><option value="">全部用户</option></select>
+          <button id="ledger-query" class="admin-btn primary">查询</button>
+        </div>
+        <div class="table-card">
+          <table class="admin-table" id="ledger-table">
+            <thead>
+              <tr><th>时间</th><th>用户</th><th>类型</th><th class="num">变动</th><th class="num">余额</th><th>模型</th><th>单号</th><th>事由</th></tr>
+            </thead>
+            <tbody id="ledger-tbody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 模型资费 -->
+      <section class="admin-page wide" data-page="models">
+        <h1 class="page-title">模型资费 <span class="title-hint">积分 / 百万 tokens</span></h1>
+        <div class="table-card">
+          <table class="admin-table" id="model-table">
+            <thead>
+              <tr><th>模型名</th><th class="num">输入</th><th class="num">缓存命中</th><th class="num">缓存写入</th><th class="num">输出</th><th>状态</th><th>更新时间</th><th>操作</th></tr>
+            </thead>
+            <tbody id="model-tbody"></tbody>
+          </table>
+        </div>
+        <form id="model-form" class="model-form">
+          <input type="text" id="model-name" placeholder="模型名（与用量记录的 modelName 一致）" required>
+          <input type="number" id="model-input" min="0" step="any" placeholder="输入" title="无缓存输入" required>
+          <input type="number" id="model-cache-read" min="0" step="any" placeholder="缓存命中" required>
+          <input type="number" id="model-cache-write" min="0" step="any" placeholder="缓存写入" required>
+          <input type="number" id="model-output" min="0" step="any" placeholder="输出" required>
+          <label class="model-enabled"><input type="checkbox" id="model-enabled" class="switch" checked>启用</label>
+          <button type="submit" class="admin-btn primary" id="model-submit">新增资费卡</button>
+          <button type="button" class="admin-btn hidden" id="model-cancel">取消编辑</button>
+        </form>
+        <div class="settings-hint table-hint">模型名 default 行为兜底卡：预扣估算与未知模型结算都按它，不可删除/改名/停用。</div>
+      </section>
+
+      <!-- 系统设置（仅站长） -->
+      <section class="admin-page" data-page="settings">
+        <h1 class="page-title">系统设置</h1>
+
+        <div class="section-caption">注册与存储</div>
+        <div class="card group-card">
+          <label class="row">
+            <span class="row-text">
+              <span class="row-label">开放注册</span>
+              <span class="row-desc">关闭后新用户无法自行注册</span>
+            </span>
+            <input type="checkbox" id="registration-open" class="switch">
+          </label>
+          <div class="row">
+            <span class="row-text">
+              <span class="row-label">单工作区上限</span>
+              <span class="row-desc">单个项目目录允许占用的最大空间，用户可被单独覆盖</span>
+            </span>
+            <span class="row-control">
+              <input type="number" id="work-max-mb" min="1" step="1" class="settings-number">
+              <span class="unit">MB</span>
+            </span>
+          </div>
+        </div>
+
+        <div class="section-caption">计费预扣档位</div>
+        <div class="card group-card">
+          <div class="row">
+            <span class="row-label">缓存命中输入</span>
+            <span class="row-control">
+              <input type="number" id="est-cache-read" min="0" step="1000" class="settings-number">
+              <span class="unit">tokens</span>
+            </span>
+          </div>
+          <div class="row">
+            <span class="row-label">无缓存输入</span>
+            <span class="row-control">
+              <input type="number" id="est-input" min="0" step="1000" class="settings-number">
+              <span class="unit">tokens</span>
+            </span>
+          </div>
+          <div class="row">
+            <span class="row-label">输出</span>
+            <span class="row-control">
+              <input type="number" id="est-output" min="0" step="1000" class="settings-number">
+              <span class="unit">tokens</span>
+            </span>
+          </div>
+        </div>
+        <div class="settings-hint ledger-hint">发起对话时按此档位预估并预扣积分，结束后按实际用量结算。</div>
+
+        <div class="settings-actions">
+          <button id="settings-save" class="wide-btn primary">保存设置</button>
+          <span id="settings-tip" class="settings-tip"></span>
+        </div>
       </section>
     </main>
   </div>
+  <script src="/static/ui.js"></script>
   <script src="/static/admin.js"></script>
 </body>
 </html>
