@@ -211,6 +211,43 @@ public class WorkService {
         return systemSettingService.getWorkMaxBytes();
     }
 
+    /**
+     * 用户的存储概览（账单页展示）：占用合计 / 总配额 / 生效的单工作区配额。
+     *
+     * <p>占用合计逐个 work 现算（{@link #refreshSize} 顺带写回快照），
+     * 不依赖外部上报，避免展示陈旧值。
+     *
+     * @param userId 用户 ID
+     * @return 概览三元组
+     * @throws BizException 用户不存在（404）
+     */
+    public StorageOverview storageOverview(long userId) {
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BizException(404, "用户不存在");
+        }
+        long workMax = user.getWorkQuotaBytes() != null
+                ? user.getWorkQuotaBytes()
+                : systemSettingService.getWorkMaxBytes();
+        long used = workMapper.selectList(new LambdaQueryWrapper<Work>()
+                        .eq(Work::getUserId, userId))
+                .stream()
+                .mapToLong(row -> refreshSize(row.getId()))
+                .sum();
+        return new StorageOverview(used,
+                user.getQuotaBytes() == null ? 0L : user.getQuotaBytes(), workMax);
+    }
+
+    /**
+     * 存储概览三元组。
+     *
+     * @param usedBytes  全部 work 占用合计（查询时现算）
+     * @param quotaBytes 总存储配额
+     * @param workMaxBytes 生效的单工作区配额（覆盖值或全局）
+     */
+    public record StorageOverview(long usedBytes, long quotaBytes, long workMaxBytes) {
+    }
+
     /** 遍历目录求字节和；目录不存在视为 0 */
     private long refreshSize(String workId) {
         Path dir = Path.of(workspacePath(workId));

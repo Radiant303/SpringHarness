@@ -228,6 +228,31 @@ class PointsLedgerRow(Base):
     )
 
 
+class RedeemCodeRow(Base):
+    """兑换码：一次性，兑换经条件 UPDATE 抢占并置软删除；过期只在兑换时判定。"""
+
+    __tablename__ = "redeem_codes"
+    __table_args__ = (
+        Index("ix_redeem_status_created", "status", "created_at"),
+        Index("ix_redeem_created_by", "created_by"),
+    )
+
+    id: Mapped[int] = mapped_column(_BigInt, primary_key=True, autoincrement=False)  # 雪花 ID
+    code: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="ACTIVE")
+    points_amount: Mapped[Decimal] = mapped_column(DECIMAL(20, 6), nullable=False, default=0)
+    storage_delta_bytes: Mapped[int] = mapped_column(_BigInt, nullable=False, default=0)
+    work_quota_delta_bytes: Mapped[int] = mapped_column(_BigInt, nullable=False, default=0)
+    expires_at: Mapped[datetime.datetime | None] = mapped_column(MicrosecondDateTime, nullable=True)
+    created_by: Mapped[int] = mapped_column(_BigInt, ForeignKey("users.id"), nullable=False)
+    redeemed_by: Mapped[int | None] = mapped_column(_BigInt, ForeignKey("users.id"), nullable=True)
+    redeemed_at: Mapped[datetime.datetime | None] = mapped_column(MicrosecondDateTime, nullable=True)
+    deleted_at: Mapped[datetime.datetime | None] = mapped_column(MicrosecondDateTime, nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        MicrosecondDateTime, nullable=False, default=utc_now,
+    )
+
+
 # ---- engine / sessionmaker 工厂（懒初始化，双检锁）----
 
 _engine: Engine | None = None

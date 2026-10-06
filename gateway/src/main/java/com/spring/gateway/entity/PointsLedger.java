@@ -36,6 +36,9 @@ public class PointsLedger {
     /** 类型：站长调账。 */
     public static final String TYPE_ADJUST = "ADJUST";
 
+    /** 类型：兑换码入账（ref_id = 码 ID）。 */
+    public static final String TYPE_REDEEM = "REDEEM";
+
     /** 主键，雪花 ID。 */
     @TableId(type = IdType.INPUT)
     private Long id;

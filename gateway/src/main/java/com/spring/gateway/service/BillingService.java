@@ -157,6 +157,22 @@ public class BillingService {
     }
 
     /**
+     * 兑换码积分入账：写 REDEEM 流水（ref_id = 码 ID，(type, ref_id) 唯一作幂等锚）。
+     * 必须在调用方的事务内使用（与配额增量同一事务，同生共死）。
+     *
+     * @param userId 兑换人用户 ID
+     * @param points 入账积分（必须为正；零面值码由调用方跳过本方法）
+     * @param refId  码 ID（字符串）
+     * @return 入账后余额
+     */
+    public BigDecimal grantRedeem(long userId, BigDecimal points, String refId) {
+        BigDecimal after = applyDelta(userId, points, false);
+        insertLedger(userId, points, after, PointsLedger.TYPE_REDEEM, refId, null, null, null);
+        log.info("兑换码入账: userId={} refId={} points={} 余额={}", userId, refId, points, after);
+        return after;
+    }
+
+    /**
      * 用户的最近流水（按 id 倒序）
      *
      * @param userId 用户 ID

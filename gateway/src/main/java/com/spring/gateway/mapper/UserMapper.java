@@ -39,4 +39,27 @@ public interface UserMapper extends BaseMapper<User> {
      */
     @Update("UPDATE users SET points_balance = #{balance} WHERE id = #{id}")
     int updateBalance(@Param("id") Long id, @Param("balance") BigDecimal balance);
+
+    /**
+     * 存储配额原子增量（兑换码发奖用）；SQL 内自加，并发兑换可叠加不丢失更新。
+     *
+     * @param id    用户 ID
+     * @param delta 增量（字节，非负）
+     * @return 受影响行数
+     */
+    @Update("UPDATE users SET quota_bytes = quota_bytes + #{delta} WHERE id = #{id}")
+    int addQuotaBytes(@Param("id") Long id, @Param("delta") long delta);
+
+    /**
+     * 单工作区上限原子增量（兑换码发奖用）。列为 NULL（跟随全局）时以 base
+     * （兑换时的全局 work_max_bytes）为基线落显式覆盖值，保证增量语义确定。
+     *
+     * @param id    用户 ID
+     * @param base  全局基线（字节），仅在列为 NULL 时生效
+     * @param delta 增量（字节，非负）
+     * @return 受影响行数
+     */
+    @Update("UPDATE users SET work_quota_bytes = COALESCE(work_quota_bytes, #{base}) + #{delta}"
+            + " WHERE id = #{id}")
+    int addWorkQuotaBytes(@Param("id") Long id, @Param("base") long base, @Param("delta") long delta);
 }
