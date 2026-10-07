@@ -8,7 +8,7 @@
 
 ## 1. 一句话风格
 
-**暖白底 + 白色圆角主卡片，黑白灰为主，颜色只用来表达含义，不做装饰。** 风格参考 Kimi：安静、留白多、层级靠灰度和字重区分，而不是靠颜色、边框和阴影。
+**浅灰底（`#fefefe`）+ 白色圆角主卡片，黑白灰为主，颜色只用来表达含义，不做装饰。** 风格参考 Kimi：安静、留白多、层级靠灰度和字重区分，而不是靠颜色、边框和阴影。
 
 判断标准：截图转成黑白后，界面层级依然清楚。如果只能靠颜色才看得出层级，说明设计错了。
 
@@ -42,7 +42,7 @@
 
 | 用途 | 值 | 变量 |
 |---|---|---|
-| 页面底（应用外壳的侧栏与主区背景） | `#f9f8f6` 暖白 | `--ground` |
+| 页面底（应用外壳的侧栏与主区背景） | `#fefefe` | `--ground` |
 | 主卡片、对话框、菜单 | `#ffffff` | `--bg` / `--panel` |
 | 输入框、次按钮 | `#f2f2f2`（hover `#ebebeb`） | — |
 | 分组卡片（设置页） | `#f7f7f7`（hover `#efefef`） | `--admin-card` |
@@ -88,7 +88,7 @@ font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-s
 
 | 字号 | 字重 | 用于 |
 |---|---|---|
-| 46px | 800 | 只用于首页字标 `SPRING HARNESS`（`#hero`），别处不用 |
+| 40px | 600 | 只用于首页字标 `SPRING HARNESS`（`#hero`，另加 `0.14em` 字距），别处不用 |
 | 24px / 32px 行高 | 600 | 独立页面（登录/注册）的主标题：页面上唯一的大标题，用了它就别再加别的层级 |
 | 20px / 28px 行高 | 600 | 页面标题（`.page-title`）、账号名 |
 | 17px / 24px | 600 | 对话框标题 |
@@ -110,7 +110,7 @@ font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-s
 |---|---|
 | 28px | 表格内蓝色文字按钮（`.admin-btn`） |
 | 32px | 图标按钮（`.sb-icon-btn`）、圆形发送按钮 |
-| 34–36px | 普通按钮、筛选栏控件、快捷胶囊、对话框按钮（36） |
+| 34–36px | 普通按钮、筛选栏控件、对话框按钮（36） |
 | 36px | 侧栏列表行（项目、会话） |
 | 40px | 对话框输入框、导航项、菜单项、"新建会话"按钮 |
 | 44px | 登录页输入框和主按钮、整宽按钮（`.wide-btn`）、底部用户行 |
@@ -128,7 +128,7 @@ font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-s
 | 18px | 用户消息气泡 |
 | 20px | 计划面板 |
 | 24px | 聊天输入卡片 |
-| 999px | 胶囊：快捷提示、"最新消息"按钮、骨架条 |
+| 999px | 胶囊："最新消息"按钮、骨架条 |
 
 ### 内容宽度
 
@@ -151,7 +151,7 @@ font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-s
 
 ### 6.1 页面骨架
 
-所有登录后的页面都是同一个结构：**暖白底 + 240px 侧栏（无边框、无分隔线） + 右侧白色主卡片**。
+所有登录后的页面都是同一个结构：**浅灰底（`--ground`）+ 240px 侧栏（无边框、无分隔线） + 右侧白色主卡片**。
 
 ```css
 #app { display: flex; height: 100vh; background: var(--ground); }
@@ -230,7 +230,7 @@ body.login-page { display: flex; flex-direction: column; min-height: 100vh; back
 ```
 
 - 灰底、无边框。聚焦态按所在底色分两种写法，**两者不叠加**：
-  - 输入框直接放在暖白/灰色背景上（登录页、对话框）：聚焦把灰底**加深一档**（`#f2f2f2` → `#ebebeb`），不画线。
+  - 输入框直接放在灰色背景上（登录页、对话框）：聚焦把灰底**加深一档**（`#f2f2f2` → `#ebebeb`），不画线。
   - 输入框放在灰色分组卡片里（设置页）：卡片内本来就是白底，聚焦改成白底 + `1px solid rgba(0,0,0,0.16)` 描边。
 - **不要**用蓝色聚焦环或发光阴影。
 - 放在灰色分组卡片里的输入框反过来用白底（`.group-card .settings-number { background: #fff }`）。
@@ -479,7 +479,7 @@ UI.enhanceDate(inp);               // 只换一个日期框
   <link rel="stylesheet" href="/static/xxx.css">
 </head>
 <body>
-  <div id="xxx-app"><!-- 暖白底 + 240px 侧栏 + 白色主卡片，见 §6.1 --></div>
+  <div id="xxx-app"><!-- 浅灰底 + 240px 侧栏 + 白色主卡片，见 §6.1 --></div>
   <script src="/static/ui.js"></script>
   <script src="/static/xxx.js"></script>
 </body>

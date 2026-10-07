@@ -1,4 +1,4 @@
-/* Spring Harness 账户中心：参考 Kimi 设置页——暖白底侧栏 + 白色主卡片，
+/* Spring Harness 账户中心：参考 Kimi 设置页——灰底侧栏 + 白色主卡片，
    居中窄栏、灰色分组卡片、蓝色文字操作；管理表格用白底细边框卡片 */
 :root {
   --admin-card: #f7f7f7;            /* 分组卡片底色 */
@@ -101,16 +101,9 @@ body { min-width: 320px; background: var(--ground); }
 }
 .page-title + .section-caption { margin-top: 0; }
 
-#admin-error {
-  width: min(100%, 600px);
-  margin: 0 auto 16px;
-  padding: 10px 14px;
-  border-radius: 12px;
-  background: #fdecea;
-  color: var(--danger);
-  font-size: 14px;
-}
-#admin-main:has(.admin-page.wide.active) #admin-error { width: min(100%, 1080px); }
+/* 页头行：标题在左、主按钮在右（如兑换码页的"生成兑换码"） */
+.page-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 0 0 24px; }
+.page-head .page-title { margin: 0; }
 
 /* ---- 账号头部：大头像 + 名称 + 黑色角色徽章 ---- */
 .account-head {
@@ -183,7 +176,6 @@ label.row { cursor: pointer; }
 .wide-btn:hover { background: #efefef; }
 .wide-btn.primary { background: #111; color: #fff; }
 .wide-btn.primary:hover { background: #000; }
-.page-foot { margin-top: 20px; text-align: center; font-size: 12px; color: rgba(0, 0, 0, 0.3); }
 
 /* ---- 账单与用量 ---- */
 .points-summary { padding: 20px 20px 18px; }
@@ -197,7 +189,6 @@ label.row { cursor: pointer; }
   color: var(--text);
 }
 .points-big.negative { color: var(--danger); }
-.points-sub { margin-top: 8px; font-size: 13px; color: var(--text-faint); }
 
 .ledger-row {
   display: flex;
@@ -263,6 +254,78 @@ label.row { cursor: pointer; }
 .points-in { color: var(--admin-green); }
 .points-out { color: var(--danger); }
 .ref-cell { max-width: 140px; overflow: hidden; text-overflow: ellipsis; font-size: 12px; color: var(--text-faint); }
+
+/* ---- 兑换码：列表卡片（查询动作独立，头部内筛选） ---- */
+.redeem-card-title { font-size: 14px; font-weight: 500; color: var(--text); }
+.redeem-list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--admin-border);
+}
+.face-zero { color: var(--text-faint); }
+.cell-sub { margin-top: 2px; font-size: 12px; color: var(--text-faint); }
+.time-cell { font-variant-numeric: tabular-nums; color: var(--text-dim); }
+
+.redeem-code {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 12.5px;
+  letter-spacing: 0.4px;
+  padding: 3px 8px;
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.05);
+}
+/* 状态着色文字（§6.9）；.status-active/.status-disabled 沿用既有定义 */
+.status-warn { color: var(--warn); }
+
+/* ---- 账单页：兑换记录（礼物图标 + 所得徽章） ---- */
+.red-item { display: flex; gap: 12px; padding: 12px 0; }
+.red-item + .red-item { border-top: 1px solid var(--admin-line); }
+.red-icon { width: 20px; height: 20px; flex-shrink: 0; margin-top: 1px; color: rgba(0, 0, 0, 0.75); }
+.red-main { min-width: 0; }
+.red-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+/* 中性灰徽章（§6.5 "默认"样式）：结构靠徽章形状表达，不靠颜色 */
+.red-chip {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--text-dim);
+  font-size: 12px;
+  line-height: 20px;
+  white-space: nowrap;
+}
+.red-meta { margin-top: 6px; font-size: 12px; color: var(--text-faint); }
+.redeem-control { display: inline-flex; align-items: center; gap: 8px; }
+.redeem-control input {
+  width: 230px;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  outline: none;
+  background: #fff;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  transition: border-color 0.15s;
+}
+.redeem-control input:focus { border-color: rgba(0, 0, 0, 0.16); }
+
+/* 账单页存储概览条 */
+.quota-strip {
+  display: flex;
+  gap: 32px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--admin-line);
+}
+.quota-item { display: flex; align-items: baseline; gap: 8px; }
+.quota-label { font-size: 12px; color: var(--text-faint); }
+.quota-value { font-size: 13px; color: var(--text-dim); }
 
 /* 表格内操作：蓝色文字按钮；主按钮黑色实底 */
 .row-actions { display: flex; gap: 2px; flex-wrap: wrap; margin: 0 -8px; }

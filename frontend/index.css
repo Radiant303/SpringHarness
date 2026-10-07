@@ -22,7 +22,7 @@
   --accent-hover: #000000;
   --hover-bg: rgba(0, 0, 0, 0.04);
   --active-bg: var(--color-surface);
-  --ground: #f9f8f6;               /* 侧栏/页面底色：暖白 */
+  --ground: #fefefe;               /* 侧栏/页面底色 */
   --sb-hover: rgba(0, 0, 0, 0.04);
   --sb-active: rgba(0, 0, 0, 0.06);
   --link: #1783ff;
@@ -67,7 +67,7 @@ html, body {
 
 #app { display: flex; height: 100vh; background: var(--ground); }
 
-/* ---- 侧栏：暖白底色，无分隔线；列表行高 36px，灰色小标题分组 ---- */
+/* ---- 侧栏：灰色底色，无分隔线；列表行高 36px，灰色小标题分组 ---- */
 #sidebar {
   position: relative;
   width: 240px;
@@ -383,8 +383,8 @@ html, body {
   gap: 18px;
 }
 
-/* ---- 空会话首页：字标 + 输入框居中，下方快捷胶囊 ---- */
-#hero, #quick-chips { display: none; }
+/* ---- 空会话首页：字标 + 输入框居中 ---- */
+#hero { display: none; }
 #main.is-empty #breadcrumb { visibility: hidden; }
 #main:has(.msg-skeleton) #breadcrumb { visibility: hidden; }  /* 加载中不露出孤零零的分隔符 */
 #main.is-empty #messages {
@@ -397,13 +397,14 @@ html, body {
 #main.is-empty #input-area::before,
 #main.is-empty #plan-dock { display: none; }
 #main.is-empty #hero { display: block; }
-#main.is-empty #quick-chips { display: flex; }
 
+/* 字标：中粗 + 宽字距，与 KIMI 的超粗紧凑字标拉开差异 */
 #hero {
   margin: 0 0 30px;
   text-align: center;
-  font: 800 46px/1 "Segoe UI", "Helvetica Neue", Arial, sans-serif;
-  letter-spacing: 0.01em;
+  font: 600 40px/1.1 "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  letter-spacing: 0.14em;
+  margin-right: -0.14em;  /* 抵消末字符后的字距，保证视觉居中 */
   color: #111;
   user-select: none;
 }
@@ -1015,29 +1016,6 @@ pre.tool-result.error { background: var(--diff-del-bg); color: var(--danger); }
 /* 断开时文字略加深以示提醒 */
 .tray-conn:has(.conn-dot.disconnected) { color: var(--text-dim); }
 
-/* 首页快捷胶囊：白底细描边圆角胶囊，居中换行 */
-#quick-chips {
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 8px;
-  max-width: var(--content-max);
-  margin: 20px auto 0;
-}
-.quick-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 36px;
-  padding: 0 14px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 999px;
-  background: #fff;
-  font-size: 14px;
-  color: var(--text);
-}
-.quick-chip:hover { background: rgba(0, 0, 0, 0.03); border-color: rgba(0, 0, 0, 0.12); }
-.quick-chip svg { width: 16px; height: 16px; color: rgba(0, 0, 0, 0.7); }
-
 /* 上下文用量：环形进度图标常驻，悬停浮出深色气泡（参考 Kimi 的用量提示） */
 #usage {
   position: relative;
@@ -1306,7 +1284,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   #plan-dock { left: 12px; right: 12px; }
   #plan-panel { padding: 14px 16px 16px; }
   #usage { display: none; }
-  #hero { font-size: 32px; margin-bottom: 22px; }
+  #hero { font-size: 26px; margin-bottom: 22px; }
   .new-session-btn .kbd { display: none; }
   .msg.user { max-width: 96%; }
   .msg-skeleton .sk-turn { gap: 8px; }

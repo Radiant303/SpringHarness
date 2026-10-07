@@ -8,9 +8,9 @@
     /* 未登录直接去登录页，避免先闪出聊天界面 */
     try { if (!localStorage.getItem("sh.token")) location.replace("/static/login.html"); } catch (e) { /* 存储不可用时交给 index.js 处理 */ }
   </script>
-  <link rel="stylesheet" href="/static/index.css">
-  <link rel="stylesheet" href="/static/ui.css">
-  <link rel="stylesheet" href="/static/sprout.css">
+  <link rel="stylesheet" href="/static/index.css?v=20261006">
+  <link rel="stylesheet" href="/static/ui.css?v=20261006">
+  <link rel="stylesheet" href="/static/sprout.css?v=20261006">
 </head>
 <body>
   <div id="app">
@@ -194,28 +194,6 @@
           </span>
         </div>
 
-        <!-- 空会话首页的快捷胶囊：点击把起手提示填进输入框 -->
-        <div id="quick-chips">
-          <button type="button" class="quick-chip" data-prompt="帮我梳理一下当前项目的目录结构和核心模块">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h6M4 12h6M4 19h6M14 5h6M14 12h6M14 19h6"/></svg>项目梳理
-          </button>
-          <button type="button" class="quick-chip" data-prompt="帮我排查这个问题：">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 8.5V7a3.5 3.5 0 0 1 7 0v1.5"/><rect x="6.5" y="8.5" width="11" height="11" rx="5.5"/><path d="M12 12v4M3.5 13h3M17.5 13h3M4.5 8.5l2 1.5M19.5 8.5l-2 1.5M4.5 19l2-1.5M19.5 19l-2-1.5"/></svg>排查 Bug
-          </button>
-          <button type="button" class="quick-chip" data-prompt="为以下代码编写单元测试：">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 3.5h5M10.5 3.5v5.2L5 18.2A1.5 1.5 0 0 0 6.3 20.5h11.4a1.5 1.5 0 0 0 1.3-2.3l-5.5-9.5V3.5"/><path d="M7.5 14.5h9"/></svg>编写测试
-          </button>
-          <button type="button" class="quick-chip" data-prompt="帮我审查最近的改动，指出潜在问题">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>代码审查
-          </button>
-          <button type="button" class="quick-chip" data-prompt="帮我重构这段代码，提升可读性：">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10z"/><path d="M13.5 7.5l3 3"/></svg>重构优化
-          </button>
-          <button type="button" class="quick-chip" data-prompt="为当前项目生成一份 README 文档">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3.5H7a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-10z"/><path d="M14 3.5v5h5M9 13h6M9 16.5h4"/></svg>生成文档
-          </button>
-        </div>
-
         <!-- Agent 提问卡：到达时顶替输入卡片的位置，不再全屏遮罩 -->
         <div id="question-card" class="hidden">
           <div id="question-head">
@@ -254,8 +232,8 @@
 
   <script src="/static/vendor/marked.min.js"></script>
   <script src="/static/vendor/purify.min.js"></script>
-  <script src="/static/sprout.js"></script>
-  <script src="/static/ui.js"></script>
-  <script src="/static/index.js"></script>
+  <script src="/static/sprout.js?v=20261006"></script>
+  <script src="/static/ui.js?v=20261006"></script>
+  <script src="/static/index.js?v=20261006"></script>
 </body>
 </html>

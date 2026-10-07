@@ -1872,15 +1872,6 @@ function bind() {
   };
   new MutationObserver(syncEmpty).observe($("messages"), { childList: true });
   syncEmpty();
-  $("quick-chips").addEventListener("click", (e) => {
-    const chip = e.target.closest(".quick-chip");
-    if (!chip) return;
-    const input = $("input");
-    input.value = chip.dataset.prompt || "";
-    input.focus();
-    input.setSelectionRange(input.value.length, input.value.length);
-    input.dispatchEvent(new Event("input"));
-  });
   const togglePlan = () => {
     const collapsed = $("plan-panel").classList.toggle("hidden");
     $("plan-pill").setAttribute("aria-pressed", String(!collapsed));

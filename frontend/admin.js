@@ -14,10 +14,9 @@ const isStaff = myRole === "owner" || myRole === "admin";
 
 /* ---------- 基础 ---------- */
 
+/* 提示类信息统一走悬浮轻提示（UI.toast）；空串为清空语义，无需发提示 */
 function showError(msg) {
-  const box = $("admin-error");
-  box.textContent = msg || "";
-  box.classList.toggle("hidden", !msg);
+  if (msg) UI.toast(msg, { type: "error" });
 }
 
 /** 去独立登录页；带上当前页（含 #hash 分页），登录后回到这里 */
@@ -58,7 +57,7 @@ function fmtPoints(n) {
   return parseFloat(v.toFixed(6)).toLocaleString(undefined, { maximumFractionDigits: 6 });
 }
 
-const LEDGER_TYPE_LABELS = { HOLD: "预扣", SETTLE: "结算", RELEASE: "释放", DIRECT: "直扣", ADJUST: "调账" };
+const LEDGER_TYPE_LABELS = { HOLD: "预扣", SETTLE: "结算", RELEASE: "释放", DIRECT: "直扣", ADJUST: "调账", REDEEM: "兑换" };
 
 function fmtBytes(bytes) {
   const n = Number(bytes || 0);
@@ -69,6 +68,14 @@ function fmtBytes(bytes) {
 }
 
 function fmtTime(iso) { return iso ? new Date(iso).toLocaleString() : "-"; }
+
+/** 紧凑时间：YYYY-MM-DD HH:mm（补齐零、无秒），管理表格用 */
+function fmtDT(iso) {
+  if (!iso) return "-";
+  const d = new Date(iso);
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
 
 /** 解析非负数字输入；空串或非法返回 null（Number("") 为 0，需单独排除） */
 function parseNonNegative(text) {
@@ -87,16 +94,17 @@ const pageLoaders = {
   usage: () => ensureUsers().then(() => loadUsage()),
   ledger: () => ensureUsers().then(() => loadLedger()),
   models: () => loadModels(),
+  redeem: () => ensureUsers().then(() => loadRedeemCodes()),
   settings: () => loadSettings(),
 };
 
-const PAGE_TITLES = { account: "账号与安全", points: "账单与用量", users: "用户管理", usage: "用量统计", ledger: "积分流水", models: "模型资费", settings: "系统设置" };
+const PAGE_TITLES = { account: "账号与安全", points: "账单与用量", users: "用户管理", usage: "用量统计", ledger: "积分流水", models: "模型资费", redeem: "兑换码", settings: "系统设置" };
 
 /* 页面可见性与导航分组一致：管理组对站长/管理员开放，系统设置仅站长 */
 function pageAllowed(page) {
   if (!Object.hasOwn(pageLoaders, page)) return false;
   if (page === "settings") return myRole === "owner";
-  if (page === "users" || page === "usage" || page === "ledger" || page === "models") return isStaff;
+  if (page === "users" || page === "usage" || page === "ledger" || page === "models" || page === "redeem") return isStaff;
   return true;
 }
 
@@ -141,12 +149,48 @@ async function loadAccount() {
 
 /* ---------- 我的积分 ---------- */
 
+/* 兑换所得组合文案：跳过 0 项（granted_* 字段命名通用） */
+function grantedPartsText(g) {
+  const parts = [];
+  if (Number(g.granted_points) > 0) parts.push("+" + fmtPoints(g.granted_points) + " 积分");
+  if (Number(g.granted_storage_bytes) > 0) parts.push("+" + fmtBytes(g.granted_storage_bytes) + " 存储配额");
+  if (Number(g.granted_work_quota_bytes) > 0) parts.push("+" + fmtBytes(g.granted_work_quota_bytes) + " work 配额");
+  return parts.join(" · ");
+}
+
 async function loadMyPoints() {
   const me = await api("/api/billing/me");
   const balance = Number(me?.balance ?? 0);
   const big = $("points-big");
   big.textContent = fmtPoints(balance);
   big.classList.toggle("negative", balance < 0);
+  $("quota-storage").textContent = me
+    ? fmtBytes(me.storage_used_bytes) + " / " + fmtBytes(me.quota_bytes)
+    : "-";
+  $("quota-work").textContent = me ? fmtBytes(me.work_quota_bytes) : "-";
+
+  const reds = await api("/api/billing/redemptions");
+  const redBox = $("my-redemptions");
+  redBox.innerHTML = "";
+  if (!reds || !reds.length) {
+    redBox.innerHTML = `<div class="empty-tip">暂无兑换记录</div>`;
+  } else {
+    for (const r of reds) {
+      const chips = [];
+      if (Number(r.granted_points) > 0) chips.push(`<span class="red-chip">+${fmtPoints(r.granted_points)} 积分</span>`);
+      if (Number(r.granted_storage_bytes) > 0) chips.push(`<span class="red-chip">+${fmtBytes(r.granted_storage_bytes)} 存储配额</span>`);
+      if (Number(r.granted_work_quota_bytes) > 0) chips.push(`<span class="red-chip">+${fmtBytes(r.granted_work_quota_bytes)} work 配额</span>`);
+      const div = document.createElement("div");
+      div.className = "red-item";
+      div.innerHTML = `
+        <svg class="red-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="4" rx="1"/><path d="M5 12v8a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-8M12 8v13M12 8s-1.5-5-4.5-5a2 2 0 0 0 0 4M12 8s1.5-5 4.5-5a2 2 0 0 1 0 4"/></svg>
+        <div class="red-main">
+          <div class="red-chips">${chips.join("")}</div>
+          <div class="red-meta">${fmtDT(r.redeemed_at)} · ${r.code}</div>
+        </div>`;
+      redBox.appendChild(div);
+    }
+  }
 
   const box = $("my-ledger");
   box.innerHTML = "";
@@ -157,7 +201,7 @@ async function loadMyPoints() {
   }
   for (const r of rows) {
     const change = Number(r.change_amount);
-    const meta = [fmtTime(r.created_at), r.model_name, r.reason].filter(Boolean).join(" · ");
+    const meta = [fmtDT(r.created_at), r.model_name, r.reason].filter(Boolean).join(" · ");
     const div = document.createElement("div");
     div.className = "ledger-row";
     div.innerHTML = `
@@ -209,7 +253,7 @@ function renderUsers() {
     if (operable) {
       actions.push(`<button class="admin-btn" data-act="password" data-id="${u.user_id}" data-name="${u.username}">重置密码</button>`);
       actions.push(`<button class="admin-btn" data-act="quota" data-id="${u.user_id}" data-name="${u.username}" data-quota="${u.quota_bytes}">设配额</button>`);
-      actions.push(`<button class="admin-btn" data-act="workquota" data-id="${u.user_id}" data-name="${u.username}" data-quota="${u.work_quota_bytes == null ? "" : u.work_quota_bytes}">work上限</button>`);
+      actions.push(`<button class="admin-btn" data-act="workquota" data-id="${u.user_id}" data-name="${u.username}" data-quota="${u.work_quota_bytes == null ? "" : u.work_quota_bytes}">work配额</button>`);
     }
     // 调账是带流水的交易（非直接改数），仅站长
     if (myRole === "owner" && !isOwnerRow) {
@@ -298,9 +342,9 @@ async function onUserAction(btn) {
     } else if (act === "workquota") {
       const current = btn.dataset.quota === "" ? "" : String(Math.round(Number(btn.dataset.quota) / MB));
       const v = await UI.prompt({
-        title: "单工作区上限",
+        title: "单工作区配额",
         message: `设置「${name}」每个项目目录允许占用的最大空间。`,
-        label: "上限",
+        label: "配额",
         value: current,
         placeholder: "跟随全局",
         inputMode: "decimal",
@@ -313,7 +357,7 @@ async function onUserAction(btn) {
         }),
       });
       if (v === null) return;
-      done = v.trim() === "" ? "已恢复跟随全局" : "单工作区上限已更新";
+      done = v.trim() === "" ? "已恢复跟随全局" : "单工作区配额已更新";
     } else if (act === "points") {
       const v = await UI.dialog({
         title: "调账",
@@ -494,6 +538,153 @@ async function onModelAction(btn) {
   }
 }
 
+/* ---------- 兑换码 ---------- */
+
+/* 状态用着色文字表达（§6.9），不用底色徽章 */
+function redeemStatusHtml(row) {
+  if (row.status === "REDEEMED") return `<span class="face-zero">已使用</span>`;
+  if (row.status === "REVOKED") return `<span class="status-disabled">已作废</span>`;
+  if (row.expired) return `<span class="status-warn">已过期</span>`;
+  return `<span class="status-active">待使用</span>`;
+}
+
+/* 面值单元格：0 显示为淡色占位，数值与类型分列 */
+function faceCell(value, fmt) {
+  const n = Number(value);
+  return n > 0 ? fmt(n) : `<span class="face-zero">–</span>`;
+}
+
+async function loadRedeemCodes() {
+  const params = new URLSearchParams();
+  if ($("redeem-status").value) params.set("status", $("redeem-status").value);
+  const rows = await UI.loadTable("redeem-tbody", () => api("/api/admin/redeem-codes?" + params.toString())) || [];
+  const nameOf = Object.fromEntries(users.map((u) => [u.user_id, u.username]));
+  const tbody = $("redeem-tbody");
+  tbody.innerHTML = "";
+  if (!rows.length) {
+    UI.emptyRow(tbody, "暂无兑换码");
+    return;
+  }
+  for (const row of rows) {
+    const tr = document.createElement("tr");
+    const actions = [`<button class="admin-btn" data-act="copy" data-code="${row.code}">复制</button>`];
+    if (myRole === "owner" && row.status === "ACTIVE") {
+      actions.push(`<button class="admin-btn danger" data-act="revoke" data-id="${row.id}">作废</button>`);
+    }
+    const redeemedBy = row.redeemed_by ? (nameOf[row.redeemed_by] || row.redeemed_by) : null;
+    tr.innerHTML = `
+      <td><code class="redeem-code">${row.code}</code></td>
+      <td class="num">${faceCell(row.points, fmtPoints)}</td>
+      <td class="num">${faceCell(row.storage_delta_bytes, fmtBytes)}</td>
+      <td class="num">${faceCell(row.work_quota_delta_bytes, fmtBytes)}</td>
+      <td>${redeemStatusHtml(row)}</td>
+      <td class="time-cell">${row.expires_at ? fmtDT(row.expires_at) : '<span class="face-zero">永久</span>'}</td>
+      <td></td>
+      <td class="time-cell">${fmtDT(row.created_at)}</td>
+      <td><div class="row-actions">${actions.join("")}</div></td>`;
+    tr.cells[6].innerHTML = redeemedBy
+      ? `${redeemedBy}<div class="cell-sub">${fmtDT(row.redeemed_at)}</div>`
+      : `<span class="face-zero">–</span>`;
+    tbody.appendChild(tr);
+  }
+}
+
+/* 生成兑换码：右上角主按钮弹出的对话框；校验/提交都在框内，失败可改了重试 */
+async function openRedeemGen() {
+  const numOrZero = (s) => {
+    const t = String(s ?? "").trim();
+    if (t === "") return 0;
+    const n = Number(t);
+    return Number.isFinite(n) && n >= 0 ? n : null;
+  };
+  const v = await UI.dialog({
+    title: "生成兑换码",
+    okText: "生成",
+    fields: [
+      { name: "count", label: "数量", value: "1", inputMode: "numeric", hint: "一次最多 100 个" },
+      { name: "points", label: "积分", placeholder: "0", inputMode: "decimal" },
+      { name: "storageMb", label: "存储配额", suffix: "MB", placeholder: "0", inputMode: "numeric" },
+      { name: "workQuotaMb", label: "单工作区配额", suffix: "MB", placeholder: "0", inputMode: "numeric" },
+      { name: "expires", label: "有效期", suffix: "小时", placeholder: "永久", inputMode: "numeric" },
+    ],
+    validate: (f) => {
+      const count = Number(f.count);
+      if (!Number.isInteger(count) || count < 1 || count > 100) {
+        return { name: "count", message: "数量必须是 1-100 的整数" };
+      }
+      const points = numOrZero(f.points);
+      const storageMb = numOrZero(f.storageMb);
+      const workQuotaMb = numOrZero(f.workQuotaMb);
+      if (points === null) return { name: "points", message: "面值必须是非负数字（留空按 0 计）" };
+      if (storageMb === null) return { name: "storageMb", message: "面值必须是非负数字（留空按 0 计）" };
+      if (workQuotaMb === null) return { name: "workQuotaMb", message: "面值必须是非负数字（留空按 0 计）" };
+      if (String(f.expires).trim() !== "") {
+        const hours = Number(f.expires);
+        if (!Number.isInteger(hours) || hours < 1) {
+          return { name: "expires", message: "有效小时必须是正整数（留空 = 永久有效）" };
+        }
+      }
+      if (points === 0 && storageMb === 0 && workQuotaMb === 0) {
+        return { name: "points", message: "三项面值至少一项大于 0" };
+      }
+      return null;
+    },
+    submit: (f) => {
+      const body = {
+        count: Number(f.count),
+        points: numOrZero(f.points),
+        storage_mb: numOrZero(f.storageMb),
+        work_quota_mb: numOrZero(f.workQuotaMb),
+      };
+      if (String(f.expires).trim() !== "") body.expires_in_hours = Number(f.expires);
+      return api("/api/admin/redeem-codes", { method: "POST", body });
+    },
+  });
+  if (v === null) return;
+  UI.toast(`已生成 ${v.count} 个兑换码`);
+  await loadRedeemCodes();
+}
+
+async function onRedeemAction(btn) {
+  try {
+    if (btn.dataset.act === "copy") {
+      await navigator.clipboard.writeText(btn.dataset.code);
+      UI.toast("兑换码已复制");
+    } else if (btn.dataset.act === "revoke") {
+      const ok = await UI.confirm({
+        title: "作废兑换码",
+        message: "确定作废该兑换码吗？作废后无法兑换。",
+        okText: "作废",
+        danger: true,
+        submit: () => api(`/api/admin/redeem-codes/${btn.dataset.id}/revoke`, { method: "POST" }),
+      });
+      if (!ok) return;
+      UI.toast("兑换码已作废");
+      await loadRedeemCodes();
+    }
+  } catch (err) {
+    showError(err.message);
+  }
+}
+
+/* 用户侧兑换（账单与用量页）：成功/失败都走轻提示 */
+async function onUserRedeem() {
+  const input = $("user-redeem-input");
+  const code = input.value.trim();
+  if (!code) { showError("请输入兑换码"); return; }
+  $("user-redeem-btn").disabled = true;
+  try {
+    const granted = await api("/api/billing/redeem", { method: "POST", body: { code } });
+    UI.toast("兑换成功：" + grantedPartsText(granted));
+    input.value = "";
+    await loadMyPoints();
+  } catch (err) {
+    showError(err.message);
+  } finally {
+    $("user-redeem-btn").disabled = false;
+  }
+}
+
 /* ---------- 积分流水（管理侧） ---------- */
 
 function renderLedgerUserOptions() {
@@ -563,7 +754,7 @@ async function loadSettings() {
 
 async function saveSettings() {
   const mb = Number($("work-max-mb").value);
-  if (!Number.isFinite(mb) || mb < 1) { showError("单工作区上限至少 1 MB"); return; }
+  if (!Number.isFinite(mb) || mb < 1) { showError("单工作区配额至少 1 MB"); return; }
   const estCacheRead = Number($("est-cache-read").value);
   const estInput = Number($("est-input").value);
   const estOutput = Number($("est-output").value);
@@ -636,17 +827,31 @@ function init() {
       const btn = e.target.closest("button[data-act]");
       if (btn) onModelAction(btn);
     });
+    $("redeem-tbody").addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-act]");
+      if (btn) onRedeemAction(btn);
+    });
     $("usage-query").onclick = () => loadUsage().catch((e) => showError(e.message));
     $("ledger-query").onclick = () => loadLedger().catch((e) => showError(e.message));
+    // 兑换码列表：切换状态筛选即刷新（自绘下拉会派发原生 change）
+    $("redeem-status").addEventListener("change", () => loadRedeemCodes().catch((e) => showError(e.message)));
     if (myRole === "owner") {
       $("model-form").addEventListener("submit", onModelFormSubmit);
       $("model-cancel").onclick = () => fillModelForm(null);
       $("settings-save").onclick = saveSettings;
+      $("redeem-open-gen").onclick = openRedeemGen;
     } else {
-      // 资费卡查看对管理员开放，编辑表单与操作仅站长
+      // 资费卡查看与兑换码列表对管理员开放，编辑表单与生成/作废仅站长
       $("model-form").remove();
+      $("redeem-open-gen").remove();
     }
   }
+
+  // 用户侧兑换（账单与用量页，所有角色可用）
+  $("user-redeem-btn").onclick = onUserRedeem;
+  $("user-redeem-input").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") onUserRedeem();
+  });
 
   // 页内链接（如「查看明细」→ #points）与浏览器前进后退都走 hash
   window.addEventListener("hashchange", () => switchPage(pageFromHash()));
