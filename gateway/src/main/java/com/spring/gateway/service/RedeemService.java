@@ -2,6 +2,7 @@ package com.spring.gateway.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.spring.gateway.common.BizException;
+import com.spring.gateway.common.RedeemFailRateLimiter;
 import com.spring.gateway.common.SnowflakeIdGenerator;
 import com.spring.gateway.dto.AdminRedeemCreateRequest;
 import com.spring.gateway.dto.RedeemResultView;
@@ -25,10 +26,9 @@ import java.util.Locale;
 /**
  * 兑换码：站长生成 → 用户兑换（积分 + 存储配额增量 + work 区上限增量）。
  *
- * <p>一次性靠 {@link RedeemCodeMapper#claim} 条件 UPDATE 抢占保证（影响行数唯一赢家），
- * 发奖与抢占同事务，失败整体回滚；积分部分经 {@link BillingService#grantRedeem}
- * 写 REDEEM 流水（(type, ref_id) 唯一作第二道幂等锚）。过期只在兑换时按
- * expires_at 判定，不建 EXPIRED 状态。
+ * <p>一次性靠条件 UPDATE 抢占保证（影响行数唯一赢家），发奖与抢占同事务，
+ * 失败整体回滚；积分部分经 BillingService 写 REDEEM 流水，(type, ref_id)
+ * 唯一约束兜底幂等。过期只在兑换时按 expires_at 判定，不建 EXPIRED 状态。
  *
  * @author hanbing
  * @since 2026-10-06
@@ -55,13 +55,14 @@ public class RedeemService {
     private final BillingService billingService;
     private final SystemSettingService systemSettingService;
     private final SnowflakeIdGenerator idGenerator;
+    private final RedeemFailRateLimiter failRateLimiter;
     private final SecureRandom secureRandom = new SecureRandom();
 
     /**
      * 批量生成兑换码（站长）。
      *
      * @param actorId 生成人（站长）用户 ID
-     * @param req     数量、三项面值、有效小时数
+     * @param req     生成请求
      * @return 生成的码行
      * @throws BizException 三项面值全为 0（400）
      */
@@ -86,44 +87,56 @@ public class RedeemService {
     }
 
     /**
-     * 用户兑换：抢占 → 同事务发奖（积分 + 两条配额原子增量）。
+     * 用户兑换：限流探查 → 抢占 → 同事务发奖。
+     *
+     * <p>失败限流：进入时探查桶余量，失败由限流器计数、成功清零；
+     * 桶空直接 429，连有效码也挡——暴力枚举场景下不再透传任何码状态信息。
      *
      * @param userId  当前用户 ID
-     * @param rawCode 用户输入（允许连字符/空格/小写）
+     * @param rawCode 用户输入的兑换码
      * @return 实发三项面值 + 入账后余额
-     * @throws BizException 码不存在（404）；已使用/已过期/已作废（409）
+     * @throws BizException 失败次数超限（429）；码不存在（404）；已使用/已过期/已作废（409）
      */
     @Transactional
     public RedeemResultView redeem(long userId, String rawCode) {
-        String code = normalize(rawCode);
-        if (redeemCodeMapper.claim(code, userId) != 1) {
-            throw claimFailure(code);
+        if (!failRateLimiter.tryEnter(userId)) {
+            throw new BizException(429, "兑换失败次数过多，请 1 分钟后再试");
         }
-        RedeemCode row = selectByCode(code);
+        try {
+            String code = normalize(rawCode);
+            if (redeemCodeMapper.claim(code, userId) != 1) {
+                throw claimFailure(code);
+            }
+            RedeemCode row = selectByCode(code);
 
-        BigDecimal balanceAfter;
-        if (row.getPointsAmount().signum() > 0) {
-            balanceAfter = billingService.grantRedeem(userId, row.getPointsAmount(), String.valueOf(row.getId()));
-        } else {
-            balanceAfter = billingService.balanceOf(userId);
+            BigDecimal balanceAfter;
+            if (row.getPointsAmount().signum() > 0) {
+                balanceAfter = billingService.grantRedeem(userId, row.getPointsAmount(), String.valueOf(row.getId()));
+            } else {
+                balanceAfter = billingService.balanceOf(userId);
+            }
+            if (row.getStorageDeltaBytes() > 0) {
+                userMapper.addQuotaBytes(userId, row.getStorageDeltaBytes());
+            }
+            if (row.getWorkQuotaDeltaBytes() > 0) {
+                // NULL（跟随全局）时以兑换时的全局上限为基线落显式覆盖值
+                userMapper.addWorkQuotaBytes(userId, systemSettingService.getWorkMaxBytes(),
+                        row.getWorkQuotaDeltaBytes());
+            }
+            failRateLimiter.reset(userId);
+            log.info("兑换成功: userId={} codeId={} points={} storage={} workQuota={} 余额={}",
+                    userId, row.getId(), row.getPointsAmount(), row.getStorageDeltaBytes(),
+                    row.getWorkQuotaDeltaBytes(), balanceAfter);
+            return new RedeemResultView(row.getPointsAmount(), row.getStorageDeltaBytes(),
+                    row.getWorkQuotaDeltaBytes(), balanceAfter);
+        } catch (BizException e) {
+            failRateLimiter.recordFailure(userId);
+            throw e;
         }
-        if (row.getStorageDeltaBytes() > 0) {
-            userMapper.addQuotaBytes(userId, row.getStorageDeltaBytes());
-        }
-        if (row.getWorkQuotaDeltaBytes() > 0) {
-            // NULL（跟随全局）时以兑换时的全局上限为基线落显式覆盖值
-            userMapper.addWorkQuotaBytes(userId, systemSettingService.getWorkMaxBytes(),
-                    row.getWorkQuotaDeltaBytes());
-        }
-        log.info("兑换成功: userId={} codeId={} points={} storage={} workQuota={} 余额={}",
-                userId, row.getId(), row.getPointsAmount(), row.getStorageDeltaBytes(),
-                row.getWorkQuotaDeltaBytes(), balanceAfter);
-        return new RedeemResultView(row.getPointsAmount(), row.getStorageDeltaBytes(),
-                row.getWorkQuotaDeltaBytes(), balanceAfter);
     }
 
     /**
-     * 作废未使用的码（站长风控出口）。
+     * 作废未使用的码（站长）。
      *
      * @param id 码 ID
      * @throws BizException 码不存在（404）；非 ACTIVE（409）
@@ -170,7 +183,7 @@ public class RedeemService {
                 .last("LIMIT " + limit));
     }
 
-    /** 规范化：去连字符/空白、转大写。 */
+    /** 输入规范化。 */
     public static String normalize(String raw) {
         return raw == null ? "" : raw.replaceAll("[-\\s]", "").toUpperCase(Locale.ROOT);
     }
@@ -195,7 +208,7 @@ public class RedeemService {
                 .eq(RedeemCode::getCode, code));
     }
 
-    /** 插一行；撞 code 唯一索引换码重试（概率极低，DB 唯一约束是权威）。 */
+    /** 插一行；撞 code 唯一索引换码重试。 */
     private RedeemCode insertOne(long actorId, BigDecimal points, long storageBytes,
                                  long workQuotaBytes, LocalDateTime expiresAt) {
         for (int attempt = 0; attempt < MAX_GENERATE_ATTEMPTS; attempt++) {

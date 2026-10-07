@@ -31,7 +31,10 @@ public class WebConfig implements WebMvcConfigurer {
 
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
-        // 静态资源映射到 ../frontend/，保留 /static/ 前缀
-        registry.addResourceHandler("/static/**").addResourceLocations("file:../frontend/");
+        // 静态资源映射到 ../frontend/，保留 /static/ 前缀。
+        // no-cache（must-revalidate）：浏览器每次加载都向服务端再验证，内容未变走 304。
+        // 根治启发式缓存导致的"新 HTML + 旧 JS"混合加载（旧 JS 引用已删除的元素会整页卡死）。
+        registry.addResourceHandler("/static/**").addResourceLocations("file:../frontend/")
+                .setCacheControl(org.springframework.http.CacheControl.noCache());
     }
 }
