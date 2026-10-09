@@ -39,6 +39,9 @@ public class User {
     /** 用户名，唯一。 */
     private String username;
 
+    /** 注册邮箱（接收验证码的 QQ 邮箱），唯一；历史数据可为 null。 */
+    private String email;
+
     /** 密码哈希（BCrypt）。 */
     private String passwordHash;
 

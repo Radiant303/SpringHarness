@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>登录 - Spring Harness</title>
-  <link rel="stylesheet" href="/static/index.css?v=20261006">
-  <link rel="stylesheet" href="/static/login.css?v=20261006">
+  <link rel="stylesheet" href="/static/index.css?v=20261009">
+  <link rel="stylesheet" href="/static/login.css?v=20261009">
 </head>
 <body class="login-page">
   <!-- 品牌标固定在页面左上角（页面式布局，不套卡片） -->
@@ -27,7 +27,7 @@
       <div class="login-field">
         <label class="login-label" for="login-username">用户名</label>
         <div class="login-control">
-          <input id="login-username" name="username" type="text" placeholder="请输入用户名（2~64 个字符）"
+          <input id="login-username" name="username" type="text" placeholder="请输入用户名或注册邮箱"
                  autocomplete="username" autocapitalize="off" spellcheck="false" maxlength="64">
         </div>
       </div>
@@ -39,6 +39,23 @@
                  autocomplete="current-password">
           <button type="button" class="login-eye" data-eye="login-password"
                   aria-label="显示密码" aria-pressed="false"></button>
+        </div>
+      </div>
+
+      <div class="login-field register-only mail-only">
+        <label class="login-label" for="login-email">QQ 邮箱</label>
+        <div class="login-control">
+          <input id="login-email" name="email" type="email" placeholder="用于接收验证码的 QQ 邮箱"
+                 autocomplete="email" autocapitalize="off" spellcheck="false" maxlength="128">
+        </div>
+      </div>
+
+      <div class="login-field register-only mail-only">
+        <label class="login-label" for="login-code">邮箱验证码</label>
+        <div class="login-control has-btn">
+          <input id="login-code" name="code" type="text" placeholder="6 位数字验证码"
+                 inputmode="numeric" autocomplete="one-time-code" maxlength="6">
+          <button type="button" id="login-send-code" class="login-code-btn">获取验证码</button>
         </div>
       </div>
 
@@ -58,6 +75,6 @@
     </form>
   </main>
 
-  <script src="/static/login.js?v=20261006"></script>
+  <script src="/static/login.js?v=20261009"></script>
 </body>
 </html>

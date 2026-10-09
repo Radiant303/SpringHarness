@@ -240,6 +240,7 @@ label.row { cursor: pointer; }
 
 /* 系统设置加载中：输入框呈骨架态（无文字、脉动、不可编辑） */
 .admin-page.is-loading .settings-number,
+.admin-page.is-loading .settings-text,
 .admin-page.is-loading input.switch {
   color: transparent;
   background: rgba(0, 0, 0, 0.05);
@@ -378,6 +379,8 @@ label.row { cursor: pointer; }
 }
 .settings-number:focus, .model-form input:focus { border-color: rgba(0, 0, 0, 0.16); background: #fff; }
 .group-card .settings-number { width: 110px; background: #fff; text-align: right; }
+/* 文本类设置项（发件邮箱、授权码）：比数字框宽，左对齐 */
+.group-card .settings-text { width: 220px; text-align: left; }
 .group-card .settings-number:focus { border-color: rgba(0, 0, 0, 0.16); }
 .usage-sep { font-size: 14px; color: var(--text-faint); }
 

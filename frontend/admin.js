@@ -264,6 +264,7 @@ function renderUsers() {
 
     tr.innerHTML = `
       <td title="ID: ${u.user_id}"></td>
+      <td class="user-email"></td>
       <td><span class="role-badge ${u.role}">${ROLE_LABELS[u.role] || u.role}</span></td>
       <td class="${disabled ? "status-disabled" : "status-active"}">${disabled ? "已禁用" : "正常"}</td>
       <td>${fmtBytes(u.quota_bytes)}</td>
@@ -272,6 +273,7 @@ function renderUsers() {
       <td>${fmtTime(u.created_at)}</td>
       <td><div class="row-actions">${actions.join("")}</div></td>`;
     tr.cells[0].textContent = u.username;
+    tr.cells[1].textContent = u.email || "-";
     tbody.appendChild(tr);
   }
 }
@@ -750,6 +752,13 @@ async function loadSettings() {
   $("est-cache-read").value = data?.billingEstCacheReadTokens ?? 90000;
   $("est-input").value = data?.billingEstInputTokens ?? 10000;
   $("est-output").value = data?.billingEstOutputTokens ?? 20000;
+  $("mail-enabled").checked = !!data && data.mailRegisterEnabled === true;
+  $("mail-username").value = data?.mailUsername ?? "";
+  // 授权码只写不读：不回显原值，留空表示保持不变
+  $("mail-auth-code").value = "";
+  $("mail-auth-code").placeholder = data && data.mailAuthCodeConfigured ? "已配置，留空保持不变" : "未配置";
+  $("mail-resend-interval").value = data?.mailResendIntervalSeconds ?? 60;
+  $("mail-code-ttl").value = data?.mailCodeTtlSeconds ?? 300;
 }
 
 async function saveSettings() {
@@ -775,6 +784,22 @@ async function saveSettings() {
     await api("/api/admin/settings/billing-est", {
       method: "POST",
       body: { cacheReadTokens: Math.round(estCacheRead), inputTokens: Math.round(estInput), outputTokens: Math.round(estOutput) },
+    });
+    // 邮箱验证码注册：邮箱/授权码留空 = 保持不变（后端按生效值校验开启条件）
+    const mailResend = Number($("mail-resend-interval").value);
+    const mailTtl = Number($("mail-code-ttl").value);
+    if (!Number.isFinite(mailResend) || mailResend < 10 || !Number.isFinite(mailTtl) || mailTtl < 60) {
+      throw new Error("重发间隔至少 10 秒，验证码有效期至少 60 秒");
+    }
+    await api("/api/admin/settings/mail", {
+      method: "POST",
+      body: {
+        enabled: $("mail-enabled").checked,
+        username: $("mail-username").value.trim(),
+        authCode: $("mail-auth-code").value.trim(),
+        resendIntervalSeconds: Math.round(mailResend),
+        codeTtlSeconds: Math.round(mailTtl),
+      },
     });
     $("settings-tip").textContent = "";
     UI.toast("设置已保存");

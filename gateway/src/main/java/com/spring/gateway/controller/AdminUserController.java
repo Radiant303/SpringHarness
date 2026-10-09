@@ -155,6 +155,7 @@ public class AdminUserController {
         return new AdminUserView(
                 String.valueOf(user.getId()),  // 字符串下发：雪花 ID 超 2^53，JS 数字会丢精度
                 user.getUsername(),
+                user.getEmail(),
                 user.getRole(),
                 user.getStatus(),
                 user.getQuotaBytes(),

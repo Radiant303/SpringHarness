@@ -48,3 +48,5 @@ app:
   work-max-works: ${WORK_MAX_WORKS:5}
   # Python 引擎地址，WS 中继（turn/start 回退透传、token 流）仍然需要
   engine-base-url: ${ENGINE_BASE_URL:http://127.0.0.1:8001}
+  # 注：邮箱验证码注册（QQ SMTP 账号/授权码/重发间隔/有效期/开关）存 system_settings 表，
+  # 由站长在管理后台"系统设置"页配置，即改即生效，不在此配置

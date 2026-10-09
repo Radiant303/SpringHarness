@@ -11,6 +11,7 @@ import java.math.BigDecimal;
  * @since 2026-10-05
  * @param userId         用户 ID（字符串：雪花 ID 超 2^53，JS 数字会丢精度）
  * @param username       用户名
+ * @param email          注册邮箱（未开启邮箱验证码注册的历史用户为 null）
  * @param role           角色（owner/admin/user）
  * @param status         账号状态（active/disabled）
  * @param quotaBytes     存储配额（字节）
@@ -21,6 +22,7 @@ import java.math.BigDecimal;
 public record AdminUserView(
         @JsonProperty("user_id") String userId,
         String username,
+        String email,
         String role,
         String status,
         @JsonProperty("quota_bytes") Long quotaBytes,

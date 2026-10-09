@@ -77,6 +77,28 @@ body.login-page {
 /* 校验失败：无边框设计下用浅红底提示，配合下方红字 */
 .login-control input.invalid { background: #fdecea; }
 .login-control.has-eye input { padding-right: 46px; }
+/* 验证码框右侧嵌"获取验证码"按钮 */
+.login-control.has-btn input { padding-right: 108px; }
+
+/* 获取验证码按钮：嵌在输入框右侧；倒计时期间禁用 */
+.login-code-btn {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--link);
+  font: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+  transform: translateY(-50%);
+  transition: background-color 0.15s, color 0.15s;
+}
+.login-code-btn:hover:not(:disabled) { background: var(--hover-bg); }
+.login-code-btn:disabled { color: var(--text-faint); cursor: default; }
 
 /* 显示/隐藏密码 */
 .login-eye {
@@ -101,6 +123,8 @@ body.login-page {
 
 /* ---- 注册专属字段：仅注册模式显示 ---- */
 .login-form:not(.is-register) .register-only { display: none; }
+/* 邮箱验证码字段：仅在站长开启邮箱验证码注册时显示（is-mail 由 /api/auth/register-config 驱动） */
+.login-form:not(.is-mail) .mail-only { display: none; }
 
 /* 预留一行错误位，出错时按钮不跳；负外边距抵消字段自身的外边距，避免留白过大 */
 .login-error { min-height: 18px; margin: -6px 0 10px; font-size: 13px; line-height: 20px; color: var(--danger); }

@@ -43,9 +43,27 @@
   } catch { /* 存储不可用时留在登录页，提交时会提示 */ }
 
   const form = $("login-form");
-  const inputs = { username: $("login-username"), password: $("login-password"), password2: $("login-password2") };
+  const inputs = {
+    username: $("login-username"),
+    password: $("login-password"),
+    password2: $("login-password2"),
+    email: $("login-email"),
+    code: $("login-code"),
+  };
+  const sendCodeBtn = $("login-send-code");
   let mode = "login";
   let busy = false;
+  let cdTimer = null;  // 重发倒计时定时器
+  let mailVerify = false;  // 站长是否开启了邮箱验证码注册（驱动邮箱/验证码字段显隐与校验）
+
+  // 拉取注册页公开配置：开启邮箱验证码注册时才显示邮箱与验证码字段
+  fetch("/api/auth/register-config")
+    .then((r) => r.json())
+    .then((p) => {
+      mailVerify = !!(p && p.data && p.data.mailVerify);
+      form.classList.toggle("is-mail", mailVerify);
+    })
+    .catch(() => { /* 拉取失败按未开启处理；服务端仍会兜底校验 */ });
 
   // 提交按钮文案：忙碌时要写"登录中…"，统一从这里取，避免两处写法不一致
   const submitLabel = () => (mode === "register" ? "注册并登录" : "登录");
@@ -121,8 +139,49 @@
       if (username.length < 2 || username.length > 64) return ["用户名长度需 2~64 个字符", "username"];
       if (password.length < 6) return ["密码至少 6 位", "password"];
       if (password !== inputs.password2.value) return ["两次输入的密码不一致", "password2"];
+      if (mailVerify) {
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inputs.email.value.trim())) return ["请输入正确的邮箱地址", "email"];
+        if (!/^\d{6}$/.test(inputs.code.value.trim())) return ["请输入 6 位数字验证码", "code"];
+      }
     }
     return null;
+  }
+
+  /* ---- 获取验证码：成功一次后按服务端返回的间隔倒计时，期间禁止重发 ---- */
+  function startCountdown(seconds) {
+    clearInterval(cdTimer);
+    let left = seconds;
+    sendCodeBtn.disabled = true;
+    sendCodeBtn.textContent = left + "s 后重发";
+    cdTimer = setInterval(() => {
+      left -= 1;
+      if (left <= 0) {
+        clearInterval(cdTimer);
+        cdTimer = null;
+        sendCodeBtn.disabled = false;
+        sendCodeBtn.textContent = "获取验证码";
+      } else {
+        sendCodeBtn.textContent = left + "s 后重发";
+      }
+    }, 1000);
+  }
+
+  async function onSendCode() {
+    if (sendCodeBtn.disabled) return;
+    const email = inputs.email.value.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showError("请输入正确的邮箱地址", "email"); return; }
+    showError("");
+    sendCodeBtn.disabled = true;
+    sendCodeBtn.textContent = "发送中…";
+    try {
+      const data = await post("send-code", { email });
+      startCountdown((data && data.resendAfterSeconds) || 60);
+      inputs.code.focus();
+    } catch (err) {
+      sendCodeBtn.disabled = false;
+      sendCodeBtn.textContent = "获取验证码";
+      showError(err.message);
+    }
   }
 
   async function onSubmit(e) {
@@ -137,7 +196,14 @@
     setBusy(true);
     const registering = mode === "register";
     try {
-      if (registering) await post("register", { username, password });
+      if (registering) {
+        const body = { username, password };
+        if (mailVerify) {
+          body.email = inputs.email.value.trim();
+          body.code = inputs.code.value.trim();
+        }
+        await post("register", body);
+      }
     } catch (err) {
       setBusy(false);
       showError(err.message);
@@ -165,6 +231,11 @@
   }
 
   form.addEventListener("submit", onSubmit);
+  sendCodeBtn.addEventListener("click", onSendCode);
+  // 验证码只留数字（粘贴也会带上非数字字符）
+  inputs.code.addEventListener("input", () => {
+    inputs.code.value = inputs.code.value.replace(/\D/g, "").slice(0, 6);
+  });
   form.addEventListener("input", () => { if ($("login-error").textContent) showError(""); });
   // 显示/隐藏密码（事件委托：按钮是静态的，但图标在切换时会重画）
   form.addEventListener("click", (e) => {

@@ -175,7 +175,7 @@
         <div class="table-card">
           <table class="admin-table" id="user-table">
             <thead>
-              <tr><th>用户名</th><th>角色</th><th>状态</th><th>存储配额</th><th>work 配额</th><th>积分</th><th>注册时间</th><th>操作</th></tr>
+              <tr><th>用户名</th><th>邮箱</th><th>角色</th><th>状态</th><th>存储配额</th><th>work 配额</th><th>积分</th><th>注册时间</th><th>操作</th></tr>
             </thead>
             <tbody id="user-tbody"></tbody>
           </table>
@@ -293,6 +293,51 @@
           </div>
         </div>
 
+        <div class="section-caption">邮箱验证码注册（QQ 邮箱 SMTP）</div>
+        <div class="card group-card">
+          <label class="row">
+            <span class="row-text">
+              <span class="row-label">开启邮箱验证码注册</span>
+            </span>
+            <input type="checkbox" id="mail-enabled" class="switch">
+          </label>
+          <div class="row">
+            <span class="row-text">
+              <span class="row-label">发件 QQ 邮箱</span>
+            </span>
+            <span class="row-control">
+              <input type="text" id="mail-username" class="settings-number settings-text"
+                     placeholder="例如 123456@qq.com" maxlength="128">
+            </span>
+          </div>
+          <div class="row">
+            <span class="row-text">
+              <span class="row-label">SMTP 授权码</span>
+            </span>
+            <span class="row-control">
+              <input type="password" id="mail-auth-code" class="settings-number settings-text" maxlength="64">
+            </span>
+          </div>
+          <div class="row">
+            <span class="row-text">
+              <span class="row-label">重发间隔</span>
+            </span>
+            <span class="row-control">
+              <input type="number" id="mail-resend-interval" min="10" max="3600" step="1" class="settings-number">
+              <span class="unit">秒</span>
+            </span>
+          </div>
+          <div class="row">
+            <span class="row-text">
+              <span class="row-label">验证码有效期</span>
+            </span>
+            <span class="row-control">
+              <input type="number" id="mail-code-ttl" min="60" max="3600" step="1" class="settings-number">
+              <span class="unit">秒</span>
+            </span>
+          </div>
+        </div>
+
         <div class="section-caption">计费预扣档位</div>
         <div class="card group-card">
           <div class="row">
@@ -324,7 +369,7 @@
       </section>
     </main>
   </div>
-  <script src="/static/ui.js?v=20261006"></script>
-  <script src="/static/admin.js?v=20261006"></script>
+  <script src="/static/ui.js?v=20261009"></script>
+  <script src="/static/admin.js?v=20261009"></script>
 </body>
 </html>

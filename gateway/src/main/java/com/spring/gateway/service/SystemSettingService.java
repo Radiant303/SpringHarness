@@ -73,6 +73,63 @@ public class SystemSettingService {
     }
 
     /**
+     * 读字符串设置；键不存在时返回默认值
+     *
+     * @param key          设置键
+     * @param defaultValue 键缺失时的默认值
+     * @return 设置值
+     */
+    public String getString(String key, String defaultValue) {
+        SystemSetting row = systemSettingMapper.selectById(key);
+        return row == null || row.getSettingValue() == null ? defaultValue : row.getSettingValue().trim();
+    }
+
+    /**
+     * 是否开启 QQ 邮箱验证码注册；默认关闭
+     *
+     * @return true = 注册必须携带邮箱验证码
+     */
+    public boolean isMailRegisterEnabled() {
+        return getBool(SystemSetting.KEY_MAIL_REGISTER_ENABLED, false);
+    }
+
+    /**
+     * 发件 QQ 邮箱；默认空串（未配置）
+     *
+     * @return 发件邮箱
+     */
+    public String getMailUsername() {
+        return getString(SystemSetting.KEY_MAIL_USERNAME, "");
+    }
+
+    /**
+     * QQ 邮箱 SMTP 授权码；默认空串（未配置）
+     *
+     * @return 授权码
+     */
+    public String getMailAuthCode() {
+        return getString(SystemSetting.KEY_MAIL_AUTH_CODE, "");
+    }
+
+    /**
+     * 同一邮箱重发验证码的最小间隔（秒）；默认 60
+     *
+     * @return 间隔秒数
+     */
+    public long getMailResendIntervalSeconds() {
+        return getLong(SystemSetting.KEY_MAIL_RESEND_INTERVAL_SECONDS, 60L);
+    }
+
+    /**
+     * 验证码有效期（秒）；默认 300
+     *
+     * @return 有效期秒数
+     */
+    public long getMailCodeTtlSeconds() {
+        return getLong(SystemSetting.KEY_MAIL_CODE_TTL_SECONDS, 300L);
+    }
+
+    /**
      * 写设置（upsert：存在更新值与 updated_at，不存在插入）
      *
      * @param key   设置键

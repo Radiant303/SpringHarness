@@ -4,10 +4,12 @@ import com.spring.gateway.common.AuthInterceptor;
 import com.spring.gateway.common.BizException;
 import com.spring.gateway.common.Result;
 import com.spring.gateway.dto.AdminBillingEstRequest;
+import com.spring.gateway.dto.AdminMailSettingsRequest;
 import com.spring.gateway.dto.AdminRegistrationRequest;
 import com.spring.gateway.dto.AdminWorkMaxBytesRequest;
 import com.spring.gateway.entity.SystemSetting;
 import com.spring.gateway.entity.User;
+import com.spring.gateway.service.MailCodeService;
 import com.spring.gateway.service.SystemSettingService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -36,7 +38,8 @@ public class AdminSettingsController {
     /**
      * 当前系统设置
      *
-     * @return 设置快照（registrationOpen、workMaxBytes、billingEst* 三档位）
+     * @return 设置快照（registrationOpen、workMaxBytes、billingEst* 三档位、mail* 邮箱验证码注册；
+     *         授权码敏感不回值，只回 mailAuthCodeConfigured 表示是否已配置）
      */
     @GetMapping
     public Result<Map<String, Object>> get() {
@@ -48,7 +51,12 @@ public class AdminSettingsController {
                 "billingEstInputTokens", systemSettingService.getLong(
                         SystemSetting.KEY_BILLING_EST_INPUT_TOKENS, 10000L),
                 "billingEstOutputTokens", systemSettingService.getLong(
-                        SystemSetting.KEY_BILLING_EST_OUTPUT_TOKENS, 20000L)));
+                        SystemSetting.KEY_BILLING_EST_OUTPUT_TOKENS, 20000L),
+                "mailRegisterEnabled", systemSettingService.isMailRegisterEnabled(),
+                "mailUsername", systemSettingService.getMailUsername(),
+                "mailAuthCodeConfigured", !systemSettingService.getMailAuthCode().isBlank(),
+                "mailResendIntervalSeconds", systemSettingService.getMailResendIntervalSeconds(),
+                "mailCodeTtlSeconds", systemSettingService.getMailCodeTtlSeconds()));
     }
 
     /**
@@ -82,6 +90,44 @@ public class AdminSettingsController {
             throw new BizException(403, "仅站长可修改系统设置");
         }
         systemSettingService.set(SystemSetting.KEY_WORK_MAX_BYTES, String.valueOf(req.bytes()));
+        return Result.ok(null);
+    }
+
+    /**
+     * 配置邮箱验证码注册（仅站长）。username/authCode 留空表示保持不变；
+     * 开启时要求最终生效的发件邮箱与授权码都已就绪。
+     *
+     * @param actorRole 当前用户角色（拦截器注入）
+     * @param req       邮箱设置
+     * @return 空数据返回体
+     */
+    @PostMapping("/mail")
+    public Result<Void> setMail(@RequestAttribute(AuthInterceptor.ATTR_USER_ROLE) String actorRole,
+                                @Valid @RequestBody AdminMailSettingsRequest req) {
+        if (!User.ROLE_OWNER.equals(actorRole)) {
+            throw new BizException(403, "仅站长可修改系统设置");
+        }
+        String username = req.username() == null ? "" : req.username().trim();
+        if (!username.isEmpty() && !MailCodeService.isValidEmail(username)) {
+            throw new BizException(400, "发件邮箱格式不正确");
+        }
+        String authCode = req.authCode() == null ? "" : req.authCode().trim();
+        // 生效值 = 本次传入优先，否则沿用已存储值
+        String effectiveUsername = username.isEmpty() ? systemSettingService.getMailUsername() : username;
+        boolean authReady = !authCode.isEmpty() || !systemSettingService.getMailAuthCode().isBlank();
+        if (Boolean.TRUE.equals(req.enabled()) && (effectiveUsername.isBlank() || !authReady)) {
+            throw new BizException(400, "开启前请先配置发件 QQ 邮箱与 SMTP 授权码");
+        }
+        systemSettingService.set(SystemSetting.KEY_MAIL_REGISTER_ENABLED, String.valueOf(req.enabled()));
+        if (!username.isEmpty()) {
+            systemSettingService.set(SystemSetting.KEY_MAIL_USERNAME, effectiveUsername.toLowerCase());
+        }
+        if (!authCode.isEmpty()) {
+            systemSettingService.set(SystemSetting.KEY_MAIL_AUTH_CODE, authCode);
+        }
+        systemSettingService.set(SystemSetting.KEY_MAIL_RESEND_INTERVAL_SECONDS,
+                String.valueOf(req.resendIntervalSeconds()));
+        systemSettingService.set(SystemSetting.KEY_MAIL_CODE_TTL_SECONDS, String.valueOf(req.codeTtlSeconds()));
         return Result.ok(null);
     }
 

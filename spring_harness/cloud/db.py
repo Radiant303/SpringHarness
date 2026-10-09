@@ -62,6 +62,8 @@ class UserRow(Base):
 
     id: Mapped[int] = mapped_column(_BigInt, primary_key=True, autoincrement=True)
     username: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    # 注册邮箱（QQ 邮箱验证码）：唯一；历史行保留 NULL（MySQL 唯一索引不约束多个 NULL）
+    email: Mapped[str | None] = mapped_column(String(128), unique=True, nullable=True)
     password_hash: Mapped[str] = mapped_column(String(128), nullable=False)
     quota_bytes: Mapped[int] = mapped_column(
         _BigInt, nullable=False, default=DEFAULT_QUOTA_BYTES,
