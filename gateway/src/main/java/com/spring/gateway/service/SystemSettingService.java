@@ -130,6 +130,15 @@ public class SystemSettingService {
     }
 
     /**
+     * 默认模型 ID；默认空串（未配置）
+     *
+     * @return 模型 ID
+     */
+    public String getDefaultModel() {
+        return getString(SystemSetting.KEY_DEFAULT_MODEL, "");
+    }
+
+    /**
      * 写设置（upsert：存在更新值与 updated_at，不存在插入）
      *
      * @param key   设置键

@@ -17,6 +17,7 @@ from spring_harness.cloud.gateway_store import (
     list_sessions_for_user,
 )
 from spring_harness.cloud.registry import CloudSessionHandle, get_registry
+from spring_harness.core.config.model import setting as model_setting
 from spring_harness.core.config.settings import config
 from spring_harness.core.log import logger
 from spring_harness.core.rpc.connection import JsonRpcConnection, JsonRpcError
@@ -32,7 +33,11 @@ from spring_harness.core.rpc.server import (
     SESSION_NOT_FOUND,
     AppServer,
 )
-from spring_harness.core.services.web_server import WebInitializeResult, _model_infos
+from spring_harness.core.services.web_server import (
+    ModelsListResult,
+    WebInitializeResult,
+    _model_infos,
+)
 
 # 会话已被其他连接占用（同会话串行的进程内拒绝码）
 SESSION_OCCUPIED = -32003
@@ -79,6 +84,11 @@ class CloudAppServer(AppServer):
         self._owned_sessions: set[str] = set()
         # 当前挂载的会话：同一时间只服务一个，切换时卸载上一个
         self._current_session: str | None = None
+        # 模型列表实时拉取：打开模型菜单时调用，保证看到最新配置
+        self._routes["models/list"] = (None, self._models_list)
+
+    async def _models_list(self, _: None) -> ModelsListResult:
+        return ModelsListResult(models=_model_infos(), default_model=model_setting.default_model())
 
     # ---- 注册表：进程内同会话串行 ----
 
@@ -134,7 +144,7 @@ class CloudAppServer(AppServer):
             protocol_version=PROTOCOL_VERSION,
             workspace=work.workspace_path,
             models=_model_infos(),
-            default_model=config.default_model,
+            default_model=model_setting.default_model(),
         )
 
     async def _session_new(self, p: WorkspaceParams) -> SessionResult:

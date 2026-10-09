@@ -1,11 +1,13 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
+import redis
 import redis.asyncio as aioredis
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from spring_harness.cloud.model_store import DbCatalog
 from spring_harness.cloud.mq import TurnDispatcher, set_dispatcher
 from spring_harness.cloud.registry import (
     CloudSessionRegistry,
@@ -13,6 +15,7 @@ from spring_harness.cloud.registry import (
     set_registry,
 )
 from spring_harness.cloud.ws import ws_endpoint
+from spring_harness.core.config.model import set_catalog
 from spring_harness.core.config.settings import config
 from spring_harness.core.log import logger
 from spring_harness.core.services.web_server import DEFAULT_FRONTEND_DIR
@@ -20,6 +23,11 @@ from spring_harness.core.services.web_server import DEFAULT_FRONTEND_DIR
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    # 模型配置来源切到 DB；Redis 快照缓存 + 写后延迟双删。
+    # catalog 用同步客户端（模型解析在同步代码路径上），与下方异步事件流客户端互不干扰
+    catalog_cache = redis.from_url(config.cloud.redis_url, decode_responses=True)
+    set_catalog(DbCatalog(catalog_cache))
+
     # 进程级会话注册表 + Redis Stream 事件流（断线续传的前提）
     redis_client = aioredis.from_url(config.cloud.redis_url, decode_responses=True)
     registry = CloudSessionRegistry(redis_client)
@@ -42,6 +50,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         set_registry(None)
         await registry.close_all()
         await redis_client.aclose()
+        catalog_cache.close()
 
 
 def create_app() -> FastAPI:

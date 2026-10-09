@@ -330,6 +330,8 @@ label.row { cursor: pointer; }
 
 /* 表格内操作：蓝色文字按钮；主按钮黑色实底 */
 .row-actions { display: flex; gap: 2px; flex-wrap: wrap; margin: 0 -8px; }
+/* 模型配置页的操作列窄：按钮不折行（其它页操作列宽，保持可换行） */
+#mc-model-table .row-actions, #mc-provider-table .row-actions { flex-wrap: nowrap; }
 .admin-btn {
   height: 28px;
   padding: 0 8px;
@@ -398,6 +400,51 @@ label.row { cursor: pointer; }
 .model-form input[type="text"] { width: 260px; }
 .model-form input[type="number"] { width: 100px; }
 .model-enabled { display: inline-flex; align-items: center; gap: 8px; margin: 0 6px; font-size: 14px; color: var(--text-dim); cursor: pointer; }
+
+/* ---- 模型配置表单（Provider / 模型定义）：标签 + 控件的网格布局 ----
+   字段多且长，横排 flex 会挤压截断；标签单独一行，占位符只做格式示例 */
+.mc-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px 16px;
+  margin-top: 16px;
+  padding: 16px;
+  border-radius: 12px;
+  background: var(--admin-card);
+}
+.mc-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.mc-label { font-size: 12px; color: var(--text-dim); }
+.mc-field input {
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  outline: none;
+  background: #fff;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+.mc-field input:focus { border-color: rgba(0, 0, 0, 0.16); }
+.mc-field input:disabled { color: var(--text-faint); background: #f2f2f2; }
+/* 自绘下拉在网格里撑满整列（原生 select 被 ui.js 包成 .ui-select > .ui-select-btn） */
+.mc-field .ui-select { display: flex; width: 100%; }
+.mc-field .ui-select-btn {
+  flex: 1;
+  justify-content: space-between;
+  background: #fff;
+  border: 1px solid transparent;
+  transition: border-color 0.15s;
+}
+.mc-field .ui-select-btn:hover:not(:disabled),
+.mc-field .ui-select-btn[aria-expanded="true"] { background: #fff; border-color: rgba(0, 0, 0, 0.16); }
+.mc-field .ui-select-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mc-switch { display: inline-flex; align-items: center; gap: 8px; height: 34px; font-size: 14px; color: var(--text-dim); cursor: pointer; }
+.mc-actions { display: flex; align-items: flex-end; gap: 8px; padding-bottom: 1px; }
+/* 模型配置表格里的长文本列（base_url / 能力列表 / 模型名）：截断省略，完整值放 title 悬浮提示 */
+.mc-ellipsis { max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
 .table-hint { display: block; margin: 10px 4px 0; }
 
 .settings-hint { font-size: 12px; color: var(--text-faint); }

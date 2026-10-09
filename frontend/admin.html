@@ -14,7 +14,7 @@
   </script>
   <link rel="stylesheet" href="/static/index.css?v=20261006">
   <link rel="stylesheet" href="/static/ui.css?v=20261006">
-  <link rel="stylesheet" href="/static/admin.css?v=20261006">
+  <link rel="stylesheet" href="/static/admin.css?v=20261009">
 </head>
 <body>
   <div id="admin-app">
@@ -61,6 +61,10 @@
 
       <div class="nav-group hidden" id="nav-group-system">
         <div class="nav-group-title">系统</div>
+        <div class="nav-item" data-page="model-config">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2"/></svg>
+          模型配置
+        </div>
         <div class="nav-item" data-page="settings">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h9M17 8h3M4 16h3M11 16h9"/><circle cx="15" cy="8" r="2.2"/><circle cx="9" cy="16" r="2.2"/></svg>
           系统设置
@@ -268,6 +272,120 @@
             <tbody id="redeem-tbody"></tbody>
           </table>
         </div>
+      </section>
+
+      <!-- 模型配置（仅站长）：Provider / 模型定义 / 默认模型 -->
+      <section class="admin-page wide" data-page="model-config">
+        <h1 class="page-title">模型配置 <span class="title-hint">保存即生效，无需重启</span></h1>
+
+        <div class="section-caption">默认模型</div>
+        <div class="card group-card">
+          <div class="row">
+            <span class="row-text">
+              <span class="row-label">新会话默认使用的模型</span>
+            </span>
+            <span class="row-control">
+              <select id="mc-default"></select>
+            </span>
+          </div>
+        </div>
+
+        <div class="section-caption">Provider（API 渠道）</div>
+        <div class="table-card">
+          <table class="admin-table" id="mc-provider-table">
+            <thead>
+              <tr><th>名称</th><th>类型</th><th>base_url</th><th>API Key</th><th>更新时间</th><th>操作</th></tr>
+            </thead>
+            <tbody id="mc-provider-tbody"></tbody>
+          </table>
+        </div>
+        <form id="mc-provider-form" class="mc-form">
+          <label class="mc-field">
+            <span class="mc-label">名称</span>
+            <input type="text" id="mc-p-name" placeholder="如 deepseek" required>
+          </label>
+          <label class="mc-field">
+            <span class="mc-label">类型</span>
+            <select id="mc-p-type">
+              <option value="openai">openai</option>
+              <option value="alibaba">alibaba</option>
+              <option value="deepseek">deepseek</option>
+              <option value="responses">responses</option>
+            </select>
+          </label>
+          <label class="mc-field">
+            <span class="mc-label">API Key</span>
+            <input type="password" id="mc-p-key" autocomplete="new-password">
+          </label>
+          <label class="mc-field">
+            <span class="mc-label">base_url</span>
+            <input type="text" id="mc-p-url" placeholder="可选，留空用官方默认">
+          </label>
+          <div class="mc-actions">
+            <button type="submit" class="admin-btn primary" id="mc-p-submit">新增 Provider</button>
+            <button type="button" class="admin-btn hidden" id="mc-p-cancel">取消编辑</button>
+          </div>
+        </form>
+
+        <div class="section-caption">模型定义</div>
+        <div class="table-card">
+          <table class="admin-table" id="mc-model-table">
+            <thead>
+              <tr><th>模型 ID</th><th>Provider</th><th>实际模型名</th><th>展示名</th><th class="num">上下文</th><th>能力</th><th>状态</th><th>操作</th></tr>
+            </thead>
+            <tbody id="mc-model-tbody"></tbody>
+          </table>
+        </div>
+        <form id="mc-model-form" class="mc-form">
+          <label class="mc-field">
+            <span class="mc-label">模型 ID</span>
+            <input type="text" id="mc-m-id" placeholder="provider/名称" required>
+          </label>
+          <label class="mc-field">
+            <span class="mc-label">Provider</span>
+            <select id="mc-m-provider"></select>
+          </label>
+          <label class="mc-field">
+            <span class="mc-label">实际模型名</span>
+            <input type="text" id="mc-m-model" placeholder="API 请求用的模型名" required>
+          </label>
+          <label class="mc-field">
+            <span class="mc-label">展示名</span>
+            <input type="text" id="mc-m-display" placeholder="用户看到的名字" required>
+          </label>
+          <label class="mc-field">
+            <span class="mc-label">上下文窗口（tokens）</span>
+            <input type="number" id="mc-m-context" min="1" step="1" required>
+          </label>
+          <label class="mc-field">
+            <span class="mc-label">输出上限（0 = 不限）</span>
+            <input type="number" id="mc-m-output" min="0" step="1" required>
+          </label>
+          <label class="mc-field">
+            <span class="mc-label">能力（逗号分隔）</span>
+            <input type="text" id="mc-m-caps" placeholder="thinking,tool_use">
+          </label>
+          <label class="mc-field">
+            <span class="mc-label">思考档位（逗号分隔）</span>
+            <input type="text" id="mc-m-efforts" placeholder="low,medium,high">
+          </label>
+          <label class="mc-field">
+            <span class="mc-label">默认档位</span>
+            <input type="text" id="mc-m-effort" placeholder="可选">
+          </label>
+          <label class="mc-field">
+            <span class="mc-label">推理字段名</span>
+            <input type="text" id="mc-m-reasoning" placeholder="可选，如 reasoning_content">
+          </label>
+          <label class="mc-field">
+            <span class="mc-label">状态</span>
+            <span class="mc-switch"><input type="checkbox" id="mc-m-enabled" class="switch" checked>启用</span>
+          </label>
+          <div class="mc-actions">
+            <button type="submit" class="admin-btn primary" id="mc-m-submit">新增模型</button>
+            <button type="button" class="admin-btn hidden" id="mc-m-cancel">取消编辑</button>
+          </div>
+        </form>
       </section>
 
       <!-- 系统设置（仅站长） -->

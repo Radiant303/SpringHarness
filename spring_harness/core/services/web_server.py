@@ -8,6 +8,7 @@ from starlette.routing import Mount, Route, WebSocketRoute
 from starlette.staticfiles import StaticFiles
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
+from spring_harness.core.config.model import setting as model_setting
 from spring_harness.core.config.settings import config
 from spring_harness.core.log import logger
 from spring_harness.core.rpc.connection import JsonRpcConnection
@@ -40,6 +41,7 @@ class WebInitializeResult(InitializeResult):
 
 
 def _model_infos() -> list[ModelInfo]:
+    # 走可插拔目录：本地入口读 config.toml，云端入口读 DB（站长后台维护）
     return [
         ModelInfo(
             id=model_id,
@@ -47,7 +49,7 @@ def _model_infos() -> list[ModelInfo]:
             provider=model.provider,
             max_context_size=model.max_context_size,
         )
-        for model_id, model in config.models.items()
+        for model_id, model in model_setting.list_model_configs()
     ]
 
 
@@ -65,11 +67,11 @@ class WebAppServer(AppServer):
             protocol_version=PROTOCOL_VERSION,
             workspace=str(self._workspace),
             models=_model_infos(),
-            default_model=config.default_model,
+            default_model=model_setting.default_model(),
         )
 
     async def _models_list(self, _: None) -> ModelsListResult:
-        return ModelsListResult(models=_model_infos(), default_model=config.default_model)
+        return ModelsListResult(models=_model_infos(), default_model=model_setting.default_model())
 
 
 class SpringWEB:

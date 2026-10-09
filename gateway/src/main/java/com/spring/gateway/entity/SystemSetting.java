@@ -47,6 +47,9 @@ public class SystemSetting {
     /** 设置键：验证码有效期（秒，十进制数字串）。 */
     public static final String KEY_MAIL_CODE_TTL_SECONDS = "mail.code_ttl_seconds";
 
+    /** 设置键：默认模型 ID（必须指向 model_definitions 中已启用的行）。 */
+    public static final String KEY_DEFAULT_MODEL = "default_model";
+
     /** 设置键，主键（值由代码固定，手动赋值）。 */
     @TableId(type = IdType.INPUT)
     private String settingKey;

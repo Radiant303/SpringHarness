@@ -94,16 +94,17 @@ const pageLoaders = {
   usage: () => ensureUsers().then(() => loadUsage()),
   ledger: () => ensureUsers().then(() => loadLedger()),
   models: () => loadModels(),
+  "model-config": () => loadModelConfig(),
   redeem: () => ensureUsers().then(() => loadRedeemCodes()),
   settings: () => loadSettings(),
 };
 
-const PAGE_TITLES = { account: "账号与安全", points: "账单与用量", users: "用户管理", usage: "用量统计", ledger: "积分流水", models: "模型资费", redeem: "兑换码", settings: "系统设置" };
+const PAGE_TITLES = { account: "账号与安全", points: "账单与用量", users: "用户管理", usage: "用量统计", ledger: "积分流水", models: "模型资费", "model-config": "模型配置", redeem: "兑换码", settings: "系统设置" };
 
-/* 页面可见性与导航分组一致：管理组对站长/管理员开放，系统设置仅站长 */
+/* 页面可见性与导航分组一致：管理组对站长/管理员开放，系统组仅站长 */
 function pageAllowed(page) {
   if (!Object.hasOwn(pageLoaders, page)) return false;
-  if (page === "settings") return myRole === "owner";
+  if (page === "settings" || page === "model-config") return myRole === "owner";
   if (page === "users" || page === "usage" || page === "ledger" || page === "models" || page === "redeem") return isStaff;
   return true;
 }
@@ -540,6 +541,263 @@ async function onModelAction(btn) {
   }
 }
 
+/* ---------- 模型配置（仅站长）：Provider / 模型定义 / 默认模型 ---------- */
+
+let modelConfig = { providers: [], models: [], defaultModel: "" };
+let editingProviderName = null;   // 非 null 表示 Provider 表单处于编辑模式
+let editingModelDefId = null;     // 非 null 表示模型表单处于编辑模式
+
+async function loadModelConfig() {
+  const data = await api("/api/admin/model-config");
+  modelConfig = data || { providers: [], models: [], defaultModel: "" };
+  renderMcDefault();
+  renderMcProviders();
+  renderMcModels();
+}
+
+/* 默认模型下拉：只列启用项；无默认时给出未设置占位 */
+function renderMcDefault() {
+  const sel = $("mc-default");
+  sel.innerHTML = "";
+  const enabled = modelConfig.models.filter((m) => m.enabled);
+  if (!modelConfig.defaultModel) {
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = "未设置";
+    sel.appendChild(opt);
+  }
+  for (const m of enabled) {
+    const opt = document.createElement("option");
+    opt.value = m.id;
+    opt.textContent = `${m.display_name}（${m.id}）`;
+    sel.appendChild(opt);
+  }
+  sel.value = modelConfig.defaultModel;
+  UI.enhance();
+}
+
+function renderMcProviders() {
+  const tbody = $("mc-provider-tbody");
+  tbody.innerHTML = "";
+  if (!modelConfig.providers.length) {
+    UI.emptyRow(tbody, "暂无 Provider");
+    return;
+  }
+  for (const p of modelConfig.providers) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td></td>
+      <td>${p.type}</td>
+      <td class="mc-ellipsis"></td>
+      <td>${p.api_key_configured ? "已配置" : '<span class="status-disabled">未配置</span>'}</td>
+      <td>${fmtTime(p.updated_at)}</td>
+      <td><div class="row-actions">
+        <button class="admin-btn" data-act="edit" data-name="${p.name}">编辑</button>
+        <button class="admin-btn danger" data-act="delete" data-name="${p.name}">删除</button>
+      </div></td>`;
+    tr.cells[0].textContent = p.name;
+    tr.cells[2].textContent = p.base_url || "-";
+    if (p.base_url) tr.cells[2].title = p.base_url;
+    tbody.appendChild(tr);
+  }
+}
+
+function fillMcProviderForm(p) {
+  $("mc-p-name").value = p ? p.name : "";
+  $("mc-p-name").disabled = !!p;  // 名称即主键，编辑时锁定
+  $("mc-p-type").value = p ? p.type : "openai";
+  $("mc-p-key").value = "";
+  $("mc-p-key").placeholder = p
+    ? (p.api_key_configured ? "已配置，留空保持不变" : "未配置，请填写")
+    : "API Key（必填）";
+  $("mc-p-url").value = p ? (p.base_url || "") : "";
+  $("mc-p-submit").textContent = p ? "保存修改" : "新增 Provider";
+  $("mc-p-cancel").classList.toggle("hidden", !p);
+  editingProviderName = p ? p.name : null;
+  UI.enhance();
+}
+
+async function onMcProviderSubmit(e) {
+  e.preventDefault();
+  const body = {
+    name: $("mc-p-name").value.trim(),
+    type: $("mc-p-type").value,
+    apiKey: $("mc-p-key").value.trim(),
+    baseUrl: $("mc-p-url").value.trim(),
+  };
+  if (!body.name) { showError("Provider 名不能为空"); return; }
+  if (!editingProviderName && !body.apiKey) { showError("新建 Provider 必须填写 API Key"); return; }
+  try {
+    await api("/api/admin/model-config/providers", { method: "POST", body });
+    fillMcProviderForm(null);
+    UI.toast("Provider 已保存");
+    await loadModelConfig();
+  } catch (err) {
+    showError(err.message);
+  }
+}
+
+async function onMcProviderAction(btn) {
+  const name = btn.dataset.name;
+  try {
+    if (btn.dataset.act === "edit") {
+      fillMcProviderForm(modelConfig.providers.find((p) => p.name === name) || null);
+      $("mc-p-key").focus();
+    } else if (btn.dataset.act === "delete") {
+      const ok = await UI.confirm({
+        title: "删除 Provider",
+        message: `确定删除 Provider「${name}」吗？`,
+        okText: "删除",
+        danger: true,
+        submit: () => api(`/api/admin/model-config/providers/${encodeURIComponent(name)}/delete`, { method: "POST" }),
+      });
+      if (!ok) return;
+      if (editingProviderName === name) fillMcProviderForm(null);
+      UI.toast("Provider 已删除");
+      await loadModelConfig();
+    }
+  } catch (err) {
+    showError(err.message);
+  }
+}
+
+function renderMcModels() {
+  const tbody = $("mc-model-tbody");
+  tbody.innerHTML = "";
+  // Provider 下拉跟随最新列表
+  const sel = $("mc-m-provider");
+  const prev = sel.value;
+  sel.innerHTML = "";
+  for (const p of modelConfig.providers) {
+    const opt = document.createElement("option");
+    opt.value = p.name;
+    opt.textContent = p.name;
+    sel.appendChild(opt);
+  }
+  if (modelConfig.providers.some((p) => p.name === prev)) sel.value = prev;
+  UI.enhance();
+
+  if (!modelConfig.models.length) {
+    UI.emptyRow(tbody, "暂无模型");
+    return;
+  }
+  for (const m of modelConfig.models) {
+    const tr = document.createElement("tr");
+    const actions = [
+      `<button class="admin-btn" data-act="edit" data-id="${m.id}">编辑</button>`,
+    ];
+    if (!m.is_default) {
+      actions.push(`<button class="admin-btn danger" data-act="delete" data-id="${m.id}">删除</button>`);
+    }
+    tr.innerHTML = `
+      <td class="mc-ellipsis"></td>
+      <td>${m.provider}</td>
+      <td class="mc-ellipsis"></td>
+      <td class="mc-ellipsis"></td>
+      <td class="num">${Math.round(m.max_context_size / 1024)}K</td>
+      <td class="mc-ellipsis"></td>
+      <td class="${m.enabled ? "status-active" : "status-disabled"}">${m.enabled ? "启用" : "停用"}</td>
+      <td><div class="row-actions">${actions.join("")}</div></td>`;
+    tr.cells[0].textContent = m.id;
+    tr.cells[0].title = m.id;
+    tr.cells[2].textContent = m.model;
+    tr.cells[2].title = m.model;
+    tr.cells[3].textContent = m.display_name;
+    tr.cells[3].title = m.display_name;
+    tr.cells[5].textContent = m.capabilities.join(", ") || "-";
+    if (m.capabilities.length) tr.cells[5].title = m.capabilities.join(", ");
+    tbody.appendChild(tr);
+  }
+}
+
+function fillMcModelForm(m) {
+  $("mc-m-id").value = m ? m.id : "";
+  $("mc-m-id").disabled = !!m;  // ID 即主键，编辑时锁定
+  if (m) $("mc-m-provider").value = m.provider;
+  $("mc-m-model").value = m ? m.model : "";
+  $("mc-m-display").value = m ? m.display_name : "";
+  $("mc-m-context").value = m ? m.max_context_size : "";
+  $("mc-m-output").value = m ? m.max_output_size : "";
+  $("mc-m-caps").value = m ? m.capabilities.join(",") : "";
+  $("mc-m-efforts").value = m ? m.support_efforts.join(",") : "";
+  $("mc-m-effort").value = m ? (m.default_effort || "") : "";
+  $("mc-m-reasoning").value = m ? (m.reasoning_key || "") : "";
+  $("mc-m-enabled").checked = m ? !!m.enabled : true;
+  $("mc-m-submit").textContent = m ? "保存修改" : "新增模型";
+  $("mc-m-cancel").classList.toggle("hidden", !m);
+  editingModelDefId = m ? m.id : null;
+}
+
+/** 逗号分隔输入 → 数组（去空白去空项） */
+function csvToList(raw) {
+  return raw.split(",").map((s) => s.trim()).filter(Boolean);
+}
+
+async function onMcModelSubmit(e) {
+  e.preventDefault();
+  const body = {
+    id: $("mc-m-id").value.trim(),
+    provider: $("mc-m-provider").value,
+    model: $("mc-m-model").value.trim(),
+    displayName: $("mc-m-display").value.trim(),
+    maxContextSize: Number($("mc-m-context").value),
+    maxOutputSize: Number($("mc-m-output").value || 0),
+    capabilities: csvToList($("mc-m-caps").value),
+    supportEfforts: csvToList($("mc-m-efforts").value),
+    defaultEffort: $("mc-m-effort").value.trim(),
+    reasoningKey: $("mc-m-reasoning").value.trim(),
+    enabled: $("mc-m-enabled").checked,
+  };
+  if (!body.id || !body.provider || !body.model || !body.displayName) { showError("模型 ID / Provider / 实际模型名 / 展示名 必填"); return; }
+  if (!Number.isFinite(body.maxContextSize) || body.maxContextSize < 1) { showError("上下文窗口必须为正数"); return; }
+  try {
+    await api("/api/admin/model-config/models", { method: "POST", body });
+    fillMcModelForm(null);
+    UI.toast("模型已保存");
+    await loadModelConfig();
+  } catch (err) {
+    showError(err.message);
+  }
+}
+
+async function onMcModelAction(btn) {
+  const id = btn.dataset.id;
+  try {
+    if (btn.dataset.act === "edit") {
+      fillMcModelForm(modelConfig.models.find((m) => m.id === id) || null);
+      $("mc-m-model").focus();
+    } else if (btn.dataset.act === "delete") {
+      const ok = await UI.confirm({
+        title: "删除模型",
+        message: `确定删除模型「${id}」吗？\n存量会话若仍引用它将无法继续对话。`,
+        okText: "删除",
+        danger: true,
+        submit: () => api("/api/admin/model-config/models/delete", { method: "POST", body: { modelId: id } }),
+      });
+      if (!ok) return;
+      if (editingModelDefId === id) fillMcModelForm(null);
+      UI.toast("模型已删除");
+      await loadModelConfig();
+    }
+  } catch (err) {
+    showError(err.message);
+  }
+}
+
+async function onMcDefaultChange() {
+  const modelId = $("mc-default").value;
+  if (!modelId || modelId === modelConfig.defaultModel) return;
+  try {
+    await api("/api/admin/model-config/default", { method: "POST", body: { modelId } });
+    modelConfig.defaultModel = modelId;
+    renderMcModels();
+    UI.toast("默认模型已切换");
+  } catch (err) {
+    showError(err.message);
+    await loadModelConfig();
+  }
+}
+
 /* ---------- 兑换码 ---------- */
 
 /* 状态用着色文字表达（§6.9），不用底色徽章 */
@@ -865,6 +1123,20 @@ function init() {
       $("model-cancel").onclick = () => fillModelForm(null);
       $("settings-save").onclick = saveSettings;
       $("redeem-open-gen").onclick = openRedeemGen;
+      // 模型配置页（Provider / 模型定义 / 默认模型）
+      $("mc-provider-form").addEventListener("submit", onMcProviderSubmit);
+      $("mc-p-cancel").onclick = () => fillMcProviderForm(null);
+      $("mc-provider-tbody").addEventListener("click", (e) => {
+        const btn = e.target.closest("button[data-act]");
+        if (btn) onMcProviderAction(btn);
+      });
+      $("mc-model-form").addEventListener("submit", onMcModelSubmit);
+      $("mc-m-cancel").onclick = () => fillMcModelForm(null);
+      $("mc-model-tbody").addEventListener("click", (e) => {
+        const btn = e.target.closest("button[data-act]");
+        if (btn) onMcModelAction(btn);
+      });
+      $("mc-default").addEventListener("change", onMcDefaultChange);
     } else {
       // 资费卡查看与兑换码列表对管理员开放，编辑表单与生成/作废仅站长
       $("model-form").remove();

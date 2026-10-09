@@ -255,6 +255,59 @@ class RedeemCodeRow(Base):
     )
 
 
+class SystemSettingRow(Base):
+    """system_settings 键值表（本进程只读）。"""
+
+    __tablename__ = "system_settings"
+
+    setting_key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    setting_value: Mapped[str] = mapped_column(String(1024), nullable=False)
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        MicrosecondDateTime, nullable=False, default=utc_now,
+    )
+
+
+class ModelProviderRow(Base):
+    """模型 Provider：type（openai/alibaba/deepseek/responses）+ api_key + base_url。"""
+
+    __tablename__ = "model_providers"
+
+    name: Mapped[str] = mapped_column(String(64), primary_key=True)
+    type: Mapped[str] = mapped_column(String(16), nullable=False)
+    api_key: Mapped[str] = mapped_column(String(256), nullable=False, default="")
+    base_url: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        MicrosecondDateTime, nullable=False, default=utc_now,
+    )
+
+
+class ModelDefinitionRow(Base):
+    """模型定义：id = "provider/模型名"。"""
+
+    __tablename__ = "model_definitions"
+    __table_args__ = (Index("ix_model_defs_provider", "provider"),)
+
+    id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    provider: Mapped[str] = mapped_column(
+        String(64), ForeignKey("model_providers.name"), nullable=False,
+    )
+    model: Mapped[str] = mapped_column(String(128), nullable=False)
+    display_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    max_context_size: Mapped[int] = mapped_column(_BigInt, nullable=False)
+    max_output_size: Mapped[int] = mapped_column(_BigInt, nullable=False, default=0)
+    capabilities: Mapped[str] = mapped_column(String(256), nullable=False, default="")
+    support_efforts: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    default_effort: Mapped[str] = mapped_column(String(16), nullable=False, default="")
+    reasoning_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        MicrosecondDateTime, nullable=False, default=utc_now,
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        MicrosecondDateTime, nullable=False, default=utc_now,
+    )
+
+
 # ---- engine / sessionmaker 工厂（懒初始化，双检锁）----
 
 _engine: Engine | None = None

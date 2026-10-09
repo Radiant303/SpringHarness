@@ -1840,6 +1840,24 @@ function closeModelMenu() {
   $("model-pill").classList.remove("open");
 }
 
+/* 打开 picker 时刷新模型列表：initialize 只在页面加载时拉一次，
+   站长中途改配置（增删模型/换默认）靠这里追上；失败保留旧列表 */
+let modelListRefreshing = false;
+async function refreshModelList() {
+  if (modelListRefreshing) return;
+  modelListRefreshing = true;
+  try {
+    const res = await rpc.request("models/list", {});
+    if (res && Array.isArray(res.models)) {
+      state.models = res.models;
+      if (!state.model && res.defaultModel) state.model = res.defaultModel;
+      populateModelSelect();
+    }
+  } catch { /* 保留旧列表 */ } finally {
+    modelListRefreshing = false;
+  }
+}
+
 async function onModelChange(picked) {
   if (!picked || picked === state.model) return;
   state.model = picked;
@@ -1898,6 +1916,7 @@ function bind() {
     e.stopPropagation();  // 防止被下面的 document click 立即关掉
     const open = $("model-menu").classList.toggle("hidden");
     $("model-pill").classList.toggle("open", !open);
+    if (open) refreshModelList();  // 打开菜单时拉最新模型列表：站长可能刚在后台改过模型配置
   };
   document.addEventListener("click", (e) => {
     if (!e.target.closest("#model-pill")) closeModelMenu();
