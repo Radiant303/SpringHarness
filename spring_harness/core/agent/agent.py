@@ -80,7 +80,6 @@ def create_agent(
             repo_context(root),
             code_mode(root),
             subagents(str(root)),
-            Shell(),
             background(extra_tools=("run_command", "edit_knowledge")),
             NotifyingCompaction(
                 max_fraction=0.8,
