@@ -1,21 +1,19 @@
 package com.spring.gateway.controller;
 
-import com.spring.gateway.common.AuthInterceptor;
-import com.spring.gateway.common.BizException;
+import com.spring.gateway.common.RequiresOwner;
 import com.spring.gateway.common.Result;
 import com.spring.gateway.dto.AdminBillingEstRequest;
 import com.spring.gateway.dto.AdminMailSettingsRequest;
 import com.spring.gateway.dto.AdminRegistrationRequest;
 import com.spring.gateway.dto.AdminWorkMaxBytesRequest;
+import com.spring.gateway.common.BizException;
 import com.spring.gateway.entity.SystemSetting;
-import com.spring.gateway.entity.User;
 import com.spring.gateway.service.MailCodeService;
 import com.spring.gateway.service.SystemSettingService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -60,53 +58,41 @@ public class AdminSettingsController {
     }
 
     /**
-     * 设置注册开关（仅站长）
+     * 设置注册开关
      *
-     * @param actorRole 当前用户角色（拦截器注入）
-     * @param req       开关
+     * @param req 开关
      * @return 空数据返回体
      */
+    @RequiresOwner(message = "仅站长可修改系统设置")
     @PostMapping("/registration")
-    public Result<Void> setRegistration(@RequestAttribute(AuthInterceptor.ATTR_USER_ROLE) String actorRole,
-                                        @Valid @RequestBody AdminRegistrationRequest req) {
-        if (!User.ROLE_OWNER.equals(actorRole)) {
-            throw new BizException(403, "仅站长可修改系统设置");
-        }
+    public Result<Void> setRegistration(@Valid @RequestBody AdminRegistrationRequest req) {
         systemSettingService.set(SystemSetting.KEY_REGISTRATION_OPEN, String.valueOf(req.open()));
         return Result.ok(null);
     }
 
     /**
-     * 设置全局单工作区上限（仅站长）
+     * 设置全局单工作区上限
      *
-     * @param actorRole 当前用户角色（拦截器注入）
-     * @param req       上限字节数
+     * @param req 上限字节数
      * @return 空数据返回体
      */
+    @RequiresOwner(message = "仅站长可修改系统设置")
     @PostMapping("/work-max-bytes")
-    public Result<Void> setWorkMaxBytes(@RequestAttribute(AuthInterceptor.ATTR_USER_ROLE) String actorRole,
-                                        @Valid @RequestBody AdminWorkMaxBytesRequest req) {
-        if (!User.ROLE_OWNER.equals(actorRole)) {
-            throw new BizException(403, "仅站长可修改系统设置");
-        }
+    public Result<Void> setWorkMaxBytes(@Valid @RequestBody AdminWorkMaxBytesRequest req) {
         systemSettingService.set(SystemSetting.KEY_WORK_MAX_BYTES, String.valueOf(req.bytes()));
         return Result.ok(null);
     }
 
     /**
-     * 配置邮箱验证码注册（仅站长）。username/authCode 留空表示保持不变；
+     * 配置邮箱验证码注册。username/authCode 留空表示保持不变；
      * 开启时要求最终生效的发件邮箱与授权码都已就绪。
      *
-     * @param actorRole 当前用户角色（拦截器注入）
-     * @param req       邮箱设置
+     * @param req 邮箱设置
      * @return 空数据返回体
      */
+    @RequiresOwner(message = "仅站长可修改系统设置")
     @PostMapping("/mail")
-    public Result<Void> setMail(@RequestAttribute(AuthInterceptor.ATTR_USER_ROLE) String actorRole,
-                                @Valid @RequestBody AdminMailSettingsRequest req) {
-        if (!User.ROLE_OWNER.equals(actorRole)) {
-            throw new BizException(403, "仅站长可修改系统设置");
-        }
+    public Result<Void> setMail(@Valid @RequestBody AdminMailSettingsRequest req) {
         String username = req.username() == null ? "" : req.username().trim();
         if (!username.isEmpty() && !MailCodeService.isValidEmail(username)) {
             throw new BizException(400, "发件邮箱格式不正确");
@@ -132,18 +118,14 @@ public class AdminSettingsController {
     }
 
     /**
-     * 设置预扣预估档位（仅站长）
+     * 设置预扣预估档位
      *
-     * @param actorRole 当前用户角色（拦截器注入）
-     * @param req       三档 tokens 数
+     * @param req 三档 tokens 数
      * @return 空数据返回体
      */
+    @RequiresOwner(message = "仅站长可修改系统设置")
     @PostMapping("/billing-est")
-    public Result<Void> setBillingEst(@RequestAttribute(AuthInterceptor.ATTR_USER_ROLE) String actorRole,
-                                      @Valid @RequestBody AdminBillingEstRequest req) {
-        if (!User.ROLE_OWNER.equals(actorRole)) {
-            throw new BizException(403, "仅站长可修改系统设置");
-        }
+    public Result<Void> setBillingEst(@Valid @RequestBody AdminBillingEstRequest req) {
         systemSettingService.set(SystemSetting.KEY_BILLING_EST_CACHE_READ_TOKENS,
                 String.valueOf(req.cacheReadTokens()));
         systemSettingService.set(SystemSetting.KEY_BILLING_EST_INPUT_TOKENS,

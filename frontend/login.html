@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>登录 - Spring Harness</title>
-  <link rel="stylesheet" href="/static/index.css?v=20261009">
-  <link rel="stylesheet" href="/static/login.css?v=20261009">
+  <link rel="stylesheet" href="/static/index.css?v=20261010">
+  <link rel="stylesheet" href="/static/login.css?v=20261010">
 </head>
 <body class="login-page">
   <!-- 品牌标固定在页面左上角（页面式布局，不套卡片） -->
@@ -20,19 +20,21 @@
       <p class="login-switch">
         <span id="login-switch-text">没有账号？</span>
         <a id="login-switch-link" href="#register">注册</a>
+        <!-- 忘记密码：仅登录模式且站长开启邮箱验证码功能时出现 -->
+        <a id="login-forgot-link" class="hidden" href="#reset">忘记密码？</a>
       </p>
-      <!-- 从主站被动跳转过来时（登录过期 / 账号禁用）说明原因 -->
+      <!-- 从主站被动跳转过来时（登录过期 / 账号禁用）说明原因；重置密码成功也复用它提示 -->
       <div id="login-notice" class="login-notice hidden" role="status"></div>
 
-      <div class="login-field">
+      <div class="login-field no-reset">
         <label class="login-label" for="login-username">用户名</label>
         <div class="login-control">
-          <input id="login-username" name="username" type="text" placeholder="请输入用户名或注册邮箱"
+          <input id="login-username" name="username" type="text" placeholder="请输入用户名"
                  autocomplete="username" autocapitalize="off" spellcheck="false" maxlength="64">
         </div>
       </div>
 
-      <div class="login-field">
+      <div class="login-field no-reset">
         <label class="login-label" for="login-password">密码</label>
         <div class="login-control has-eye">
           <input id="login-password" name="password" type="password" placeholder="请输入密码（至少 6 位）"
@@ -42,15 +44,15 @@
         </div>
       </div>
 
-      <div class="login-field register-only mail-only">
+      <div class="login-field code-fields">
         <label class="login-label" for="login-email">QQ 邮箱</label>
         <div class="login-control">
-          <input id="login-email" name="email" type="email" placeholder="用于接收验证码的 QQ 邮箱"
+          <input id="login-email" name="email" type="email" placeholder="注册时验证过的 QQ 邮箱"
                  autocomplete="email" autocapitalize="off" spellcheck="false" maxlength="128">
         </div>
       </div>
 
-      <div class="login-field register-only mail-only">
+      <div class="login-field code-fields">
         <label class="login-label" for="login-code">邮箱验证码</label>
         <div class="login-control has-btn">
           <input id="login-code" name="code" type="text" placeholder="6 位数字验证码"
@@ -69,12 +71,32 @@
         </div>
       </div>
 
+      <div class="login-field reset-only">
+        <label class="login-label" for="login-new-password">新密码</label>
+        <div class="login-control has-eye">
+          <input id="login-new-password" name="newPassword" type="password" placeholder="请输入新密码（至少 6 位）"
+                 autocomplete="new-password">
+          <button type="button" class="login-eye" data-eye="login-new-password"
+                  aria-label="显示密码" aria-pressed="false"></button>
+        </div>
+      </div>
+
+      <div class="login-field reset-only">
+        <label class="login-label" for="login-new-password2">确认新密码</label>
+        <div class="login-control has-eye">
+          <input id="login-new-password2" name="newPassword2" type="password" placeholder="请再次输入新密码"
+                 autocomplete="new-password">
+          <button type="button" class="login-eye" data-eye="login-new-password2"
+                  aria-label="显示密码" aria-pressed="false"></button>
+        </div>
+      </div>
+
       <div id="login-error" class="login-error" role="alert"></div>
 
       <button id="login-submit" type="submit" class="login-primary">登录</button>
     </form>
   </main>
 
-  <script src="/static/login.js?v=20261009"></script>
+  <script src="/static/login.js?v=20261010"></script>
 </body>
 </html>

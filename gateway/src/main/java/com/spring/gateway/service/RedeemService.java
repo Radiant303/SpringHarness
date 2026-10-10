@@ -155,7 +155,7 @@ public class RedeemService {
     }
 
     /**
-     * 管理侧列表（按 id 倒序）。
+     * 管理侧列表。
      *
      * @param statusFilter 状态过滤（null = 全部；须为 ACTIVE/REDEEMED/REVOKED）
      * @return 码行列表
@@ -170,7 +170,7 @@ public class RedeemService {
     }
 
     /**
-     * 用户自己的兑换记录（按兑换时间倒序）。
+     * 用户自己的兑换记录。
      *
      * @param userId 用户 ID
      * @param limit  条数上限

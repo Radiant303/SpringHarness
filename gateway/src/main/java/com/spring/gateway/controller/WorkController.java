@@ -36,7 +36,7 @@ public class WorkController {
     /**
      * 项目列表（size_bytes 为刚重算的最新值）
      *
-     * @param userId 当前用户 ID（拦截器注入）
+     * @param userId 当前用户 ID
      * @return work 摘要列表
      */
     @GetMapping
@@ -47,7 +47,7 @@ public class WorkController {
     /**
      * 新建项目；达到数量上限返回 409
      *
-     * @param userId 当前用户 ID（拦截器注入）
+     * @param userId 当前用户 ID
      * @param req    项目名
      * @return work 摘要
      */
@@ -60,7 +60,7 @@ public class WorkController {
     /**
      * 硬删除项目：删除目录及全部关联数据，有活跃会话或引擎不可达时拒绝
      *
-     * @param userId 当前用户 ID（拦截器注入）
+     * @param userId 当前用户 ID
      * @param workId work ID
      * @return 空数据返回体
      */

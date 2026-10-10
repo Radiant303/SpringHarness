@@ -32,7 +32,7 @@ public class SessionController {
     /**
      * 会话列表；workId 非空时只返回该 work 下的会话
      *
-     * @param userId 当前用户 ID（拦截器注入）
+     * @param userId 当前用户 ID
      * @param workId work ID，可选
      * @return 会话摘要列表
      */
@@ -58,7 +58,7 @@ public class SessionController {
     /**
      * 新建会话（网关本地落库）；workId 为空时落默认 work
      *
-     * @param userId 当前用户 ID（拦截器注入）
+     * @param userId 当前用户 ID
      * @param workId work ID，可选
      * @return 会话摘要
      */
@@ -72,7 +72,7 @@ public class SessionController {
      * 删除会话（网关本地软删除）
      *
      * @param sessionId 会话 ID
-     * @param userId    当前用户 ID（拦截器注入）
+     * @param userId    当前用户 ID
      * @return 空数据返回体
      */
     @DeleteMapping("/{sessionId}")

@@ -1,5 +1,5 @@
-/* 独立登录/注册页。
-   - 地址 #register 进入注册模式，可直接分享注册链接
+/* 独立登录/注册/重置密码页。
+   - 地址 #register 进入注册模式，#reset 进入重置密码模式，可直接分享链接
    - ?reason=expired|disabled：从主站/账户中心被动跳转时说明原因
    - ?next=/static/...：登录成功后回到来源页（仅允许本站 /static/ 下的页面，防开放重定向）
    token、用户名、角色与主站共用 localStorage（同源）。 */
@@ -14,6 +14,12 @@
   const REASONS = {
     expired: "登录已过期，请重新登录",
     disabled: "账号已被禁用，请联系管理员",
+  };
+
+  const MODES = {
+    login: { title: "登录", switchText: "没有账号？", switchLink: "注册", switchHash: "#register", submit: "登录", busy: "登录中…" },
+    register: { title: "注册", switchText: "已有账号？", switchLink: "登录", switchHash: "#login", submit: "注册并登录", busy: "注册中…" },
+    reset: { title: "重置密码", switchText: "想起密码了？", switchLink: "登录", switchHash: "#login", submit: "重置密码", busy: "重置中…" },
   };
 
   const $ = (id) => document.getElementById(id);
@@ -49,36 +55,54 @@
     password2: $("login-password2"),
     email: $("login-email"),
     code: $("login-code"),
+    newPassword: $("login-new-password"),
+    newPassword2: $("login-new-password2"),
   };
   const sendCodeBtn = $("login-send-code");
   let mode = "login";
   let busy = false;
   let cdTimer = null;  // 重发倒计时定时器
-  let mailVerify = false;  // 站长是否开启了邮箱验证码注册（驱动邮箱/验证码字段显隐与校验）
+  let mailVerify = false;  // 站长是否开启了邮箱验证码功能（驱动邮箱/验证码字段显隐、校验与忘记密码入口）
+  let configLoaded = false;  // register-config 返回前不要把 #reset 误判成"未开启"
+  // URL reason 带来的提示不被模式切换清掉；重置成功这类临时提示会被清掉
+  let noticePinned = false;
 
-  // 拉取注册页公开配置：开启邮箱验证码注册时才显示邮箱与验证码字段
+  /** 当前模式是否需要邮箱+验证码字段（注册且站长开启，或重置密码） */
+  const needsCode = () => (mode === "register" && mailVerify) || mode === "reset";
+
+  // 拉取注册页公开配置：开启邮箱验证码功能时才显示相关字段与忘记密码入口
   fetch("/api/auth/register-config")
     .then((r) => r.json())
     .then((p) => {
       mailVerify = !!(p && p.data && p.data.mailVerify);
-      form.classList.toggle("is-mail", mailVerify);
+      configLoaded = true;
+      // 用户名占位符只在开启邮箱功能时提"邮箱"（支持邮箱登录）
+      inputs.username.placeholder = mailVerify ? "请输入用户名或注册邮箱" : "请输入用户名";
+      setMode(mode);  // 重新评估字段显隐
     })
     .catch(() => { /* 拉取失败按未开启处理；服务端仍会兜底校验 */ });
 
-  // 提交按钮文案：忙碌时要写"登录中…"，统一从这里取，避免两处写法不一致
-  const submitLabel = () => (mode === "register" ? "注册并登录" : "登录");
-
   function setMode(m) {
-    mode = m === "register" ? "register" : "login";
-    const reg = mode === "register";
-    form.classList.toggle("is-register", reg);
-    $("login-title").textContent = reg ? "注册" : "登录";
-    $("login-switch-text").textContent = reg ? "已有账号？" : "没有账号？";
-    $("login-switch-link").textContent = reg ? "登录" : "注册";
-    $("login-switch-link").setAttribute("href", reg ? "#login" : "#register");
-    $("login-submit").textContent = submitLabel();
-    inputs.password.autocomplete = reg ? "new-password" : "current-password";
-    document.title = (reg ? "注册" : "登录") + " - Spring Harness";
+    mode = MODES[m] ? m : "login";
+    // 未开启邮箱功能时重置密码模式无意义（发不出验证码），直接回登录模式
+    if (mode === "reset" && configLoaded && !mailVerify) {
+      history.replaceState(null, "", location.pathname + location.search + "#login");
+      mode = "login";
+    }
+    const conf = MODES[mode];
+    form.classList.toggle("is-register", mode === "register");
+    form.classList.toggle("is-reset", mode === "reset");
+    form.classList.toggle("is-code", needsCode());
+    $("login-title").textContent = conf.title;
+    $("login-switch-text").textContent = conf.switchText;
+    $("login-switch-link").textContent = conf.switchLink;
+    $("login-switch-link").setAttribute("href", conf.switchHash);
+    $("login-submit").textContent = conf.submit;
+    // 忘记密码入口：只在登录模式且邮箱验证码功能开启时出现
+    $("login-forgot-link").classList.toggle("hidden", !(mode === "login" && mailVerify));
+    inputs.password.autocomplete = mode === "login" ? "current-password" : "new-password";
+    document.title = conf.title + " - Spring Harness";
+    if (!noticePinned) showNotice("");
     // 切换模式时把已显示的密码收回隐藏状态，避免明文留在屏幕上
     form.querySelectorAll(".login-eye").forEach((btn) => setRevealed(btn, false));
     showError("");
@@ -108,11 +132,16 @@
     }
   }
 
+  function showNotice(msg) {
+    $("login-notice").textContent = msg || "";
+    $("login-notice").classList.toggle("hidden", !msg);
+  }
+
   function setBusy(on) {
     busy = on;
     const btn = $("login-submit");
     btn.disabled = on;
-    btn.textContent = on ? (mode === "register" ? "注册中…" : "登录中…") : submitLabel();
+    btn.textContent = on ? MODES[mode].busy : MODES[mode].submit;
   }
 
   /** POST 认证接口；网关统一返回 {code, message, data}，错误详情在 message 里 */
@@ -132,7 +161,18 @@
     return payload ? payload.data : null;
   }
 
-  function validate(username, password) {
+  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  function validate() {
+    const username = inputs.username.value.trim();
+    const password = inputs.password.value;
+    if (mode === "reset") {
+      if (!EMAIL_RE.test(inputs.email.value.trim())) return ["请输入正确的邮箱地址", "email"];
+      if (!/^\d{6}$/.test(inputs.code.value.trim())) return ["请输入 6 位数字验证码", "code"];
+      if (inputs.newPassword.value.length < 6) return ["密码至少 6 位", "newPassword"];
+      if (inputs.newPassword.value !== inputs.newPassword2.value) return ["两次输入的密码不一致", "newPassword2"];
+      return null;
+    }
     if (!username) return ["请输入用户名", "username"];
     if (!password) return ["请输入密码", "password"];
     if (mode === "register") {
@@ -140,7 +180,7 @@
       if (password.length < 6) return ["密码至少 6 位", "password"];
       if (password !== inputs.password2.value) return ["两次输入的密码不一致", "password2"];
       if (mailVerify) {
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inputs.email.value.trim())) return ["请输入正确的邮箱地址", "email"];
+        if (!EMAIL_RE.test(inputs.email.value.trim())) return ["请输入正确的邮箱地址", "email"];
         if (!/^\d{6}$/.test(inputs.code.value.trim())) return ["请输入 6 位数字验证码", "code"];
       }
     }
@@ -169,12 +209,13 @@
   async function onSendCode() {
     if (sendCodeBtn.disabled) return;
     const email = inputs.email.value.trim();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showError("请输入正确的邮箱地址", "email"); return; }
+    if (!EMAIL_RE.test(email)) { showError("请输入正确的邮箱地址", "email"); return; }
     showError("");
     sendCodeBtn.disabled = true;
     sendCodeBtn.textContent = "发送中…";
     try {
-      const data = await post("send-code", { email });
+      // scene：注册与重置密码的验证码在服务端分命名空间，互不串用
+      const data = await post("send-code", { email, scene: mode === "reset" ? "reset" : "register" });
       startCountdown((data && data.resendAfterSeconds) || 60);
       inputs.code.focus();
     } catch (err) {
@@ -187,13 +228,36 @@
   async function onSubmit(e) {
     e.preventDefault();
     if (busy) return;
-    const username = inputs.username.value.trim();
-    const password = inputs.password.value;
-    const invalid = validate(username, password);
+    const invalid = validate();
     if (invalid) { showError(invalid[0], invalid[1]); return; }
 
     showError("");
     setBusy(true);
+    if (mode === "reset") {
+      try {
+        await post("reset-password", {
+          email: inputs.email.value.trim(),
+          code: inputs.code.value.trim(),
+          newPassword: inputs.newPassword.value,
+        });
+      } catch (err) {
+        setBusy(false);
+        showError(err.message);
+        return;
+      }
+      // 重置成功：回登录模式，用户名预填邮箱（支持邮箱登录），密码框等输入
+      setBusy(false);
+      history.replaceState(null, "", location.pathname + location.search + "#login");
+      setMode("login");
+      inputs.username.value = inputs.email.value.trim();
+      inputs.password.value = "";
+      showNotice("密码已重置，请用新密码登录");
+      inputs.password.focus();
+      return;
+    }
+
+    const username = inputs.username.value.trim();
+    const password = inputs.password.value;
     const registering = mode === "register";
     try {
       if (registering) {
@@ -251,15 +315,15 @@
     }
   });
   window.addEventListener("hashchange", () => {
-    setMode(location.hash === "#register" ? "register" : "login");
-    inputs.username.focus();
+    setMode(location.hash.slice(1));
+    (mode === "reset" ? inputs.email : inputs.username).focus();
   });
 
   const reason = REASONS[params.get("reason")];
   if (reason) {
-    $("login-notice").textContent = reason;
-    $("login-notice").classList.remove("hidden");
+    noticePinned = true;
+    showNotice(reason);
   }
-  setMode(location.hash === "#register" ? "register" : "login");
-  inputs.username.focus();
+  setMode(location.hash.slice(1));
+  (mode === "reset" ? inputs.email : inputs.username).focus();
 })();

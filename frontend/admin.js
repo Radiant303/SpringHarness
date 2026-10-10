@@ -146,6 +146,192 @@ async function loadAccount() {
   const el = $("account-points");
   el.textContent = fmtPoints(balance);
   el.classList.toggle("points-out", balance < 0);
+
+  // 绑定邮箱 + 邮箱功能可用性（站长未开启邮箱功能时整行隐藏）
+  try {
+    const profile = await api("/api/account/me");
+    acEmail = profile.email || "";
+    $("account-email").textContent = acEmail;  // 未绑定留空即可（按钮文案已表达状态）
+    const cfg = await fetch("/api/auth/register-config").then((r) => r.json()).catch(() => null);
+    acMailOn = !!(cfg && cfg.data && cfg.data.mailVerify);
+    $("account-email-row").classList.toggle("hidden", !acMailOn);
+    // 按钮文案随绑定状态：未绑定 → 绑定；已绑定 → 修改
+    $("ac-bind-email").textContent = acEmail ? "修改" : "绑定";
+  } catch {
+    $("account-email").textContent = "-";
+  }
+}
+
+/* ---------- 账户安全：修改密码（校验旧密码）与绑定/换绑邮箱 ---------- */
+
+let acEmail = "";      // 当前账号绑定的邮箱（空 = 未绑定）
+let acMailOn = false;  // 站长是否开启了邮箱验证码功能
+
+/** 发码按钮倒计时（弹窗内的"获取验证码"按钮） */
+function acCountdown(btn, seconds) {
+  let left = seconds;
+  btn.disabled = true;
+  btn.textContent = left + "s 后重发";
+  const timer = setInterval(() => {
+    left -= 1;
+    if (left <= 0) {
+      clearInterval(timer);
+      btn.disabled = false;
+      btn.textContent = "获取验证码";
+    } else {
+      btn.textContent = left + "s 后重发";
+    }
+  }, 1000);
+}
+
+/** 给绑定邮箱发验证码（开启邮箱功能时的改密用） */
+async function acSendCode(btn) {
+  if (btn.disabled) return;
+  btn.disabled = true;
+  btn.textContent = "发送中…";
+  try {
+    const data = await api("/api/account/send-code", { method: "POST" });
+    acCountdown(btn, (data && data.resendAfterSeconds) || 60);
+    UI.toast("验证码已发送，请查收邮件");
+  } catch (err) {
+    btn.disabled = false;
+    btn.textContent = "获取验证码";
+    UI.toast(err.message, { type: "error" });
+  }
+}
+
+/** 修改密码弹窗：开启邮箱功能 → 邮箱验证码（绑定邮箱为前提）；未开启 → 校验旧密码 */
+function openChangePassword() {
+  if (acMailOn && !acEmail) {
+    UI.toast("请先绑定邮箱后再修改密码", { type: "error" });
+    return;
+  }
+  if (acMailOn) {
+    UI.dialog({
+      title: "修改密码",
+      message: `验证码将发送至绑定邮箱 ${acEmail}`,
+      fields: [
+        {
+          name: "code", label: "邮箱验证码", placeholder: "6 位数字", inputMode: "numeric", maxLength: 6,
+          suffixBtn: { text: "获取验证码", onClick: (btn) => acSendCode(btn) },
+        },
+        { name: "newPassword", label: "新密码", type: "password", placeholder: "至少 6 位", autocomplete: "new-password" },
+        { name: "newPassword2", label: "确认新密码", type: "password", placeholder: "再次输入新密码", autocomplete: "new-password" },
+      ],
+      okText: "确认修改",
+      validate: (v) => {
+        if (!/^\d{6}$/.test(v.code.trim())) return { message: "请输入 6 位数字验证码", name: "code" };
+        if (v.newPassword.length < 6) return { message: "密码至少 6 位", name: "newPassword" };
+        if (v.newPassword !== v.newPassword2) return { message: "两次输入的密码不一致", name: "newPassword2" };
+        return null;
+      },
+      submit: (v) => api("/api/account/change-password", {
+        method: "POST",
+        body: { code: v.code.trim(), newPassword: v.newPassword },
+      }),
+    }).then((ok) => { if (ok) UI.toast("密码已修改"); });
+    return;
+  }
+  UI.dialog({
+    title: "修改密码",
+    fields: [
+      { name: "oldPassword", label: "旧密码", type: "password", placeholder: "请输入当前密码", autocomplete: "current-password" },
+      { name: "newPassword", label: "新密码", type: "password", placeholder: "至少 6 位", autocomplete: "new-password" },
+      { name: "newPassword2", label: "确认新密码", type: "password", placeholder: "再次输入新密码", autocomplete: "new-password" },
+    ],
+    okText: "确认修改",
+    validate: (v) => {
+      if (!v.oldPassword) return { message: "请输入旧密码", name: "oldPassword" };
+      if (v.newPassword.length < 6) return { message: "密码至少 6 位", name: "newPassword" };
+      if (v.newPassword !== v.newPassword2) return { message: "两次输入的密码不一致", name: "newPassword2" };
+      if (v.oldPassword === v.newPassword) return { message: "新密码不能与旧密码相同", name: "newPassword" };
+      return null;
+    },
+    submit: (v) => api("/api/account/change-password", {
+      method: "POST",
+      body: { oldPassword: v.oldPassword, newPassword: v.newPassword },
+    }),
+  }).then((ok) => { if (ok) UI.toast("密码已修改"); });
+}
+
+/** "绑定/修改"按钮：未绑定打开绑定弹窗，已绑定打开换绑弹窗 */
+function onBindEmail() {
+  openBindEmailDialog(!!acEmail);
+}
+
+/** 绑定/换绑邮箱弹窗（邮箱 + 验证码；发码按钮需要读同弹窗的邮箱字段） */
+function openBindEmailDialog(isChange) {
+  UI.dialog({
+    title: isChange ? "修改绑定邮箱" : "绑定邮箱",
+    message: isChange ? `当前绑定邮箱：${acEmail}；验证码将发送至新邮箱` : "绑定后可用邮箱验证码重置密码",
+    fields: [
+      { name: "email", label: isChange ? "新邮箱" : "QQ 邮箱", type: "email", placeholder: "用于接收验证码", autocomplete: "email" },
+      {
+        name: "code", label: "邮箱验证码", placeholder: "6 位数字", inputMode: "numeric", maxLength: 6,
+        suffixBtn: {
+          text: "获取验证码",
+          onClick: (btn, _input, inputs) => {
+            const email = inputs.email.value.trim();
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+              UI.toast("请输入正确的邮箱地址", { type: "error" });
+              inputs.email.focus();
+              return;
+            }
+            acSendBindCode(btn, email);
+          },
+        },
+      },
+    ],
+    okText: isChange ? "确认修改" : "绑定",
+    validate: (v) => {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.email.trim())) return { message: "请输入正确的邮箱地址", name: "email" };
+      if (!/^\d{6}$/.test(v.code.trim())) return { message: "请输入 6 位数字验证码", name: "code" };
+      return null;
+    },
+    submit: async (v) => {
+      await api("/api/account/bind-email", {
+        method: "POST",
+        body: { email: v.email.trim(), code: v.code.trim() },
+      });
+    },
+  }).then((ok) => {
+    if (ok) {
+      UI.toast(isChange ? "绑定邮箱已修改" : "邮箱绑定成功");
+      loadAccount();  // 刷新绑定状态
+    }
+  });
+}
+
+/** 发绑定验证码（目标邮箱不能被其他账号占用） */
+async function acSendBindCode(btn, email) {
+  if (btn.disabled) return;
+  btn.disabled = true;
+  btn.textContent = "发送中…";
+  try {
+    const data = await api("/api/account/send-bind-code", { method: "POST", body: { email } });
+    acCountdown(btn, (data && data.resendAfterSeconds) || 60);
+    UI.toast("验证码已发送，请查收邮件");
+  } catch (err) {
+    btn.disabled = false;
+    btn.textContent = "获取验证码";
+    UI.toast(err.message, { type: "error" });
+  }
+}
+
+/** 发绑定验证码（目标邮箱不能被任何账号占用） */
+async function acSendBindCode(btn, email) {
+  if (btn.disabled) return;
+  btn.disabled = true;
+  btn.textContent = "发送中…";
+  try {
+    const data = await api("/api/account/send-bind-code", { method: "POST", body: { email } });
+    acCountdown(btn, (data && data.resendAfterSeconds) || 60);
+    UI.toast("验证码已发送，请查收邮件");
+  } catch (err) {
+    btn.disabled = false;
+    btn.textContent = "获取验证码";
+    UI.toast(err.message, { type: "error" });
+  }
 }
 
 /* ---------- 我的积分 ---------- */
@@ -442,7 +628,7 @@ let models = [];
 let editingModelId = null;  // 非 null 表示表单处于编辑模式
 
 async function loadModels() {
-  models = await UI.loadTable("model-tbody", () => api("/api/admin/models")) || [];
+  models = await UI.loadTable("model-tbody", () => api("/api/admin/rate-cards")) || [];
   renderModels();
 }
 
@@ -505,9 +691,9 @@ async function onModelFormSubmit(e) {
   try {
     const editing = !!editingModelId;
     if (editing) {
-      await api(`/api/admin/models/${editingModelId}`, { method: "POST", body });
+      await api(`/api/admin/rate-cards/${editingModelId}`, { method: "POST", body });
     } else {
-      await api("/api/admin/models", { method: "POST", body });
+      await api("/api/admin/rate-cards", { method: "POST", body });
     }
     fillModelForm(null);
     UI.toast(editing ? "资费卡已更新" : "资费卡已新增");
@@ -529,7 +715,7 @@ async function onModelAction(btn) {
         message: `确定删除「${btn.dataset.name}」吗？\n删除后该模型按兜底卡计费。`,
         okText: "删除",
         danger: true,
-        submit: () => api(`/api/admin/models/${id}/delete`, { method: "POST" }),
+        submit: () => api(`/api/admin/rate-cards/${id}/delete`, { method: "POST" }),
       });
       if (!ok) return;
       if (editingModelId === id) fillModelForm(null);
@@ -1100,6 +1286,9 @@ function init() {
     localStorage.removeItem("sh.sessionId");
     location.replace("/static/login.html");
   };
+  // 账户安全（所有角色可用）：修改密码 + 绑定/换绑邮箱（单按钮随状态切换）
+  $("ac-change-pw").onclick = openChangePassword;
+  $("ac-bind-email").onclick = onBindEmail;
 
   if (isStaff) {
     $("user-tbody").addEventListener("click", (e) => {

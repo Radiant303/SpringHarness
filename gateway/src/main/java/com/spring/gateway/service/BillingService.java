@@ -3,12 +3,12 @@ package com.spring.gateway.service;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.spring.gateway.common.BizException;
 import com.spring.gateway.common.SnowflakeIdGenerator;
-import com.spring.gateway.entity.ModelRate;
+import com.spring.gateway.entity.RateCard;
 import com.spring.gateway.entity.PointsHold;
 import com.spring.gateway.entity.PointsLedger;
 import com.spring.gateway.entity.SystemSetting;
 import com.spring.gateway.entity.UsageRecord;
-import com.spring.gateway.mapper.ModelRateMapper;
+import com.spring.gateway.mapper.RateCardMapper;
 import com.spring.gateway.mapper.PointsHoldMapper;
 import com.spring.gateway.mapper.PointsLedgerMapper;
 import com.spring.gateway.mapper.UsageRecordMapper;
@@ -50,7 +50,7 @@ public class BillingService {
     private static final int SCALE = 6;
 
     private final UserMapper userMapper;
-    private final ModelRateMapper modelRateMapper;
+    private final RateCardMapper rateCardMapper;
     private final PointsHoldMapper pointsHoldMapper;
     private final PointsLedgerMapper pointsLedgerMapper;
     private final UsageRecordMapper usageRecordMapper;
@@ -173,7 +173,7 @@ public class BillingService {
     }
 
     /**
-     * 用户的最近流水（按 id 倒序）
+     * 用户的最近流水
      *
      * @param userId 用户 ID
      * @param limit  条数上限
@@ -214,7 +214,7 @@ public class BillingService {
 
     /** 实际成本：按 usage 的 modelName 精确匹配启用中的资费卡，否则回落兜底卡。 */
     private BigDecimal computeCost(UsageRecord record) {
-        ModelRate rate = findRate(record.getModelName());
+        RateCard rate = findRate(record.getModelName());
         if (rate == null) {
             return BigDecimal.ZERO;
         }
@@ -229,7 +229,7 @@ public class BillingService {
 
     /** 预扣估算：兜底卡 × 系统设置的预估档位（缓存写入不预估，结算按实际计）。 */
     private BigDecimal estimateAmount() {
-        ModelRate rate = findRate(null);
+        RateCard rate = findRate(null);
         if (rate == null) {
             return BigDecimal.ZERO;
         }
@@ -243,21 +243,21 @@ public class BillingService {
     }
 
     /** 资费卡查找：精确匹配且启用 → 用之；否则兜底卡（停用/缺失 → null = 免费）。 */
-    private ModelRate findRate(String modelName) {
-        if (modelName != null && !ModelRate.DEFAULT_MODEL_NAME.equals(modelName)) {
-            ModelRate row = modelRateMapper.selectOne(new LambdaQueryWrapper<ModelRate>()
-                    .eq(ModelRate::getModelName, modelName));
+    private RateCard findRate(String modelName) {
+        if (modelName != null && !RateCard.DEFAULT_MODEL_NAME.equals(modelName)) {
+            RateCard row = rateCardMapper.selectOne(new LambdaQueryWrapper<RateCard>()
+                    .eq(RateCard::getModelName, modelName));
             if (row != null && Boolean.TRUE.equals(row.getEnabled())) {
                 return row;
             }
         }
-        ModelRate fallback = modelRateMapper.selectOne(new LambdaQueryWrapper<ModelRate>()
-                .eq(ModelRate::getModelName, ModelRate.DEFAULT_MODEL_NAME));
+        RateCard fallback = rateCardMapper.selectOne(new LambdaQueryWrapper<RateCard>()
+                .eq(RateCard::getModelName, RateCard.DEFAULT_MODEL_NAME));
         return fallback != null && Boolean.TRUE.equals(fallback.getEnabled()) ? fallback : null;
     }
 
     /** 成本 = Σ(费率 × tokens) / 1e6，六位小数。 */
-    private static BigDecimal costOf(ModelRate rate, long uncached, long cacheRead,
+    private static BigDecimal costOf(RateCard rate, long uncached, long cacheRead,
                                      long cacheWrite, long output) {
         BigDecimal total = rate.getInputPoints().multiply(BigDecimal.valueOf(uncached))
                 .add(rate.getCacheReadPoints().multiply(BigDecimal.valueOf(cacheRead)))

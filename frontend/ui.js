@@ -79,6 +79,14 @@
           control.classList.add("has-suffix");
           control.appendChild(h("span", "ui-suffix", f.suffix));
         }
+        // 字段内嵌按钮（如"获取验证码"）：悬浮在输入框右侧，可交互
+        if (f.suffixBtn) {
+          control.classList.add("has-suffix-btn");
+          const btn = h("button", "ui-suffix-btn", f.suffixBtn.text || "");
+          btn.type = "button";
+          btn.addEventListener("click", () => f.suffixBtn.onClick(btn, input, inputs));
+          control.appendChild(btn);
+        }
         wrap.appendChild(control);
         if (f.hint) wrap.appendChild(h("span", "ui-field-hint", f.hint));
         box.appendChild(wrap);

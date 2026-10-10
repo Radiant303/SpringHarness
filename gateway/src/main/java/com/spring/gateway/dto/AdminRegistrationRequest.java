@@ -3,7 +3,7 @@ package com.spring.gateway.dto;
 import jakarta.validation.constraints.NotNull;
 
 /**
- * 注册开关请求（仅站长）。
+ * 注册开关请求。
  *
  * @author hanbing
  * @since 2026-10-05

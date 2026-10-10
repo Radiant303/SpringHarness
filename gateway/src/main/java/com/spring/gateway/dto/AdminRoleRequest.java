@@ -4,7 +4,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 
 /**
- * 任命/罢免管理员请求（仅站长）。
+ * 任命/罢免管理员请求。
  *
  * @author hanbing
  * @since 2026-10-05

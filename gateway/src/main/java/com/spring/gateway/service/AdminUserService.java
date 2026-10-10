@@ -60,17 +60,13 @@ public class AdminUserService {
     }
 
     /**
-     * 任命/罢免管理员；仅站长可调用，此处再校验一次角色
+     * 任命/罢免管理员；仅站长可调用
      *
-     * @param actorRole 操作者角色
-     * @param targetId  目标用户 ID
-     * @param role      目标角色（admin/user）
-     * @throws BizException 目标不存在（404）；非站长操作或目标为站长（403）
+     * @param targetId 目标用户 ID
+     * @param role     目标角色（admin/user）
+     * @throws BizException 目标不存在（404）；目标为站长（403）
      */
-    public void setRole(String actorRole, Long targetId, String role) {
-        if (!User.ROLE_OWNER.equals(actorRole)) {
-            throw new BizException(403, "仅站长可任命管理员");
-        }
+    public void setRole(Long targetId, String role) {
         User target = requireTarget(targetId);
         if (User.ROLE_OWNER.equals(target.getRole())) {
             throw new BizException(403, "站长角色不可变更");

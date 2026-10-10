@@ -3,9 +3,9 @@ package com.spring.gateway.service;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.spring.gateway.common.BizException;
 import com.spring.gateway.common.SnowflakeIdGenerator;
-import com.spring.gateway.dto.AdminModelRequest;
-import com.spring.gateway.entity.ModelRate;
-import com.spring.gateway.mapper.ModelRateMapper;
+import com.spring.gateway.dto.AdminRateCardRequest;
+import com.spring.gateway.entity.RateCard;
+import com.spring.gateway.mapper.RateCardMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
@@ -25,9 +25,9 @@ import java.util.List;
  */
 @Service
 @RequiredArgsConstructor
-public class AdminModelService {
+public class AdminRateCardService {
 
-    private final ModelRateMapper modelRateMapper;
+    private final RateCardMapper rateCardMapper;
     private final SnowflakeIdGenerator idGenerator;
 
     /**
@@ -35,12 +35,12 @@ public class AdminModelService {
      *
      * @return 资费卡列表
      */
-    public List<ModelRate> list() {
-        List<ModelRate> rows = modelRateMapper.selectList(new LambdaQueryWrapper<ModelRate>()
-                .orderByAsc(ModelRate::getModelName));
+    public List<RateCard> list() {
+        List<RateCard> rows = rateCardMapper.selectList(new LambdaQueryWrapper<RateCard>()
+                .orderByAsc(RateCard::getModelName));
         rows.sort((a, b) -> Boolean.compare(
-                !ModelRate.DEFAULT_MODEL_NAME.equals(a.getModelName()),
-                !ModelRate.DEFAULT_MODEL_NAME.equals(b.getModelName())));
+                !RateCard.DEFAULT_MODEL_NAME.equals(a.getModelName()),
+                !RateCard.DEFAULT_MODEL_NAME.equals(b.getModelName())));
         return rows;
     }
 
@@ -51,15 +51,15 @@ public class AdminModelService {
      * @return 新建行
      * @throws BizException 模型名已存在（409）
      */
-    public ModelRate create(AdminModelRequest req) {
+    public RateCard create(AdminRateCardRequest req) {
         LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
-        ModelRate row = new ModelRate();
+        RateCard row = new RateCard();
         row.setId(idGenerator.nextId());
         apply(row, req);
         row.setCreatedAt(now);
         row.setUpdatedAt(now);
         try {
-            modelRateMapper.insert(row);
+            rateCardMapper.insert(row);
         } catch (DuplicateKeyException e) {
             throw new BizException(409, "模型名已存在: " + req.modelName());
         }
@@ -73,19 +73,19 @@ public class AdminModelService {
      * @param req 新值
      * @throws BizException 不存在（404）；触碰兜底卡保护（403）；模型名撞车（409）
      */
-    public void update(Long id, AdminModelRequest req) {
-        ModelRate row = requireRow(id);
-        if (ModelRate.DEFAULT_MODEL_NAME.equals(row.getModelName())
-                && !ModelRate.DEFAULT_MODEL_NAME.equals(req.modelName())) {
+    public void update(Long id, AdminRateCardRequest req) {
+        RateCard row = requireRow(id);
+        if (RateCard.DEFAULT_MODEL_NAME.equals(row.getModelName())
+                && !RateCard.DEFAULT_MODEL_NAME.equals(req.modelName())) {
             throw new BizException(403, "兜底资费卡（default）不可改名");
         }
-        if (ModelRate.DEFAULT_MODEL_NAME.equals(row.getModelName()) && Boolean.FALSE.equals(req.enabled())) {
+        if (RateCard.DEFAULT_MODEL_NAME.equals(row.getModelName()) && Boolean.FALSE.equals(req.enabled())) {
             throw new BizException(403, "兜底资费卡（default）不可停用");
         }
         apply(row, req);
         row.setUpdatedAt(LocalDateTime.now(ZoneOffset.UTC));
         try {
-            modelRateMapper.updateById(row);
+            rateCardMapper.updateById(row);
         } catch (DuplicateKeyException e) {
             throw new BizException(409, "模型名已存在: " + req.modelName());
         }
@@ -98,22 +98,22 @@ public class AdminModelService {
      * @throws BizException 不存在（404）；兜底卡（403）
      */
     public void delete(Long id) {
-        ModelRate row = requireRow(id);
-        if (ModelRate.DEFAULT_MODEL_NAME.equals(row.getModelName())) {
+        RateCard row = requireRow(id);
+        if (RateCard.DEFAULT_MODEL_NAME.equals(row.getModelName())) {
             throw new BizException(403, "兜底资费卡（default）不可删除");
         }
-        modelRateMapper.deleteById(id);
+        rateCardMapper.deleteById(id);
     }
 
-    private ModelRate requireRow(Long id) {
-        ModelRate row = modelRateMapper.selectById(id);
+    private RateCard requireRow(Long id) {
+        RateCard row = rateCardMapper.selectById(id);
         if (row == null) {
             throw new BizException(404, "资费卡不存在");
         }
         return row;
     }
 
-    private static void apply(ModelRate row, AdminModelRequest req) {
+    private static void apply(RateCard row, AdminRateCardRequest req) {
         row.setModelName(req.modelName().trim());
         row.setInputPoints(req.inputPoints());
         row.setCacheReadPoints(req.cacheReadPoints());

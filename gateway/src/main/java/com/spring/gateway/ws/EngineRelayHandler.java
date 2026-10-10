@@ -26,6 +26,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -67,6 +68,34 @@ public class EngineRelayHandler extends TextWebSocketHandler {
     private final InternalStoreService internalStoreService;
     private final SessionHistoryService sessionHistoryService;
     private final WebSocketContainer webSocketContainer;
+
+    /**
+     * 控制面方法 → 本地处理器注册表：表内方法由网关本地应答，不透传给引擎；
+     * 表外方法一律透传。新增本地拦截方法时在此登记一行即可。
+     */
+    private final Map<String, ControlPlaneHandler> localHandlers = Map.of(
+            "session/list", this::handleSessionList,
+            "session/history", this::handleSessionHistory,
+            "stream/subscribe", this::handleStreamSubscribe,
+            "turn/start", this::handleTurnStart,
+            "turn/cancel", this::handleTurnCancel);
+
+    /**
+     * 控制面帧处理器。
+     *
+     * @return true = 已本地应答（含应答错误）；false = 放弃本地处理，回退为透传给引擎
+     */
+    @FunctionalInterface
+    private interface ControlPlaneHandler {
+        boolean handle(WebSocketSession session, JsonNode idNode, JsonNode params, Long userId)
+                throws IOException;
+    }
+
+    /** MQ 派发动作（turn/start、turn/cancel 共享派发骨架）。 */
+    @FunctionalInterface
+    private interface MqAction {
+        void run() throws Exception;
+    }
 
     public EngineRelayHandler(@Value("${app.engine-base-url}") String engineBaseUrl,
                               ObjectMapper objectMapper,
@@ -145,12 +174,9 @@ public class EngineRelayHandler extends TextWebSocketHandler {
     }
 
     /**
-     * 拦截网关本地处理的请求帧，返回 true 表示已处理，不再透传：
-     * - session/list、session/history：只读查询，网关本地查库合成应答
-     * - turn/start、turn/cancel：转 MQ 消息；发布失败回退透传，
-     *   业务拒绝（积分不足等）直接应答错误，不回退
-     * - stream/subscribe：订阅事件流推送
-     * 其余方法、响应帧（无 method）、解析失败的帧一律透传。
+     * 拦截网关本地处理的请求帧：命中 localHandlers 注册表即交由对应处理器，
+     * 返回 true 表示已处理，不再透传；处理器返回 false（如 MQ 发布失败）时回退透传。
+     * 表外方法、响应帧（无 method）、解析失败的帧一律透传。
      */
     private boolean tryHandleControlPlane(WebSocketSession browserSession, String payload) throws IOException {
         JsonNode frame;
@@ -164,87 +190,121 @@ public class EngineRelayHandler extends TextWebSocketHandler {
         if (methodNode == null || !methodNode.isTextual() || idNode == null || idNode.isNull()) {
             return false;
         }
-        String method = methodNode.asText();
-        if ("session/list".equals(method) || "session/history".equals(method)) {
-            Long userId = (Long) browserSession.getAttributes().get(AuthHandshakeInterceptor.ATTR_USER_ID);
-            handleSessionQuery(browserSession, idNode, method, frame.get("params"), userId);
-            return true;
-        }
-        if (!"turn/start".equals(method) && !"turn/cancel".equals(method)
-                && !"stream/subscribe".equals(method)) {
+        ControlPlaneHandler handler = localHandlers.get(methodNode.asText());
+        if (handler == null) {
             return false;
         }
-
         Long userId = (Long) browserSession.getAttributes().get(AuthHandshakeInterceptor.ATTR_USER_ID);
-        JsonNode params = frame.get("params");
-        JsonNode sessionIdNode = params == null ? null : params.get("sessionId");
-        if (sessionIdNode == null || !sessionIdNode.isTextual() || sessionIdNode.asText().isBlank()) {
-            sendRpcError(browserSession, idNode, INVALID_PARAMS, "缺少 sessionId");
-            return true;
-        }
-        String sessionId = sessionIdNode.asText();
+        return handler.handle(browserSession, idNode, frame.get("params"), userId);
+    }
 
-        if ("stream/subscribe".equals(method)) {
-            JsonNode lastSeqNode = params.get("lastSeq");
-            String lastSeq = lastSeqNode == null || lastSeqNode.isNull() ? null : lastSeqNode.asText();
-            turnStreamReader.subscribe(browserSession, sessionId, lastSeq);
-            sendRpcResult(browserSession, idNode);
-            return true;
-        }
-
+    /** session/list：本地查库合成应答；params 里带 workId 时只返回该 work 下的会话 */
+    private boolean handleSessionList(WebSocketSession session, JsonNode idNode, JsonNode params,
+                                      Long userId) throws IOException {
         try {
-            if ("turn/start".equals(method)) {
-                JsonNode inputNode = params.get("input");
-                String input = inputNode == null ? "" : inputNode.asText();
-                long turnId = turnDispatchService.dispatch(userId, sessionId, input);
-                log.info("turn 已派发 MQ: turnId={} sessionId={} userId={}", turnId, sessionId, userId);
-            } else {
-                turnDispatchService.cancel(userId, sessionId);
-                log.info("turn 取消已派发 MQ: sessionId={} userId={}", sessionId, userId);
-            }
-        } catch (BizException e) {
-            // 业务拒绝（如积分不足）：直接应答用户，不回退透传——透传会绕过派发侧控制
-            sendRpcError(browserSession, idNode, BIZ_REJECTED, e.getMessage());
-            return true;
+            sendRpcResult(session, idNode, listSessions(userId, params));
         } catch (Exception e) {
-            log.warn("MQ 发布失败，回退 WS 透传: method={} error={}", method, e.getMessage());
-            return false;
+            log.warn("会话查询失败: method=session/list error={}", e.toString());
+            sendRpcError(session, idNode, INTERNAL_ERROR, "会话查询失败");
         }
-        sendRpcResult(browserSession, idNode);
         return true;
     }
 
-    /**
-     * 本地应答只读会话查询：session/list 按用户列出未删除会话，session/history
-     * 归属校验后分页。
-     */
-    private void handleSessionQuery(WebSocketSession session, JsonNode idNode, String method, JsonNode params,
-                                    Long userId) throws IOException {
+    /** session/history：归属校验后分页查询 */
+    private boolean handleSessionHistory(WebSocketSession session, JsonNode idNode, JsonNode params,
+                                         Long userId) throws IOException {
         try {
-            if ("session/list".equals(method)) {
-                sendRpcResult(session, idNode, listSessions(userId, params));
-                return;
-            }
-            JsonNode sessionIdNode = params == null ? null : params.get("sessionId");
-            if (sessionIdNode == null || !sessionIdNode.isTextual() || sessionIdNode.asText().isBlank()) {
-                sendRpcError(session, idNode, INVALID_PARAMS, "缺少 sessionId");
-                return;
+            String sessionId = requireSessionId(session, idNode, params);
+            if (sessionId == null) {
+                return true;
             }
             // 注意校验顺序：direction → limit → cursor，调整顺序会改变报错优先级
             String direction = readDirection(params);
             Integer limit = readLimit(params);
             String cursor = readCursor(params);
-            ObjectNode result = sessionHistoryService.queryHistory(
-                    sessionIdNode.asText(), userId, cursor, limit, direction);
+            ObjectNode result = sessionHistoryService.queryHistory(sessionId, userId, cursor, limit, direction);
             sendRpcResult(session, idNode, result);
         } catch (UnknownSessionException e) {
             sendRpcError(session, idNode, SessionHistoryService.SESSION_NOT_FOUND, e.getMessage());
         } catch (IllegalArgumentException e) {
             sendRpcError(session, idNode, INVALID_PARAMS, e.getMessage());
         } catch (Exception e) {
-            log.warn("会话查询失败: method={} error={}", method, e.toString());
+            log.warn("会话查询失败: method=session/history error={}", e.toString());
             sendRpcError(session, idNode, INTERNAL_ERROR, "会话查询失败");
         }
+        return true;
+    }
+
+    /** stream/subscribe：订阅事件流推送 */
+    private boolean handleStreamSubscribe(WebSocketSession session, JsonNode idNode, JsonNode params,
+                                          Long userId) throws IOException {
+        String sessionId = requireSessionId(session, idNode, params);
+        if (sessionId == null) {
+            return true;
+        }
+        JsonNode lastSeqNode = params.get("lastSeq");
+        String lastSeq = lastSeqNode == null || lastSeqNode.isNull() ? null : lastSeqNode.asText();
+        turnStreamReader.subscribe(session, sessionId, lastSeq);
+        sendRpcResult(session, idNode);
+        return true;
+    }
+
+    /** turn/start：转 MQ 派发（受理即应答，结果经事件流下发） */
+    private boolean handleTurnStart(WebSocketSession session, JsonNode idNode, JsonNode params,
+                                    Long userId) throws IOException {
+        String sessionId = requireSessionId(session, idNode, params);
+        if (sessionId == null) {
+            return true;
+        }
+        JsonNode inputNode = params.get("input");
+        String input = inputNode == null ? "" : inputNode.asText();
+        return dispatchViaMq(session, idNode, "turn/start", () -> {
+            long turnId = turnDispatchService.dispatch(userId, sessionId, input);
+            log.info("turn 已派发 MQ: turnId={} sessionId={} userId={}", turnId, sessionId, userId);
+        });
+    }
+
+    /** turn/cancel：转 MQ 取消 */
+    private boolean handleTurnCancel(WebSocketSession session, JsonNode idNode, JsonNode params,
+                                     Long userId) throws IOException {
+        String sessionId = requireSessionId(session, idNode, params);
+        if (sessionId == null) {
+            return true;
+        }
+        return dispatchViaMq(session, idNode, "turn/cancel", () -> {
+            turnDispatchService.cancel(userId, sessionId);
+            log.info("turn 取消已派发 MQ: sessionId={} userId={}", sessionId, userId);
+        });
+    }
+
+    /**
+     * turn/* 公共骨架：MQ 发布成功 → 应答受理；业务拒绝（积分不足等）→ 直接应答错误，
+     * 不回退透传（透传会绕过派发侧控制）；其余发布失败 → 回退透传给引擎。
+     */
+    private boolean dispatchViaMq(WebSocketSession session, JsonNode idNode, String method,
+                                  MqAction action) throws IOException {
+        try {
+            action.run();
+        } catch (BizException e) {
+            sendRpcError(session, idNode, BIZ_REJECTED, e.getMessage());
+            return true;
+        } catch (Exception e) {
+            log.warn("MQ 发布失败，回退 WS 透传: method={} error={}", method, e.getMessage());
+            return false;
+        }
+        sendRpcResult(session, idNode);
+        return true;
+    }
+
+    /** 提取 sessionId；缺失/非法时直接应答参数错误并返回 null（调用方按已处理收尾） */
+    private String requireSessionId(WebSocketSession session, JsonNode idNode, JsonNode params)
+            throws IOException {
+        JsonNode node = params == null ? null : params.get("sessionId");
+        if (node == null || !node.isTextual() || node.asText().isBlank()) {
+            sendRpcError(session, idNode, INVALID_PARAMS, "缺少 sessionId");
+            return null;
+        }
+        return node.asText();
     }
 
     /** session/list 的 result；params 里带 workId 时只返回该 work 下的会话 */

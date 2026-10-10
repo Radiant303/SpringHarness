@@ -1,7 +1,7 @@
 package com.spring.gateway.controller;
 
 import com.spring.gateway.common.AuthInterceptor;
-import com.spring.gateway.common.BizException;
+import com.spring.gateway.common.RequiresOwner;
 import com.spring.gateway.common.Result;
 import com.spring.gateway.common.TimeFormat;
 import com.spring.gateway.dto.AdminPasswordRequest;
@@ -11,7 +11,6 @@ import com.spring.gateway.dto.AdminRoleRequest;
 import com.spring.gateway.dto.AdminStatusRequest;
 import com.spring.gateway.dto.AdminUserView;
 import com.spring.gateway.dto.AdminWorkQuotaRequest;
-import com.spring.gateway.entity.User;
 import com.spring.gateway.service.AdminUserService;
 import com.spring.gateway.service.BillingService;
 import jakarta.validation.Valid;
@@ -53,7 +52,7 @@ public class AdminUserController {
     /**
      * 禁用/启用账号；站长不可被禁用，管理员只能操作用户账号
      *
-     * @param actorRole 当前用户角色（拦截器注入）
+     * @param actorRole 当前用户角色
      * @param id        目标用户 ID
      * @param req       目标状态
      * @return 空数据返回体
@@ -67,25 +66,24 @@ public class AdminUserController {
     }
 
     /**
-     * 任命/罢免管理员（仅站长）
+     * 任命/罢免管理员
      *
-     * @param actorRole 当前用户角色（拦截器注入）
-     * @param id        目标用户 ID
-     * @param req       目标角色（admin/user）
+     * @param id  目标用户 ID
+     * @param req 目标角色（admin/user）
      * @return 空数据返回体
      */
+    @RequiresOwner(message = "仅站长可任命管理员")
     @PostMapping("/{id}/role")
-    public Result<Void> setRole(@RequestAttribute(AuthInterceptor.ATTR_USER_ROLE) String actorRole,
-                                @PathVariable Long id,
+    public Result<Void> setRole(@PathVariable Long id,
                                 @Valid @RequestBody AdminRoleRequest req) {
-        adminUserService.setRole(actorRole, id, req.role());
+        adminUserService.setRole(id, req.role());
         return Result.ok(null);
     }
 
     /**
      * 重置用户密码
      *
-     * @param actorRole 当前用户角色（拦截器注入）
+     * @param actorRole 当前用户角色
      * @param id        目标用户 ID
      * @param req       新密码
      * @return 空数据返回体
@@ -101,7 +99,7 @@ public class AdminUserController {
     /**
      * 调整存储配额
      *
-     * @param actorRole 当前用户角色（拦截器注入）
+     * @param actorRole 当前用户角色
      * @param id        目标用户 ID
      * @param req       新配额（字节）
      * @return 空数据返回体
@@ -117,7 +115,7 @@ public class AdminUserController {
     /**
      * 调整单工作区上限覆盖值；quotaBytes 为 null 时恢复跟随全局设置
      *
-     * @param actorRole 当前用户角色（拦截器注入）
+     * @param actorRole 当前用户角色
      * @param id        目标用户 ID
      * @param req       覆盖值或 null
      * @return 空数据返回体
@@ -133,20 +131,16 @@ public class AdminUserController {
     /**
      * 调账（充值/扣减积分）：写 ADJUST 流水，仅站长；不提供直接 set 余额的入口
      *
-     * @param actorRole 当前用户角色（拦截器注入）
-     * @param actorId   当前用户 ID（拦截器注入，记账为操作人）
-     * @param id        目标用户 ID
-     * @param req       变动额与事由
+     * @param actorId 当前用户 ID（记账为操作人）
+     * @param id      目标用户 ID
+     * @param req     变动额与事由
      * @return 空数据返回体
      */
+    @RequiresOwner(message = "仅站长可调账")
     @PostMapping("/{id}/points")
-    public Result<Void> adjustPoints(@RequestAttribute(AuthInterceptor.ATTR_USER_ROLE) String actorRole,
-                                     @RequestAttribute(AuthInterceptor.ATTR_USER_ID) Long actorId,
+    public Result<Void> adjustPoints(@RequestAttribute(AuthInterceptor.ATTR_USER_ID) Long actorId,
                                      @PathVariable Long id,
                                      @Valid @RequestBody AdminPointsAdjustRequest req) {
-        if (!User.ROLE_OWNER.equals(actorRole)) {
-            throw new BizException(403, "仅站长可调账");
-        }
         billingService.adjust(actorId, id, req.delta(), req.reason());
         return Result.ok(null);
     }

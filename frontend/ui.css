@@ -58,6 +58,26 @@
 .ui-input.invalid { border-color: rgba(192, 57, 43, 0.45); background: #fff; }
 .ui-control.has-suffix .ui-input { padding-right: 52px; }
 .ui-suffix { position: absolute; right: 12px; font-size: 13px; color: var(--text-faint); pointer-events: none; }
+/* 字段内嵌按钮（如"获取验证码"）：悬浮在输入框右侧，可交互 */
+.ui-control.has-suffix-btn .ui-input { padding-right: 100px; }
+.ui-suffix-btn {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  height: 28px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--link);
+  font: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+  transform: translateY(-50%);
+  transition: background-color 0.15s, color 0.15s;
+}
+.ui-suffix-btn:hover:not(:disabled) { background: rgba(23, 131, 255, 0.08); }
+.ui-suffix-btn:disabled { color: var(--text-faint); cursor: default; }
 .ui-field-hint { font-size: 12px; line-height: 18px; color: var(--text-faint); }
 
 .ui-dialog-error { margin-top: 12px; font-size: 13px; line-height: 20px; color: var(--danger); }

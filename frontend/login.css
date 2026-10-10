@@ -123,8 +123,14 @@ body.login-page {
 
 /* ---- 注册专属字段：仅注册模式显示 ---- */
 .login-form:not(.is-register) .register-only { display: none; }
-/* 邮箱验证码字段：仅在站长开启邮箱验证码注册时显示（is-mail 由 /api/auth/register-config 驱动） */
-.login-form:not(.is-mail) .mail-only { display: none; }
+/* 邮箱/验证码字段：注册且站长开启邮箱验证码、或重置密码模式时显示（is-code 由 JS 按模式计算） */
+.login-form:not(.is-code) .code-fields { display: none; }
+/* 重置密码模式：专属新密码字段；隐藏用户名/密码字段 */
+.login-form:not(.is-reset) .reset-only { display: none; }
+.login-form.is-reset .no-reset { display: none; }
+
+/* 忘记密码链接：跟在模式切换链接后面 */
+#login-forgot-link { margin-left: 10px; }
 
 /* 预留一行错误位，出错时按钮不跳；负外边距抵消字段自身的外边距，避免留白过大 */
 .login-error { min-height: 18px; margin: -6px 0 10px; font-size: 13px; line-height: 20px; color: var(--danger); }

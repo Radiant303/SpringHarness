@@ -3,6 +3,7 @@ package com.spring.gateway.controller;
 import com.spring.gateway.common.Result;
 import com.spring.gateway.dto.LoginRequest;
 import com.spring.gateway.dto.RegisterRequest;
+import com.spring.gateway.dto.ResetPasswordRequest;
 import com.spring.gateway.dto.SendCodeRequest;
 import com.spring.gateway.dto.TokenResponse;
 import com.spring.gateway.dto.UserResponse;
@@ -31,19 +32,33 @@ import java.util.Map;
 public class AuthController {
 
     private final AuthService authService;
-    private final MailCodeService mailCodeService;
     private final SystemSettingService systemSettingService;
 
     /**
-     * 发送注册邮箱验证码；同一邮箱在重发间隔内只能发一次
+     * 发送邮箱验证码；同一邮箱在重发间隔内只能发一次。
+     * scene=register（默认）要求邮箱未被注册；scene=reset 要求邮箱已注册。
      *
      * @param req 发送请求
      * @return resendAfterSeconds：重发间隔秒数（前端据此倒计时）
      */
     @PostMapping("/send-code")
     public Result<Map<String, Long>> sendCode(@Valid @RequestBody SendCodeRequest req) {
-        long resendAfterSeconds = mailCodeService.sendCode(req.email());
+        MailCodeService.Scene scene = "reset".equals(req.scene())
+                ? MailCodeService.Scene.RESET : MailCodeService.Scene.REGISTER;
+        long resendAfterSeconds = authService.sendSceneCode(req.email(), scene);
         return Result.ok(Map.of("resendAfterSeconds", resendAfterSeconds));
+    }
+
+    /**
+     * 邮箱验证码重置密码
+     *
+     * @param req 重置请求
+     * @return 空数据返回体
+     */
+    @PostMapping("/reset-password")
+    public Result<Void> resetPassword(@Valid @RequestBody ResetPasswordRequest req) {
+        authService.resetPassword(req);
+        return Result.ok(null);
     }
 
     /**

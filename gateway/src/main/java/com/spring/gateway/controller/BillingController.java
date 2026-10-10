@@ -45,7 +45,7 @@ public class BillingController {
     /**
      * 当前用户的积分余额、最近 10 条流水与存储概览
      *
-     * @param userId 当前用户 ID（拦截器注入）
+     * @param userId 当前用户 ID
      * @return 余额 + 流水列表 + 存储概览
      */
     @GetMapping("/me")
@@ -66,7 +66,7 @@ public class BillingController {
     /**
      * 当前用户的兑换记录（含纯配额兑换；最近 10 条）
      *
-     * @param userId 当前用户 ID（拦截器注入）
+     * @param userId 当前用户 ID
      * @return 兑换记录列表
      */
     @GetMapping("/redemptions")
@@ -83,9 +83,9 @@ public class BillingController {
     }
 
     /**
-     * 兑换码兑换（任何登录用户；一次性，并发安全）
+     * 兑换码兑换
      *
-     * @param userId 当前用户 ID（拦截器注入）
+     * @param userId 当前用户 ID
      * @param req    兑换码（允许连字符/空格/小写）
      * @return 实发三项面值 + 入账后余额
      */

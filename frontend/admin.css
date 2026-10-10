@@ -153,8 +153,10 @@ label.row { cursor: pointer; }
 .row-value { display: inline-flex; align-items: center; gap: 6px; color: var(--text-faint); text-align: right; }
 .row-right { display: inline-flex; align-items: center; gap: 14px; }
 .row-control { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; }
+/* 文字链接统一不带下划线（悬停也不出），靠颜色表达可点 */
 .row-link { color: var(--link); font-size: 14px; text-decoration: none; white-space: nowrap; }
-.row-link:hover { text-decoration: underline; }
+/* 按钮当文字链接用（绑定/修改等行内操作）：去掉按钮默认样式 */
+button.row-link { background: none; border: none; padding: 0; font: inherit; cursor: pointer; }
 .unit { min-width: 44px; font-size: 13px; color: var(--text-faint); }
 .num { font-variant-numeric: tabular-nums; }
 

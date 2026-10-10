@@ -4,7 +4,7 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 
 /**
- * 调整全局单工作区上限请求（仅站长）。
+ * 调整全局单工作区上限请求。
  *
  * @author hanbing
  * @since 2026-10-05

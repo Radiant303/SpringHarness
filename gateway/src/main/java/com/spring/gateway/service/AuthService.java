@@ -4,8 +4,10 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.spring.gateway.common.BizException;
 import com.spring.gateway.common.JwtUtils;
 import com.spring.gateway.common.SnowflakeIdGenerator;
+import com.spring.gateway.dto.ChangePasswordRequest;
 import com.spring.gateway.dto.LoginRequest;
 import com.spring.gateway.dto.RegisterRequest;
+import com.spring.gateway.dto.ResetPasswordRequest;
 import com.spring.gateway.dto.TokenResponse;
 import com.spring.gateway.dto.UserResponse;
 import com.spring.gateway.entity.User;
@@ -80,7 +82,7 @@ public class AuthService {
             throw new BizException(403, "当前未开放注册");
         }
         if (mailRequired) {
-            mailCodeService.verifyCode(email, code);
+            mailCodeService.verifyCode(email, code, MailCodeService.Scene.REGISTER);
         }
         User user = new User();
         user.setId(idGenerator.nextId());
@@ -125,5 +127,150 @@ public class AuthService {
         String token = jwtUtils.createToken(user.getId(), user.getUsername());
         return new TokenResponse(token, String.valueOf(user.getId()), user.getUsername(), user.getRole(),
                 user.getPointsBalance() == null ? BigDecimal.ZERO : user.getPointsBalance());
+    }
+
+    /**
+     * 按用途发验证码，含快速失败的归属校验：
+     * 注册场景要求邮箱未被注册；重置密码场景要求邮箱已注册。
+     *
+     * @param email 收件邮箱
+     * @param scene 用途
+     * @return 重发间隔秒数
+     * @throws BizException 注册场景邮箱已存在（409）；重置场景邮箱未注册（400）
+     */
+    public long sendSceneCode(String email, MailCodeService.Scene scene) {
+        String normalized = MailCodeService.normalize(email);
+        boolean registered = userMapper.exists(
+                new LambdaQueryWrapper<User>().eq(User::getEmail, normalized));
+        if (scene == MailCodeService.Scene.REGISTER && registered) {
+            throw new BizException(409, "该邮箱已被注册");
+        }
+        if (scene == MailCodeService.Scene.RESET && !registered) {
+            throw new BizException(400, "该邮箱未注册");
+        }
+        return mailCodeService.sendCode(normalized, scene);
+    }
+
+    /**
+     * 邮箱验证码重置密码（忘记密码）：验码（一次性，通过即销毁）→ 改 BCrypt 哈希。
+     *
+     * @param req 重置请求
+     * @throws BizException 邮箱未注册（400）；验证码错误或已过期（400）
+     */
+    @Transactional
+    public void resetPassword(ResetPasswordRequest req) {
+        String email = MailCodeService.normalize(req.email());
+        User user = userMapper.selectOne(
+                new LambdaQueryWrapper<User>().eq(User::getEmail, email));
+        if (user == null) {
+            throw new BizException(400, "该邮箱未注册");
+        }
+        mailCodeService.verifyCode(email, req.code(), MailCodeService.Scene.RESET);
+        user.setPasswordHash(passwordEncoder.encode(req.newPassword()));
+        userMapper.updateById(user);
+    }
+
+    /**
+     * 给新邮箱发绑定验证码：目标邮箱不能被任何账号占用
+     *
+     * @param userId 当前用户 ID
+     * @param email  待绑定邮箱
+     * @return 重发间隔秒数
+     * @throws BizException 邮箱已是当前账号绑定邮箱（400）；被其他账号占用（409）
+     */
+    public long sendBindCode(Long userId, String email) {
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BizException(404, "用户不存在");
+        }
+        String normalized = MailCodeService.normalize(email);
+        if (normalized.equals(user.getEmail())) {
+            throw new BizException(400, "该邮箱已是当前账号的绑定邮箱");
+        }
+        boolean used = userMapper.exists(
+                new LambdaQueryWrapper<User>().eq(User::getEmail, normalized));
+        if (used) {
+            throw new BizException(409, "该邮箱已被其他账号绑定");
+        }
+        return mailCodeService.sendCode(normalized, MailCodeService.Scene.BIND);
+    }
+
+    /**
+     * 凭验证码绑定邮箱：验码（一次性）→ 写 users.email（唯一索引兜底并发）
+     *
+     * @param userId 当前用户 ID
+     * @param email  待绑定邮箱
+     * @param code   6 位验证码（绑定场景）
+     * @throws BizException 验证码错误或已过期（400）；邮箱被占用（409）
+     */
+    @Transactional
+    public void bindEmail(Long userId, String email, String code) {
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BizException(404, "用户不存在");
+        }
+        String normalized = MailCodeService.normalize(email);
+        mailCodeService.verifyCode(normalized, code, MailCodeService.Scene.BIND);
+        boolean used = userMapper.exists(
+                new LambdaQueryWrapper<User>().eq(User::getEmail, normalized));
+        if (used) {
+            throw new BizException(409, "该邮箱已被其他账号绑定");
+        }
+        user.setEmail(normalized);
+        try {
+            userMapper.updateById(user);
+        } catch (DuplicateKeyException e) {
+            throw new BizException(409, "该邮箱已被其他账号绑定");
+        }
+    }
+
+    /**
+     * 给当前登录用户的绑定邮箱发验证码（改密码用）
+     *
+     * @param userId 当前用户 ID
+     * @return 重发间隔秒数
+     * @throws BizException 账号未绑定邮箱（400）；用户不存在（404）
+     */
+    public long sendMyCode(Long userId) {
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BizException(404, "用户不存在");
+        }
+        if (user.getEmail() == null || user.getEmail().isBlank()) {
+            throw new BizException(400, "账号未绑定邮箱，无法使用邮箱验证");
+        }
+        return mailCodeService.sendCode(user.getEmail(), MailCodeService.Scene.RESET);
+    }
+
+    /**
+     * 已登录用户改密码（双模式，服务端按站长开关强制分流，前端传哪个不作数）：
+     * 开启邮箱验证码功能 → 必须有绑定邮箱（前提）+ 邮箱验证码（凭证）；
+     * 未开启 → 校验旧密码。
+     *
+     * @param userId 当前用户 ID
+     * @param req    旧密码 / 验证码 / 新密码
+     * @throws BizException 用户不存在（404）；未绑定邮箱（400）；验证码错误或旧密码错误（400）
+     */
+    @Transactional
+    public void changePassword(Long userId, ChangePasswordRequest req) {
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BizException(404, "用户不存在");
+        }
+        if (systemSettingService.isMailRegisterEnabled()) {
+            // 邮箱是找回凭证的锚点：开启邮箱功能的站点，改密必须先绑定邮箱并持码验证
+            if (user.getEmail() == null || user.getEmail().isBlank()) {
+                throw new BizException(400, "请先绑定邮箱后再修改密码");
+            }
+            String code = req.code() == null ? "" : req.code().trim();
+            mailCodeService.verifyCode(user.getEmail(), code, MailCodeService.Scene.RESET);
+        } else {
+            String oldPassword = req.oldPassword() == null ? "" : req.oldPassword();
+            if (!passwordEncoder.matches(oldPassword, user.getPasswordHash())) {
+                throw new BizException(400, "旧密码错误");
+            }
+        }
+        user.setPasswordHash(passwordEncoder.encode(req.newPassword()));
+        userMapper.updateById(user);
     }
 }

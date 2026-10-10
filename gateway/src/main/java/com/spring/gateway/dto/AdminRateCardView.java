@@ -19,7 +19,7 @@ import java.math.BigDecimal;
  * @param createdAt        创建时间（ISO UTC）
  * @param updatedAt        更新时间（ISO UTC）
  */
-public record AdminModelView(
+public record AdminRateCardView(
         String id,
         @JsonProperty("model_name") String modelName,
         @JsonProperty("input_points") BigDecimal inputPoints,

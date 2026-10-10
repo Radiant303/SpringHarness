@@ -19,7 +19,7 @@ import java.math.BigDecimal;
  * @param outputPoints     输出费率
  * @param enabled          是否启用；null 视为启用
  */
-public record AdminModelRequest(
+public record AdminRateCardRequest(
         @NotBlank @Size(max = 128) String modelName,
         @NotNull @DecimalMin(value = "0", message = "费率不能为负") BigDecimal inputPoints,
         @NotNull @DecimalMin(value = "0", message = "费率不能为负") BigDecimal cacheReadPoints,

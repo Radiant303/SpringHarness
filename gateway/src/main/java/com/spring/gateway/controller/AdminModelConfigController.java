@@ -1,7 +1,6 @@
 package com.spring.gateway.controller;
 
-import com.spring.gateway.common.AuthInterceptor;
-import com.spring.gateway.common.BizException;
+import com.spring.gateway.common.RequiresOwner;
 import com.spring.gateway.common.Result;
 import com.spring.gateway.common.TimeFormat;
 import com.spring.gateway.dto.AdminDefaultModelRequest;
@@ -12,7 +11,6 @@ import com.spring.gateway.dto.AdminProviderRequest;
 import com.spring.gateway.dto.AdminProviderView;
 import com.spring.gateway.entity.ModelDefinition;
 import com.spring.gateway.entity.ModelProvider;
-import com.spring.gateway.entity.User;
 import com.spring.gateway.service.AdminModelConfigService;
 import com.spring.gateway.service.SystemSettingService;
 import jakarta.validation.Valid;
@@ -20,7 +18,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -30,7 +27,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 模型配置管理接口（Provider / 模型定义 / 默认模型）：查看对 owner/admin 开放，修改仅站长。
+ * 模型配置管理接口：查看对 owner/admin 开放，修改仅站长。
  *
  * @author hanbing
  * @since 2026-10-09
@@ -60,85 +57,69 @@ public class AdminModelConfigController {
     }
 
     /**
-     * 新建或更新 Provider（仅站长）；apiKey/baseUrl 留空 = 保持不变
+     * 新建或更新 Provider；apiKey/baseUrl 留空 = 保持不变
      *
-     * @param actorRole 当前用户角色（拦截器注入）
-     * @param req       Provider 请求
+     * @param req Provider 请求
      * @return 空数据返回体
      */
+    @RequiresOwner(message = "仅站长可管理模型配置")
     @PostMapping("/providers")
-    public Result<Void> upsertProvider(@RequestAttribute(AuthInterceptor.ATTR_USER_ROLE) String actorRole,
-                                       @Valid @RequestBody AdminProviderRequest req) {
-        requireOwner(actorRole);
+    public Result<Void> upsertProvider(@Valid @RequestBody AdminProviderRequest req) {
         modelConfigService.upsertProvider(req);
         return Result.ok(null);
     }
 
     /**
-     * 删除 Provider（仅站长）；被模型引用时拒绝
+     * 删除 Provider；被模型引用时拒绝
      *
-     * @param actorRole 当前用户角色（拦截器注入）
-     * @param name      Provider 名
+     * @param name Provider 名
      * @return 空数据返回体
      */
+    @RequiresOwner(message = "仅站长可管理模型配置")
     @PostMapping("/providers/{name}/delete")
-    public Result<Void> deleteProvider(@RequestAttribute(AuthInterceptor.ATTR_USER_ROLE) String actorRole,
-                                       @PathVariable String name) {
-        requireOwner(actorRole);
+    public Result<Void> deleteProvider(@PathVariable String name) {
         modelConfigService.deleteProvider(name);
         return Result.ok(null);
     }
 
     /**
-     * 新建或更新模型定义（仅站长）
+     * 新建或更新模型定义
      *
-     * @param actorRole 当前用户角色（拦截器注入）
-     * @param req       模型请求
+     * @param req 模型请求
      * @return 空数据返回体
      */
+    @RequiresOwner(message = "仅站长可管理模型配置")
     @PostMapping("/models")
-    public Result<Void> upsertModel(@RequestAttribute(AuthInterceptor.ATTR_USER_ROLE) String actorRole,
-                                    @Valid @RequestBody AdminModelDefRequest req) {
-        requireOwner(actorRole);
+    public Result<Void> upsertModel(@Valid @RequestBody AdminModelDefRequest req) {
         modelConfigService.upsertModel(req);
         return Result.ok(null);
     }
 
     /**
-     * 删除模型定义（仅站长）；默认模型不可删。
+     * 删除模型定义；默认模型不可删。
      * id 含斜杠（provider/模型名），放请求体而不是路径变量（%2F 会被按路径分隔符处理）。
      *
-     * @param actorRole 当前用户角色（拦截器注入）
-     * @param req       模型 ID
+     * @param req 模型 ID
      * @return 空数据返回体
      */
+    @RequiresOwner(message = "仅站长可管理模型配置")
     @PostMapping("/models/delete")
-    public Result<Void> deleteModel(@RequestAttribute(AuthInterceptor.ATTR_USER_ROLE) String actorRole,
-                                    @Valid @RequestBody AdminModelIdRequest req) {
-        requireOwner(actorRole);
+    public Result<Void> deleteModel(@Valid @RequestBody AdminModelIdRequest req) {
         modelConfigService.deleteModel(req.modelId());
         return Result.ok(null);
     }
 
     /**
-     * 设置默认模型（仅站长）
+     * 设置默认模型
      *
-     * @param actorRole 当前用户角色（拦截器注入）
-     * @param req       模型 ID
+     * @param req 模型 ID
      * @return 空数据返回体
      */
+    @RequiresOwner(message = "仅站长可管理模型配置")
     @PostMapping("/default")
-    public Result<Void> setDefault(@RequestAttribute(AuthInterceptor.ATTR_USER_ROLE) String actorRole,
-                                   @Valid @RequestBody AdminDefaultModelRequest req) {
-        requireOwner(actorRole);
+    public Result<Void> setDefault(@Valid @RequestBody AdminDefaultModelRequest req) {
         modelConfigService.setDefaultModel(req.modelId());
         return Result.ok(null);
-    }
-
-    private static void requireOwner(String actorRole) {
-        if (!User.ROLE_OWNER.equals(actorRole)) {
-            throw new BizException(403, "仅站长可管理模型配置");
-        }
     }
 
     private static AdminProviderView toProviderView(ModelProvider row) {

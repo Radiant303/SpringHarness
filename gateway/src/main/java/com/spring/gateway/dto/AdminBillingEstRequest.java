@@ -4,7 +4,7 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 
 /**
- * 预扣预估档位请求（仅站长）；单位 tokens。
+ * 预扣预估档位请求；单位 tokens。
  *
  * @author hanbing
  * @since 2026-10-05

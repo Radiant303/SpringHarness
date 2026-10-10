@@ -13,7 +13,7 @@
     } catch (e) { /* 存储不可用时交给 admin.js 处理 */ }
   </script>
   <link rel="stylesheet" href="/static/index.css?v=20261006">
-  <link rel="stylesheet" href="/static/ui.css?v=20261006">
+  <link rel="stylesheet" href="/static/ui.css?v=20261010">
   <link rel="stylesheet" href="/static/admin.css?v=20261009">
 </head>
 <body>
@@ -110,6 +110,19 @@
           <div class="row">
             <span class="row-label">登录凭证</span>
             <span class="row-value">已登录，权限受保护</span>
+          </div>
+          <div class="row" id="account-email-row">
+            <span class="row-label">绑定邮箱</span>
+            <span class="row-right">
+              <span class="row-value" id="account-email"><span class="sk" style="--w:120px"></span></span>
+              <button type="button" class="row-link" id="ac-bind-email">绑定</button>
+            </span>
+          </div>
+          <div class="row">
+            <span class="row-label">修改密码</span>
+            <span class="row-right">
+              <button type="button" class="row-link" id="ac-change-pw">修改</button>
+            </span>
           </div>
         </div>
 
@@ -487,7 +500,7 @@
       </section>
     </main>
   </div>
-  <script src="/static/ui.js?v=20261009"></script>
-  <script src="/static/admin.js?v=20261009"></script>
+  <script src="/static/ui.js?v=20261010"></script>
+  <script src="/static/admin.js?v=20261011"></script>
 </body>
 </html>
